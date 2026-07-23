@@ -16,9 +16,9 @@ import type {
 } from "@gilly/harness-protocol";
 import { z } from "zod";
 
-// Anchored to the repo root (this file lives at apps/harness-claude/src/) so dev works
+// Anchored to the repo root so dev works
 // regardless of cwd; relative WORKSPACES_DIR anchors here, absolute values pass through.
-const repoRoot = resolve(import.meta.dir, "../../..");
+const repoRoot = resolve(import.meta.dir, "../../../..");
 
 /** Scratch dir for one Gilly session's workspace. Pure: same request → same path. */
 export function workspaceDir(req: InvocationRequest): string {

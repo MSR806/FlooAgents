@@ -1,6 +1,6 @@
 # Project Gilly — Repo & Code Architecture
 
-**A Bun + TypeScript monorepo.** Two deployable apps (control plane, harness), a set of shared packages that encode the layer boundaries, and two Docker images. See [`mvp-scope.md`](../mvp-scope.md) and [`control-plane/control-plane.md`](../control-plane/control-plane.md).
+**A Bun + TypeScript monorepo.** Deployable control-plane, harness, gateway, and web apps share packages that encode the layer boundaries. See [`mvp-scope.md`](../mvp-scope.md) and [`control-plane/control-plane.md`](../control-plane/control-plane.md).
 
 ---
 
@@ -9,8 +9,8 @@
 ```text
 project-gilly/
 ├── apps/
-│   ├── control-plane/      # Gilly server: Slack (Socket Mode), session/run engine, config loader  → image #1
-│   └── harness-claude/     # Claude Agent SDK behind the AgentCore contract (/invocations, /ping)   → image #2
+│   ├── control-plane/      # Gilly server: channels, session/run engine, management API
+│   ├── harness/            # One AgentCore server with Claude and OpenAI loops
 ├── packages/
 │   ├── core/               # domain model + Zod schemas: Agent, Connection, Session, Run, Workspace
 │   ├── harness-protocol/   # the control-plane ⇄ harness contract (invocation request / result)
@@ -47,22 +47,25 @@ One tool covers package management, workspaces, test, and TS execution.
 | Operational store | **SQLite + Drizzle** |
 | Lint / format | **Biome** (single fast tool) |
 
-**Harness runtime.** We run the Claude Agent SDK under Bun — it spawns the Claude Code CLI as a subprocess, which Bun's Node-compat handles. The `harness-claude` container is the only place that could, *as a contingency*, fall back to a Node base image; because the boundary is the container, that decision leaks nowhere else. Plan of record is Bun everywhere.
+**Harness runtime.** Both SDKs run under Bun in one container and spawn their vendor CLI
+subprocesses behind the same HTTP contract.
 
 ---
 
-## Docker — Two Images
+## Docker
 
 - **`Dockerfile.control-plane`** — Bun base. Runs the Slack listener + session engine. Mounts `config/agents` and the SQLite volume.
-- **`Dockerfile.harness`** — exposes `/invocations` + `/ping` on `:8080` (AgentCore contract). Bun base, with the Node escape hatch noted above. This is the image that later ships to AgentCore unchanged.
-- **`compose.yaml`** — wires `control-plane` → `harness` over the Docker network; `LocalRuntimeProvider` POSTs `http://harness:8080/invocations`.
+- **`Dockerfile.harness`** - unified harness on `:8080`, including a native Codex CLI resolution
+  check.
+- **`compose.yaml`** - wires one harness URL to `RoutingRuntimeProvider`, with persistent shared
+  workspaces and separate Codex session state.
 
 ---
 
 ## Testing Strategy
 
 - **Unit** — session/run state machine, thread→Session mapping, follow-up queueing, config loading.
-- **Contract** — `harness-protocol` schemas round-trip; control plane tests run against a fake `RuntimeProvider`; harness tests mock the Claude SDK.
+- **Contract** — `harness-protocol` schemas round-trip; control plane tests use fake runtime providers; harness tests inject fake SDK streams.
 - **End-to-end** (optional, flagged) — `compose up` then drive a real invocation through `LocalRuntimeProvider`.
 
 ---
@@ -72,9 +75,10 @@ One tool covers package management, workspaces, test, and TS execution.
 ```text
 Slack thread message
   → control plane: resolve agent (JSON) + Session (SQLite)
-  → RuntimeProvider.invoke(harnessImage, { agentConfig, userMessage, resumeSessionId, workspaceRef })
-  → LocalRuntimeProvider POSTs harness /invocations
-  → harness runs Claude query() loop → { finalText, harnessSessionId, status }
+  → RuntimeProvider.invoke({ agentConfig, userMessage, resumeSessionId, workspaceRef })
+  → RoutingRuntimeProvider adds modelType from the model catalog
+  → LocalRuntimeProvider POSTs the shared harness /invocations
+  → harness selects its Claude or OpenAI loop → { finalText, harnessSessionId, status }
   → control plane records Run, posts reply to the thread
 ```
 
@@ -84,7 +88,7 @@ Slack thread message
 
 | Decision | Why |
 | --- | --- |
-| **Bun** over pnpm+Vitest+tsx | One tool; fast; native TS; built-in test. Runs the Claude Agent SDK directly. |
+| **Bun** over pnpm+Vitest+tsx | One tool; fast; native TS; built-in test. Runs both harness SDKs directly. |
 | **JSON agent config**, no API | MVP needs no authoring surface; agents are files loaded at boot. |
 | **SQLite** for operational state | Sessions/Runs must survive restarts (to resume threads) without an extra container. Same Drizzle schema swaps to Postgres later. |
 | **Slack Socket Mode** | No public URL/tunnel for local dev. |

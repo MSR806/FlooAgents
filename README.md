@@ -39,9 +39,9 @@ without rebuilding infrastructure each time.
 **Active development.** APIs, package boundaries, and docs may change while the
 MVP is being built.
 
-The MVP target is one JSON-configured agent, triggered from Slack, routed through
-the control plane, executed by a Claude harness, and persisted in SQLite so
-thread follow-ups can resume the same session.
+Agents are triggered from Slack or web, routed by their selected model to the
+Claude or OpenAI Codex harness, and persisted in SQLite so follow-ups resume the
+correct provider session.
 
 ## What Gilly Provides
 
@@ -50,7 +50,7 @@ thread follow-ups can resume the same session.
 | Agent config | JSON agent definitions loaded from `config/agents/` |
 | Channels | Slack Socket Mode plus a web channel surface in progress |
 | Control plane | Session/run engine, follow-up queue, channel translation |
-| Harness | Claude Agent SDK behind `/invocations` and `/ping` |
+| Harness | Claude Agent SDK and OpenAI Codex SDK behind one stable HTTP contract |
 | Runtime | Local HTTP runtime provider with an AgentCore-compatible contract |
 | Storage | SQLite operational state via Drizzle |
 | Web | Next.js UI for managing agents, skills, connectors, users, and chats |
@@ -65,12 +65,11 @@ apps/control-plane
    |  resolves agent config, sessions, runs
    v
 packages/runtime
-   |  invokes the selected harness
+   |  adds modelType and calls one URL
    v
-apps/harness-claude
-   |  AgentCore-style HTTP contract
-   v
-Claude Agent SDK
+apps/harness
+   +--> harness-claude --> Claude Agent SDK
+   +--> harness-openai --> OpenAI Codex SDK
 ```
 
 Key boundaries:
@@ -94,7 +93,7 @@ Prerequisites:
 - [Bun](https://bun.sh/)
 - Docker, if you want the one-command stack
 - Slack app credentials for the Slack channel
-- Anthropic credentials for the Claude harness
+- Anthropic credentials for Claude and/or an OpenAI API key for Codex
 
 Install and check the workspace:
 
@@ -107,14 +106,17 @@ bun test
 Create local env files:
 
 ```bash
-cp apps/harness-claude/.env.example apps/harness-claude/.env
+cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
 ```
+
+Set the provider credentials you use in `apps/harness/.env`. `HARNESS_URL` is the single endpoint
+for Claude and OpenAI models.
 
 Then run the services you need:
 
 ```bash
-bun run dev:harness         # harness on :8080
+bun run dev:harness         # Claude/OpenAI harness on :8080
 bun run dev:control-plane   # API + Slack listener on :4000
 bun run dev:web             # web UI on :3000
 ```
@@ -124,7 +126,7 @@ bun run dev:web             # web UI on :3000
 Run the stack with Compose:
 
 ```bash
-cp apps/harness-claude/.env.example apps/harness-claude/.env
+cp apps/harness/.env.example apps/harness/.env
 
 docker compose -f docker/compose.yaml up --build
 ```
@@ -139,7 +141,7 @@ service hostnames and container paths. Keep `WEB_PORT=4000` in
 
 ```text
 apps/control-plane       Slack/Web channel handling, sessions, runs
-apps/harness-claude      Claude harness behind the AgentCore-style contract
+apps/harness             Shared server with Claude and OpenAI harness loops
 apps/gateway             Connector gateway
 apps/web                 Next.js management UI
 packages/core            Domain model + Zod schemas

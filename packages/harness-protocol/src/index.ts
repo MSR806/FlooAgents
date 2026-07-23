@@ -1,12 +1,12 @@
-import { AgentConfig, WorkspaceRef } from "@gilly/core";
+import { AgentConfig, ModelProvider, WorkspaceRef } from "@gilly/core";
 import { z } from "zod";
 
 /**
- * A skill shipped to the harness: a folder flattened to relative paths + contents. The harness
- * materializes it under `<workspace>/.claude/skills/<name>/` so the SDK can load it.
+ * A skill shipped to the harness: a folder flattened to relative paths + contents. Each harness
+ * materializes it in its SDK's project-level skill directory.
  */
 export const SkillBundle = z.object({
-  /** Skill folder name; becomes the `.claude/skills/<name>/` directory. */
+  /** Skill folder name; becomes one project-level skill directory. */
   name: z.string().min(1),
   /** Files under the folder (SKILL.md + supporting files), paths relative to the folder root. */
   files: z.array(z.object({ path: z.string().min(1), contents: z.string() })),
@@ -15,6 +15,8 @@ export type SkillBundle = z.infer<typeof SkillBundle>;
 
 /** Control plane → harness: everything needed to drive one loop. The stable handoff. */
 export const InvocationRequest = z.object({
+  /** Harness implementation to run. Omitted requests default to Anthropic at the HTTP boundary. */
+  modelType: ModelProvider.optional(),
   agent: AgentConfig,
   /** The task for this invocation (Slack message, cron payload, …). */
   userMessage: z.string(),

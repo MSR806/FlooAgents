@@ -1,5 +1,6 @@
 import {
   AgentConfig,
+  MODEL_CATALOG,
   type SkillFile,
   type SlackConnection,
   SlackConnectionInput,
@@ -120,6 +121,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     if (method === "OPTIONS") return new Response(null, { headers: cors });
 
     // --- Agents ---
+    if (method === "GET" && pathname === "/api/models") return json(MODEL_CATALOG);
+
     if (pathname === "/api/agents") {
       if (method === "GET") {
         return json(listAgents(db).map(({ id, name, model }) => ({ id, name, model })));

@@ -26,8 +26,8 @@ Tests are **`bun:test`, fully offline, and every seam is injectable** — no moc
 | Dependency | How to fake it in a test | Canonical example |
 | --- | --- | --- |
 | `RuntimeProvider` | Object literal implementing `invoke` / `invokeStream` / `healthy` with canned data | `apps/control-plane/src/engine.test.ts` (`fakeRuntime`) |
-| SDK `query` | Pass `queryFn` (default-valued param) returning a fake `async function*` of `SDKMessage`s; throw to test the error path | `apps/harness-claude/src/loop.test.ts` |
-| HTTP server | `createServer(runLoop, runStream)` returns a `fetch` handler — call it directly with `new Request(...)`, no socket | `apps/harness-claude/src/server.test.ts` |
+| SDK `query` | Pass `queryFn` (default-valued param) returning a fake `async function*` of `SDKMessage`s; throw to test the error path | `apps/harness/src/harness-claude/loop.test.ts` |
+| HTTP server | `createServer(runners)` returns a `fetch` handler — call it directly with `new Request(...)`, no socket | `apps/harness/src/server.test.ts` |
 | Database | `createDb(":memory:")` — the real Drizzle/SQLite, fresh per test | `packages/db/src/repo.test.ts`, `engine.test.ts` |
 | Async event stream | `async function*` yielding canned `StreamEvent`s; drain with a small `collect()` helper | `engine.test.ts` |
 | Real HTTP wire (parsers) | `Bun.serve({ port: 0, fetch })`, then point the client at `server.port`; `server.stop(true)` after | `packages/runtime/src/local.test.ts` |

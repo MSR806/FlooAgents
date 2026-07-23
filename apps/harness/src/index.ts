@@ -5,4 +5,4 @@ const port = Number(process.env.PORT ?? 8080);
 // NDJSON event at a time, and a single step (a slow tool call, model think-time) can leave
 // the socket without bytes for >10s — which would otherwise sever the stream mid-run.
 Bun.serve({ port, idleTimeout: 0, fetch: createServer().fetch });
-console.log(`harness-claude listening on :${port}`);
+console.log(`harness listening on :${port}`);

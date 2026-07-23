@@ -5,3 +5,4 @@ export type {
 } from "@gilly/harness-protocol";
 export { LocalRuntimeProvider } from "./local.ts";
 export type { RuntimeProvider } from "./provider.ts";
+export { RoutingRuntimeProvider } from "./routing.ts";

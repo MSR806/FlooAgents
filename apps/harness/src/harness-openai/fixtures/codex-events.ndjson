@@ -1,0 +1,10 @@
+{"type":"thread.started","thread_id":"thread-fixture-1"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"I will inspect and update the file."}}
+{"type":"item.started","item":{"id":"command-1","type":"command_execution","command":"pwd","aggregated_output":"","status":"in_progress"}}
+{"type":"item.updated","item":{"id":"command-1","type":"command_execution","command":"pwd","aggregated_output":"/tmp/workspace\n","status":"completed","exit_code":0}}
+{"type":"item.completed","item":{"id":"command-1","type":"command_execution","command":"pwd","aggregated_output":"/tmp/workspace\n","status":"completed","exit_code":0}}
+{"type":"item.completed","item":{"id":"change-1","type":"file_change","changes":[{"path":"hello.txt","kind":"add"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"mcp-1","type":"mcp_tool_call","server":"gateway","tool":"gateway_invoke","arguments":{"tool":"github.create_issue","input":{"title":"Hello"}},"result":{"content":[],"structured_content":{}},"status":"completed"}}
+{"type":"item.completed","item":{"id":"message-2","type":"agent_message","text":"Created hello.txt and verified it."}}
+{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":8,"reasoning_output_tokens":2}}

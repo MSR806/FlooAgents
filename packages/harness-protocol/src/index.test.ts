@@ -11,6 +11,7 @@ test("InvocationRequest round-trips a minimal payload", () => {
 
 test("InvocationRequest carries inline skills", () => {
   const req = {
+    modelType: "openai" as const,
     agent: {
       id: "release-bot",
       name: "Release Bot",
@@ -22,6 +23,15 @@ test("InvocationRequest carries inline skills", () => {
     skills: [{ name: "cut-release", files: [{ path: "SKILL.md", contents: "# go" }] }],
   };
   expect(InvocationRequest.parse(req)).toMatchObject(req);
+});
+
+test("InvocationRequest rejects unknown model types", () => {
+  const req = {
+    modelType: "unknown",
+    agent: { id: "a", name: "A", model: "model", systemPrompt: "do x" },
+    userMessage: "hello",
+  };
+  expect(InvocationRequest.safeParse(req).success).toBe(false);
 });
 
 test("InvocationResult requires nullable fields to be present", () => {
