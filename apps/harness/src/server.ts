@@ -48,7 +48,7 @@ export function createServer(runners: HarnessRunners = defaultRunners) {
       if (req.method === "POST" && pathname === "/invocations") {
         const parsed = await parseRequest(req);
         if (parsed instanceof Response) return parsed;
-        const runner = runners[parsed.modelType ?? "anthropic"];
+        const runner = runners[parsed.harnessType ?? "anthropic"];
         return json(await runner.runLoop(parsed));
       }
 
@@ -58,7 +58,7 @@ export function createServer(runners: HarnessRunners = defaultRunners) {
 
         const encoder = new TextEncoder();
         const abort = new AbortController();
-        const runner = runners[parsed.modelType ?? "anthropic"];
+        const runner = runners[parsed.harnessType ?? "anthropic"];
         const iterator = runner.runStream(parsed, abort.signal)[Symbol.asyncIterator]();
         const stream = new ReadableStream<Uint8Array>({
           async pull(controller) {

@@ -6,9 +6,9 @@ server hosts both implementations; Claude remains the default.
 ## Routing
 
 `MODEL_CATALOG` in `packages/core` is the source of truth for the model picker and routing.
-`RoutingRuntimeProvider` sets `InvocationRequest.modelType` to `anthropic` or `openai`, then sends
+`RoutingRuntimeProvider` sets `InvocationRequest.harnessType` to `anthropic` or `openai`, then sends
 both through the same `HARNESS_URL`. The shared server dispatches to the matching loop. Requests
-that omit `modelType` use the Claude loop.
+that omit `harnessType` use the Claude loop.
 
 Catalog variants may map display choices to Codex runtime settings. `gpt-5.4-fast` runs model `gpt-5.4` with Codex `service_tier = "fast"`.
 
@@ -28,7 +28,7 @@ exposes the tooling gateway through an in-process MCP server.
 2. Stores `CODEX_HOME` under a separate persistent state root so the agent cannot edit its own session files.
 3. Injects the agent role through Codex `developer_instructions`.
 4. Materializes attached skills under `.agents/skills`.
-5. Starts or resumes a Codex thread with a workspace-only permission profile and web search disabled.
+5. Starts or resumes a Codex thread with its native sandbox and web search disabled.
 6. Translates completed Codex items into Gilly `message`, `tool`, `done`, and `error` events.
 
 The current Codex SDK emits item snapshots rather than token deltas, so this harness streams completed messages and tool events. It does not synthesize fake token events.
@@ -39,7 +39,7 @@ Gilly's gateway speaks `POST /catalog` and `POST /invoke`; it is not itself an M
 
 ## Tool Boundary
 
-Codex permissions constrain filesystem and network effects but are not themselves a vendor tool allowlist. Without `Bash`, Gilly exposes `Read` and `Write` through a workspace-scoped stdio MCP bridge. With `Bash`, it disables that host-side bridge and uses only Codex's OS-sandboxed shell, avoiding path-validation races between the two lanes. Gilly also generates a per-session profile that denies filesystem-root reads, reopens only Codex's minimal runtime paths, and grants read or write access to the current workspace. Network access and web search remain disabled, and Gilly never grants `danger-full-access`.
+Codex permissions constrain filesystem and network effects but are not themselves a vendor tool allowlist. Without `Bash`, Gilly exposes `Read` and `Write` through a workspace-scoped stdio MCP bridge. With `Bash`, it disables that host-side bridge and uses only Codex's OS-sandboxed shell, avoiding path-validation races between the two lanes. Gilly selects Codex's native `read-only` sandbox unless the agent has `Write` or `Bash`, when it selects `workspace-write`. Bash-enabled agents also receive command network access for remote Git operations. Provider-side web search remains disabled, and Gilly never grants `danger-full-access`.
 
 The shell environment is allowlisted so model-generated commands do not receive OpenAI or gateway secrets.
 

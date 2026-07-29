@@ -11,7 +11,7 @@ test("InvocationRequest round-trips a minimal payload", () => {
 
 test("InvocationRequest carries inline skills", () => {
   const req = {
-    modelType: "openai" as const,
+    harnessType: "openai" as const,
     agent: {
       id: "release-bot",
       name: "Release Bot",
@@ -27,7 +27,7 @@ test("InvocationRequest carries inline skills", () => {
 
 test("InvocationRequest rejects unknown model types", () => {
   const req = {
-    modelType: "unknown",
+    harnessType: "unknown",
     agent: { id: "a", name: "A", model: "model", systemPrompt: "do x" },
     userMessage: "hello",
   };

@@ -76,7 +76,7 @@ subprocesses behind the same HTTP contract.
 Slack thread message
   → control plane: resolve agent (JSON) + Session (SQLite)
   → RuntimeProvider.invoke({ agentConfig, userMessage, resumeSessionId, workspaceRef })
-  → RoutingRuntimeProvider adds modelType from the model catalog
+  → RoutingRuntimeProvider adds harnessType from the model catalog
   → LocalRuntimeProvider POSTs the shared harness /invocations
   → harness selects its Claude or OpenAI loop → { finalText, harnessSessionId, status }
   → control plane records Run, posts reply to the thread

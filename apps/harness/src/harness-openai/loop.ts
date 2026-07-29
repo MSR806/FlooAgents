@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { providerFor } from "@gilly/core";
+import { providerFor, resolveCodexModel } from "@gilly/core";
 import type { InvocationRequest, InvocationResult, StreamEvent } from "@gilly/harness-protocol";
 import {
   Codex,
@@ -73,39 +73,18 @@ export function sandboxModeFor(tools: string[]): "read-only" | "workspace-write"
   return tools.includes("Write") || tools.includes("Bash") ? "workspace-write" : "read-only";
 }
 
-/** Build headless, network-disabled thread options for an isolated workspace. */
+/** Build headless thread options using Codex's native workspace sandbox. */
 export function buildThreadOptions(req: InvocationRequest, cwd: string): ThreadOptions {
+  const tools = req.agent.tools ?? [];
   return {
-    model: req.agent.model === "gpt-5.4-fast" ? "gpt-5.4" : req.agent.model,
+    model: resolveCodexModel(req.agent.model).model,
     workingDirectory: cwd,
     skipGitRepoCheck: true,
     approvalPolicy: "never",
+    sandboxMode: sandboxModeFor(tools),
+    networkAccessEnabled: tools.includes("Bash"),
     webSearchMode: "disabled",
   };
-}
-
-/** Restrict command reads to runtime essentials and this invocation's workspace. */
-export function buildCodexConfig(req: InvocationRequest): string {
-  const access = sandboxModeFor(req.agent.tools ?? []) === "workspace-write" ? "write" : "read";
-  return [
-    'default_permissions = "gilly"',
-    "",
-    "[permissions.gilly]",
-    'description = "Gilly per-invocation workspace policy"',
-    "",
-    "[permissions.gilly.filesystem]",
-    '":root" = "deny"',
-    '":minimal" = "read"',
-    '":tmpdir" = "deny"',
-    '":slash_tmp" = "deny"',
-    "",
-    '[permissions.gilly.filesystem.":workspace_roots"]',
-    `"." = "${access}"`,
-    "",
-    "[permissions.gilly.network]",
-    "enabled = false",
-    "",
-  ].join("\n");
 }
 
 type CodexOptionsInput = {
@@ -140,7 +119,8 @@ export function buildCodexOptions(req: InvocationRequest, input: CodexOptionsInp
       include_only: ["HOME", "LANG", "LC_ALL", "PATH", "SHELL", "TMPDIR", "USER"],
     },
   };
-  if (req.agent.model === "gpt-5.4-fast") config.service_tier = "fast";
+  const { serviceTier } = resolveCodexModel(req.agent.model);
+  if (serviceTier) config.service_tier = serviceTier;
 
   const tools = req.agent.tools ?? [];
   // Never combine the host-side filesystem bridge with model-driven shell processes: a shell could
@@ -231,9 +211,8 @@ export function materializeWorkspace(
   writeFileSync(manifestPath, `${JSON.stringify(incoming.map(({ name }) => name))}\n`);
 }
 
-/** Create persistent Codex state and its command permission profile without following symlinks. */
+/** Create persistent Codex state and seed local login auth without following symlinks. */
 export function materializeCodexHome(
-  req: InvocationRequest,
   codexHome: string,
   sourceEnv: NodeJS.ProcessEnv = process.env,
   authPath: string = loginAuthPath(),
@@ -241,7 +220,7 @@ export function materializeCodexHome(
   ensureDirectory(codexHome, "Codex home");
   const configPath = resolve(codexHome, "config.toml");
   assertNoSymlinkChain(codexHome, configPath);
-  writeFileSync(configPath, buildCodexConfig(req));
+  rmSync(configPath, { force: true });
   seedAuthFromLogin(codexHome, sourceEnv, authPath);
 }
 
@@ -417,7 +396,7 @@ export async function* streamAgentLoop(
   try {
     const cwd = workspaceDir(req);
     const codexHome = codexHomeDir(req);
-    materializeCodexHome(req, codexHome);
+    materializeCodexHome(codexHome);
     materializeWorkspace(req, cwd, codexHome);
 
     const codex = codexFactory(

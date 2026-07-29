@@ -61,15 +61,15 @@ async function collect(events: AsyncIterable<StreamEvent>): Promise<StreamEvent[
 
 test("invoke sends both providers to one runtime and namespaces returned session ids", async () => {
   const runtime = fakeRuntime((request) =>
-    completed(request.modelType === "openai" ? "o-session" : "a-session"),
+    completed(request.harnessType === "openai" ? "o-session" : "a-session"),
   );
   const routing = new RoutingRuntimeProvider(runtime);
 
   expect(await routing.invoke(anthropicRequest)).toEqual(completed("anthropic:a-session"));
   expect(await routing.invoke(openaiRequest)).toEqual(completed("openai:o-session"));
   expect(runtime.invokeRequests).toEqual([
-    { ...anthropicRequest, modelType: "anthropic" },
-    { ...openaiRequest, modelType: "openai" },
+    { ...anthropicRequest, harnessType: "anthropic" },
+    { ...openaiRequest, harnessType: "openai" },
   ]);
 });
 
@@ -84,11 +84,11 @@ test("invoke strips matching namespaces and preserves only legacy Anthropic sess
   await routing.invoke({ ...anthropicRequest, resumeSessionId: "openai:other-session" });
 
   expect(runtime.invokeRequests).toEqual([
-    { ...anthropicRequest, modelType: "anthropic", resumeSessionId: "previous-a" },
-    { ...openaiRequest, modelType: "openai", resumeSessionId: "previous-o" },
-    { ...anthropicRequest, modelType: "anthropic", resumeSessionId: "legacy-session" },
-    { ...openaiRequest, modelType: "openai" },
-    { ...anthropicRequest, modelType: "anthropic" },
+    { ...anthropicRequest, harnessType: "anthropic", resumeSessionId: "previous-a" },
+    { ...openaiRequest, harnessType: "openai", resumeSessionId: "previous-o" },
+    { ...anthropicRequest, harnessType: "anthropic", resumeSessionId: "legacy-session" },
+    { ...openaiRequest, harnessType: "openai" },
+    { ...anthropicRequest, harnessType: "anthropic" },
   ]);
 });
 
@@ -118,7 +118,7 @@ test("invokeStream selects a harness and namespaces only done events", async () 
     { type: "done", finalText: "done", harnessSessionId: "openai:stream-session" },
   ]);
   expect(runtime.streamRequests).toEqual([
-    { ...openaiRequest, modelType: "openai", resumeSessionId: "previous-session" },
+    { ...openaiRequest, harnessType: "openai", resumeSessionId: "previous-session" },
   ]);
 });
 

@@ -12,7 +12,7 @@ function namespaceSessionId(provider: HarnessProvider, sessionId: string | null)
 
 function requestForProvider(req: InvocationRequest, provider: HarnessProvider): InvocationRequest {
   const { resumeSessionId, ...freshRequest } = req;
-  const providerRequest = { ...freshRequest, modelType: provider };
+  const providerRequest = { ...freshRequest, harnessType: provider };
   if (resumeSessionId === undefined) return providerRequest;
 
   const matchingPrefix = `${provider}:`;

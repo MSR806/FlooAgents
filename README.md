@@ -65,7 +65,7 @@ apps/control-plane
    |  resolves agent config, sessions, runs
    v
 packages/runtime
-   |  adds modelType and calls one URL
+   |  adds harnessType and calls one URL
    v
 apps/harness
    +--> harness-claude --> Claude Agent SDK

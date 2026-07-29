@@ -10,9 +10,14 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InvocationRequest, StreamEvent } from "@gilly/harness-protocol";
-import type { CodexOptions, ThreadEvent, ThreadOptions, TurnOptions } from "@openai/codex-sdk";
+import type {
+  CodexOptions,
+  ThreadEvent,
+  ThreadOptions,
+  TurnOptions,
+  Usage,
+} from "@openai/codex-sdk";
 import {
-  buildCodexConfig,
   buildCodexOptions,
   buildThreadOptions,
   type CodexFactory,
@@ -34,10 +39,84 @@ const request: InvocationRequest = {
   workspace: { provider: "local", handle: "session-1" },
 };
 
-const fixture = readFileSync(join(import.meta.dir, "fixtures/codex-events.ndjson"), "utf8")
-  .trim()
-  .split("\n")
-  .map((line) => JSON.parse(line) as ThreadEvent);
+// Small event builders, mirroring the Claude harness test's inline SDKMessage helpers (init/result).
+const threadStarted = (threadId: string): ThreadEvent => ({
+  type: "thread.started",
+  thread_id: threadId,
+});
+const turnStarted = (): ThreadEvent => ({ type: "turn.started" });
+const agentMessage = (id: string, text: string): ThreadEvent => ({
+  type: "item.completed",
+  item: { id, type: "agent_message", text },
+});
+const commandStarted = (id: string, command: string): ThreadEvent => ({
+  type: "item.started",
+  item: { id, type: "command_execution", command, aggregated_output: "", status: "in_progress" },
+});
+const commandUpdated = (id: string, command: string, output: string): ThreadEvent => ({
+  type: "item.updated",
+  item: {
+    id,
+    type: "command_execution",
+    command,
+    aggregated_output: output,
+    status: "completed",
+    exit_code: 0,
+  },
+});
+const commandCompleted = (id: string, command: string, output: string): ThreadEvent => ({
+  type: "item.completed",
+  item: {
+    id,
+    type: "command_execution",
+    command,
+    aggregated_output: output,
+    status: "completed",
+    exit_code: 0,
+  },
+});
+const fileChange = (
+  id: string,
+  changes: { path: string; kind: "add" | "delete" | "update" }[],
+): ThreadEvent => ({
+  type: "item.completed",
+  item: { id, type: "file_change", changes, status: "completed" },
+});
+const mcpToolCall = (id: string, server: string, tool: string, args: unknown): ThreadEvent => ({
+  type: "item.completed",
+  item: {
+    id,
+    type: "mcp_tool_call",
+    server,
+    tool,
+    arguments: args,
+    result: { content: [], structured_content: {} },
+    status: "completed",
+  },
+});
+const turnCompleted = (usage: Usage): ThreadEvent => ({ type: "turn.completed", usage });
+
+// One realistic Codex turn: narration, a shell command, a file edit, and a gateway MCP call.
+const fixture: ThreadEvent[] = [
+  threadStarted("thread-fixture-1"),
+  turnStarted(),
+  agentMessage("message-1", "I will inspect and update the file."),
+  commandStarted("command-1", "pwd"),
+  commandUpdated("command-1", "pwd", "/tmp/workspace\n"),
+  commandCompleted("command-1", "pwd", "/tmp/workspace\n"),
+  fileChange("change-1", [{ path: "hello.txt", kind: "add" }]),
+  mcpToolCall("mcp-1", "gateway", "gateway_invoke", {
+    tool: "github.create_issue",
+    input: { title: "Hello" },
+  }),
+  agentMessage("message-2", "Created hello.txt and verified it."),
+  turnCompleted({
+    input_tokens: 10,
+    cached_input_tokens: 0,
+    output_tokens: 8,
+    reasoning_output_tokens: 2,
+  }),
+];
 
 async function* eventStream(events: ThreadEvent[]) {
   yield* events;
@@ -83,12 +162,14 @@ test("sandboxModeFor keeps Bash inside workspace-write", () => {
   expect(sandboxModeFor(["Bash"])).toBe("workspace-write");
 });
 
-test("buildThreadOptions isolates the thread without overriding its permission profile", () => {
+test("buildThreadOptions applies the native Codex sandbox", () => {
   expect(buildThreadOptions(request, "/workspace")).toEqual({
     model: "gpt-5.2",
     workingDirectory: "/workspace",
     skipGitRepoCheck: true,
     approvalPolicy: "never",
+    sandboxMode: "read-only",
+    networkAccessEnabled: false,
     webSearchMode: "disabled",
   });
   expect(
@@ -97,33 +178,18 @@ test("buildThreadOptions isolates the thread without overriding its permission p
       "/workspace",
     ).model,
   ).toBe("gpt-5.4");
-});
-
-test("buildCodexConfig denies root reads and grants only the current workspace", () => {
-  expect(buildCodexConfig(request)).toBe(
-    [
-      'default_permissions = "gilly"',
-      "",
-      "[permissions.gilly]",
-      'description = "Gilly per-invocation workspace policy"',
-      "",
-      "[permissions.gilly.filesystem]",
-      '":root" = "deny"',
-      '":minimal" = "read"',
-      '":tmpdir" = "deny"',
-      '":slash_tmp" = "deny"',
-      "",
-      '[permissions.gilly.filesystem.":workspace_roots"]',
-      '"." = "read"',
-      "",
-      "[permissions.gilly.network]",
-      "enabled = false",
-      "",
-    ].join("\n"),
-  );
-  expect(buildCodexConfig({ ...request, agent: { ...request.agent, tools: ["Write"] } })).toContain(
-    '"." = "write"',
-  );
+  expect(
+    buildThreadOptions({ ...request, agent: { ...request.agent, tools: ["Write"] } }, "/workspace")
+      .sandboxMode,
+  ).toBe("workspace-write");
+  expect(
+    buildThreadOptions({ ...request, agent: { ...request.agent, tools: ["Write"] } }, "/workspace")
+      .networkAccessEnabled,
+  ).toBe(false);
+  expect(
+    buildThreadOptions({ ...request, agent: { ...request.agent, tools: ["Bash"] } }, "/workspace")
+      .networkAccessEnabled,
+  ).toBe(true);
 });
 
 test("buildCodexOptions supplies developer instructions and hides secrets from shell commands", () => {
@@ -311,11 +377,15 @@ test("materialization rejects duplicate skill bundles before changing managed st
   expect(existsSync(join(cwd, ".agents/skills/review"))).toBe(false);
 });
 
-test("materializeCodexHome writes the per-session permission profile", () => {
+test("materializeCodexHome removes the obsolete permission profile", () => {
   const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
   const home = join(root, "session");
-  materializeCodexHome(request, home);
-  expect(readFileSync(join(home, "config.toml"), "utf8")).toBe(buildCodexConfig(request));
+  mkdirSync(home);
+  writeFileSync(join(home, "config.toml"), "old profile");
+
+  materializeCodexHome(home);
+
+  expect(existsSync(join(home, "config.toml"))).toBe(false);
 });
 
 test("materializeCodexHome forwards a logged-in codex session when no API key is configured", () => {
@@ -326,7 +396,7 @@ test("materializeCodexHome forwards a logged-in codex session when no API key is
   mkdirSync(join(fakeLoginRoot, ".codex"), { recursive: true });
   writeFileSync(authPath, '{"tokens":"secret"}');
 
-  materializeCodexHome(request, home, {}, authPath);
+  materializeCodexHome(home, {}, authPath);
 
   expect(readFileSync(join(home, "auth.json"), "utf8")).toBe('{"tokens":"secret"}');
 });
@@ -339,7 +409,7 @@ test("materializeCodexHome skips the logged-in session when an API key is config
   mkdirSync(join(fakeLoginRoot, ".codex"), { recursive: true });
   writeFileSync(authPath, '{"tokens":"secret"}');
 
-  materializeCodexHome(request, home, { OPENAI_API_KEY: "sk-configured" }, authPath);
+  materializeCodexHome(home, { OPENAI_API_KEY: "sk-configured" }, authPath);
 
   expect(existsSync(join(home, "auth.json"))).toBe(false);
 });
@@ -349,12 +419,12 @@ test("materializeCodexHome is a no-op when there is no logged-in session either"
   const home = join(root, "session");
   const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
 
-  materializeCodexHome(request, home, {}, loginAuthPath(fakeLoginRoot));
+  materializeCodexHome(home, {}, loginAuthPath(fakeLoginRoot));
 
   expect(existsSync(join(home, "auth.json"))).toBe(false);
 });
 
-test("reduceCodexEvents reads the documented fixture and rejects failed turns", async () => {
+test("reduceCodexEvents reads a full turn and rejects failed turns", async () => {
   expect(await reduceCodexEvents(eventStream(fixture))).toEqual({
     harnessSessionId: "thread-fixture-1",
     finalText: "Created hello.txt and verified it.",

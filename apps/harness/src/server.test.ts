@@ -11,9 +11,9 @@ const completed = (finalText: string): InvocationResult => ({
 
 const emptyStream = async function* (): AsyncIterable<StreamEvent> {};
 
-function request(modelType?: "anthropic" | "openai"): InvocationRequest {
+function request(harnessType?: "anthropic" | "openai"): InvocationRequest {
   return {
-    ...(modelType ? { modelType } : {}),
+    ...(harnessType ? { harnessType } : {}),
     agent: { id: "a", name: "A", model: "test-model", systemPrompt: "do x" },
     userMessage: "hello",
   };
