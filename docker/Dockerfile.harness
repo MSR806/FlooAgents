@@ -13,5 +13,8 @@ RUN bun install --frozen-lockfile
 # Constructing the client resolves the SDK's bundled native Linux Codex binary.
 RUN bun --cwd apps/harness -e 'import { Codex } from "@openai/codex-sdk"; new Codex();'
 
+RUN mkdir -p /data/workspaces /data/codex && chown -R bun:bun /data/workspaces /data/codex
+
 EXPOSE 8080
+USER bun
 CMD ["bun", "run", "--filter", "@gilly/harness", "start"]

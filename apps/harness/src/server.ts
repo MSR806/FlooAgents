@@ -24,10 +24,12 @@ type RunStream = (request: InvocationRequest, signal?: AbortSignal) => AsyncIter
 
 export type HarnessRunners = Record<ModelProvider, { runLoop: RunLoop; runStream: RunStream }>;
 
+const DEFAULT_PROVIDER = "anthropic" satisfies ModelProvider;
+
 const defaultRunners: HarnessRunners = {
   anthropic: {
     runLoop: runClaudeAgentLoop,
-    runStream: (request) => streamClaudeAgentLoop(request),
+    runStream: (request, signal) => streamClaudeAgentLoop(request, undefined, signal),
   },
   openai: {
     runLoop: runOpenAiAgentLoop,
@@ -48,7 +50,7 @@ export function createServer(runners: HarnessRunners = defaultRunners) {
       if (req.method === "POST" && pathname === "/invocations") {
         const parsed = await parseRequest(req);
         if (parsed instanceof Response) return parsed;
-        const runner = runners[parsed.harnessType ?? "anthropic"];
+        const runner = runners[parsed.harnessType ?? DEFAULT_PROVIDER];
         return json(await runner.runLoop(parsed));
       }
 
@@ -58,7 +60,7 @@ export function createServer(runners: HarnessRunners = defaultRunners) {
 
         const encoder = new TextEncoder();
         const abort = new AbortController();
-        const runner = runners[parsed.harnessType ?? "anthropic"];
+        const runner = runners[parsed.harnessType ?? DEFAULT_PROVIDER];
         const iterator = runner.runStream(parsed, abort.signal)[Symbol.asyncIterator]();
         const stream = new ReadableStream<Uint8Array>({
           async pull(controller) {

@@ -26,7 +26,6 @@ import {
   loginAuthPath,
   materializeCodexHome,
   materializeWorkspace,
-  reduceCodexEvents,
   runAgentLoop,
   sandboxModeFor,
   streamAgentLoop,
@@ -201,7 +200,6 @@ test("buildCodexOptions supplies developer instructions and hides secrets from s
   expect(options.env).toEqual({
     PATH: "/bin",
     OPENAI_API_KEY: "openai-secret",
-    UNRELATED: "kept",
     CODEX_HOME: "/state/session-1",
   });
   expect(options.config).toEqual({
@@ -258,41 +256,19 @@ test("formatCodexError hides verbose authentication retries", () => {
   );
 });
 
-test("Read and Write use a workspace MCP bridge while only Bash enables Codex shell", () => {
+test("Read and Write do not add Codex tools when Bash is absent", () => {
   const options = buildCodexOptions(
     { ...request, agent: { ...request.agent, tools: ["Read", "Write"] } },
-    {
-      codexHome: "/state",
-      workspaceDir: "/workspace",
-      workspaceBridgePath: "/app/workspace-mcp.ts",
-      executablePath: "/usr/bin/bun",
-      env: {},
-    },
+    { codexHome: "/state", env: {} },
   );
   expect(options.config?.features).toMatchObject({ shell_tool: false });
-  expect(options.env).toMatchObject({ GILLY_WORKSPACE_DIR: "/workspace" });
-  expect(options.config?.mcp_servers).toEqual({
-    workspace: {
-      command: "/usr/bin/bun",
-      args: ["/app/workspace-mcp.ts"],
-      env_vars: ["GILLY_WORKSPACE_DIR"],
-      enabled_tools: ["read_file", "glob", "grep", "write_file", "edit_file"],
-      default_tools_approval_mode: "approve",
-      required: true,
-    },
-  });
+  expect(options.config?.mcp_servers).toBeUndefined();
   expect(
     buildCodexOptions(
       { ...request, agent: { ...request.agent, tools: ["Bash"] } },
       { codexHome: "/state", env: {} },
     ).config?.features,
   ).toMatchObject({ shell_tool: true });
-  expect(
-    buildCodexOptions(
-      { ...request, agent: { ...request.agent, tools: ["Read", "Write", "Bash"] } },
-      { codexHome: "/state", env: {} },
-    ).config?.mcp_servers,
-  ).toBeUndefined();
 });
 
 test("buildCodexOptions exposes the gateway through a stdio MCP bridge without argv secrets", () => {
@@ -380,10 +356,11 @@ test("materialization rejects duplicate skill bundles before changing managed st
 test("materializeCodexHome removes the obsolete permission profile", () => {
   const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
   const home = join(root, "session");
+  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
   mkdirSync(home);
   writeFileSync(join(home, "config.toml"), "old profile");
 
-  materializeCodexHome(home);
+  materializeCodexHome(home, {}, loginAuthPath(fakeLoginRoot));
 
   expect(existsSync(join(home, "config.toml"))).toBe(false);
 });
@@ -424,16 +401,6 @@ test("materializeCodexHome is a no-op when there is no logged-in session either"
   expect(existsSync(join(home, "auth.json"))).toBe(false);
 });
 
-test("reduceCodexEvents reads a full turn and rejects failed turns", async () => {
-  expect(await reduceCodexEvents(eventStream(fixture))).toEqual({
-    harnessSessionId: "thread-fixture-1",
-    finalText: "Created hello.txt and verified it.",
-  });
-  await expect(
-    reduceCodexEvents(eventStream([{ type: "turn.failed", error: { message: "model failed" } }])),
-  ).rejects.toThrow("model failed");
-});
-
 test("streamAgentLoop translates completed messages and tool items without duplicate snapshots", async () => {
   expect(await collect(streamAgentLoop(request, fakeCodex(fixture)))).toEqual([
     { type: "message", text: "I will inspect and update the file." },
@@ -446,6 +413,17 @@ test("streamAgentLoop translates completed messages and tool items without dupli
       harnessSessionId: "thread-fixture-1",
     },
   ]);
+});
+
+test("streamAgentLoop reports failed turns", async () => {
+  expect(
+    await collect(
+      streamAgentLoop(
+        request,
+        fakeCodex([{ type: "turn.failed", error: { message: "model failed" } }]),
+      ),
+    ),
+  ).toEqual([{ type: "error", error: "model failed" }]);
 });
 
 test("streamAgentLoop drains through SDK EOF before emitting done", async () => {

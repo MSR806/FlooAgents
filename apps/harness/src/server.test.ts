@@ -73,9 +73,16 @@ test("POST /invocations defaults to Anthropic and dispatches explicit OpenAI req
   expect(called).toEqual(["anthropic", "openai"]);
 });
 
-test("POST /invocations/stream dispatches OpenAI and cancels its source", async () => {
+test("POST /invocations/stream forwards cancellation and closes its source", async () => {
   let cancelled = false;
-  async function* openaiStream(): AsyncIterable<StreamEvent> {
+  let aborted = false;
+  async function* openaiStream(
+    _request: InvocationRequest,
+    signal?: AbortSignal,
+  ): AsyncIterable<StreamEvent> {
+    signal?.addEventListener("abort", () => {
+      aborted = true;
+    });
     try {
       yield { type: "token", text: "hello" };
       await new Promise(() => {});
@@ -98,5 +105,6 @@ test("POST /invocations/stream dispatches OpenAI and cancels its source", async 
     '{"type":"token","text":"hello"}\n',
   );
   await reader?.cancel();
+  expect(aborted).toBe(true);
   expect(cancelled).toBe(true);
 });

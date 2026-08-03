@@ -27,7 +27,7 @@ Tests are **`bun:test`, fully offline, and every seam is injectable** — no moc
 | --- | --- | --- |
 | `RuntimeProvider` | Object literal implementing `invoke` / `invokeStream` / `healthy` with canned data | `apps/control-plane/src/engine.test.ts` (`fakeRuntime`) |
 | SDK `query` | Pass `queryFn` (default-valued param) returning a fake `async function*` of `SDKMessage`s; throw to test the error path | `apps/harness/src/harness-claude/loop.test.ts` |
-| HTTP server | `createServer(runners)` returns a `fetch` handler — call it directly with `new Request(...)`, no socket | `apps/harness/src/server.test.ts` |
+| HTTP server | `createServer(runners())` returns a `fetch` handler — call it directly with `new Request(...)`, no socket | `apps/harness/src/server.test.ts` |
 | Database | `createDb(":memory:")` — the real Drizzle/SQLite, fresh per test | `packages/db/src/repo.test.ts`, `engine.test.ts` |
 | Async event stream | `async function*` yielding canned `StreamEvent`s; drain with a small `collect()` helper | `engine.test.ts` |
 | Real HTTP wire (parsers) | `Bun.serve({ port: 0, fetch })`, then point the client at `server.port`; `server.stop(true)` after | `packages/runtime/src/local.test.ts` |
@@ -59,14 +59,14 @@ const collect = async (it: AsyncIterable<StreamEvent>) => {
 
 - **Test:** pure helpers (translators, formatters, reducers), state-machine behavior (the engine's session/run + queue/batch), contract schemas, and the parsing of any wire format you own (NDJSON, SSE lines).
 - **Don't test:** the thin I/O shells (the Bolt wiring, `Bun.serve` glue, the SDK itself). If a shell has logic worth testing, that's the signal to extract it into a pure helper first.
-- **Never:** hit the network, require `ANTHROPIC_API_KEY`, or open a real Slack connection in a test.
+- **Never:** hit the network, require Anthropic/OpenAI API keys or Codex login credentials, or open a real Slack connection in a test.
 
 ## Recipes
 
 - **A new channel translator** → pure function `nativeEvent → MessageInput`; test sourceKey derivation, text cleanup, and edge cases (missing/empty fields). Mirror `slack-translate.test.ts`.
 - **A new runtime provider** → for parsing/transport logic, stand up a `Bun.serve({ port: 0 })` that returns canned bytes and assert the provider yields the right events (mirror `local.test.ts`). Don't call a real backend.
 - **Engine behavior** → `createDb(":memory:")` + a `fakeRuntime`; assert replies/streamed events and that Session/Run state persisted. To test the **queue/batch**, give the fake an `invokeStream` that enqueues follow-ups on its first call, then assert the second run is the combined batch (see the batch test in `engine.test.ts`).
-- **A harness route** → call `createServer(fakeRunLoop, fakeRunStream).fetch(new Request(...))`; assert status codes (e.g. 400 on a bad body) and the response body/stream.
+- **A harness route** → build `runners()` with fake `runLoop` / `runStream` functions, then call `createServer(runners()).fetch(new Request(...))`; assert status codes (e.g. 400 on a bad body) and the response body/stream.
 
 ## Conventions
 

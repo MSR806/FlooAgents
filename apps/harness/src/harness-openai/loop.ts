@@ -21,7 +21,6 @@ import {
 
 const repoRoot = resolve(import.meta.dir, "../../../..");
 const gatewayBridgePath = resolve(import.meta.dir, "gateway-mcp.ts");
-const workspaceBridgePath = resolve(import.meta.dir, "workspace-mcp.ts");
 
 type ThreadLike = {
   readonly id: string | null;
@@ -90,19 +89,41 @@ export function buildThreadOptions(req: InvocationRequest, cwd: string): ThreadO
 type CodexOptionsInput = {
   codexHome: string;
   bridgePath?: string;
-  workspaceBridgePath?: string;
   executablePath?: string;
-  workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
 };
 
+type LocalMcpServerEntry = {
+  command: string;
+  args: string[];
+  env_vars: string[];
+  enabled_tools: string[];
+  default_tools_approval_mode: "approve";
+  required: true;
+};
+
+const CODEX_ENV_ALLOWLIST = [
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "PATH",
+  "SHELL",
+  "TMPDIR",
+  "USER",
+  "OPENAI_API_KEY",
+  "CODEX_API_KEY",
+] as const;
+
 /** Build per-invocation SDK options without writing secrets to config files. */
 export function buildCodexOptions(req: InvocationRequest, input: CodexOptionsInput): CodexOptions {
+  // Guard rejected model families before constructing any SDK or subprocess configuration.
   providerFor(req.agent.model);
   const sourceEnv = input.env ?? process.env;
-  const env = Object.fromEntries(
-    Object.entries(sourceEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
+  const env: Record<string, string> = {};
+  for (const key of CODEX_ENV_ALLOWLIST) {
+    const value = sourceEnv[key];
+    if (value !== undefined) env[key] = value;
+  }
   env.CODEX_HOME = input.codexHome;
 
   const shellEnabled = req.agent.tools?.includes("Bash") ?? false;
@@ -122,30 +143,7 @@ export function buildCodexOptions(req: InvocationRequest, input: CodexOptionsInp
   const { serviceTier } = resolveCodexModel(req.agent.model);
   if (serviceTier) config.service_tier = serviceTier;
 
-  const tools = req.agent.tools ?? [];
-  // Never combine the host-side filesystem bridge with model-driven shell processes: a shell could
-  // otherwise race path validation by swapping a directory for a symlink. Bash can perform the
-  // requested reads/writes itself inside Codex's OS-enforced workspace profile.
-  const workspaceTools = tools.includes("Bash")
-    ? []
-    : [
-        ...(tools.includes("Read") ? ["read_file", "glob", "grep"] : []),
-        ...(tools.includes("Write") ? ["write_file", "edit_file"] : []),
-      ];
-  const mcpServers: Record<string, NonNullable<CodexOptions["config"]>> = {};
-  if (workspaceTools.length) {
-    if (!input.workspaceDir) throw new Error("workspaceDir is required for Read or Write tools");
-    env.GILLY_WORKSPACE_DIR = input.workspaceDir;
-    mcpServers.workspace = {
-      command: input.executablePath ?? process.execPath,
-      args: [input.workspaceBridgePath ?? workspaceBridgePath],
-      env_vars: ["GILLY_WORKSPACE_DIR"],
-      enabled_tools: workspaceTools,
-      default_tools_approval_mode: "approve",
-      required: true,
-    };
-  }
-
+  const mcpServers: Record<string, LocalMcpServerEntry> = {};
   if (req.gateway) {
     env.GILLY_GATEWAY_URL = req.gateway.url;
     env.GILLY_GATEWAY_TOKEN = req.gateway.token;
@@ -297,28 +295,6 @@ function safeRelativePath(path: string): boolean {
   return !path.split("/").some((segment) => !segment || segment === "." || segment === "..");
 }
 
-/** Collapse a documented Codex event stream to its resumable id and final assistant response. */
-export async function reduceCodexEvents(
-  events: AsyncIterable<ThreadEvent>,
-  initialSessionId: string | null = null,
-): Promise<{ harnessSessionId: string | null; finalText: string }> {
-  let harnessSessionId = initialSessionId;
-  let finalText = "";
-  let completed = false;
-
-  for await (const event of events) {
-    if (event.type === "thread.started") harnessSessionId = event.thread_id;
-    else if (event.type === "item.completed" && event.item.type === "agent_message") {
-      finalText = event.item.text;
-    } else if (event.type === "turn.completed") completed = true;
-    else if (event.type === "turn.failed") throw new Error(event.error.message);
-    else if (event.type === "error") throw new Error(event.message);
-  }
-
-  if (!completed) throw new Error("Codex stream ended before turn.completed");
-  return { harnessSessionId, finalText };
-}
-
 function summarizeItem(event: Extract<ThreadEvent, { type: "item.completed" }>): string {
   const { item } = event;
   if (item.type === "command_execution") return concise(item.command);
@@ -364,14 +340,6 @@ function toolEvent(event: Extract<ThreadEvent, { type: "item.completed" }>): Str
     return { type: "tool", name: "Write", summary: summarizeItem(event) };
   }
   if (event.item.type === "mcp_tool_call") {
-    if (event.item.server === "workspace") {
-      return {
-        type: "tool",
-        name:
-          event.item.tool === "write_file" || event.item.tool === "edit_file" ? "Write" : "Read",
-        summary: summarizeItem(event),
-      };
-    }
     return {
       type: "tool",
       name: `${event.item.server}.${event.item.tool}`,
@@ -402,7 +370,6 @@ export async function* streamAgentLoop(
     const codex = codexFactory(
       buildCodexOptions(req, {
         codexHome,
-        workspaceDir: cwd,
       }),
     );
     const threadOptions = buildThreadOptions(req, cwd);

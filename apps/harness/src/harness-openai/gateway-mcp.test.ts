@@ -19,6 +19,30 @@ test("gatewayPost authenticates and forwards JSON to the Gilly gateway", async (
   expect(seen?.url).toBe("http://gateway/catalog");
   expect((seen?.init.headers as Record<string, string>).authorization).toBe("Bearer token");
   expect(seen?.init.body).toBe(JSON.stringify({ query: "git" }));
+  expect(seen?.init.signal).toBeInstanceOf(AbortSignal);
+});
+
+test("gatewayPost preserves non-2xx gateway errors", async () => {
+  const fakeFetch = (async () =>
+    new Response(JSON.stringify({ error: "not allowed", tool: "github.create_issue" }), {
+      status: 403,
+    })) as unknown as typeof fetch;
+
+  expect(await gatewayPost("http://gateway", "token", "/invoke", {}, fakeFetch)).toEqual({
+    ok: false,
+    data: { error: "not allowed", tool: "github.create_issue" },
+  });
+});
+
+test("gatewayPost returns fetch failures as gateway errors", async () => {
+  const fakeFetch = (async () => {
+    throw new Error("connection refused");
+  }) as unknown as typeof fetch;
+
+  expect(await gatewayPost("http://gateway", "token", "/catalog", {}, fakeFetch)).toEqual({
+    ok: false,
+    data: { error: "connection refused" },
+  });
 });
 
 test("the MCP bridge lists and invokes Gilly gateway tools", async () => {

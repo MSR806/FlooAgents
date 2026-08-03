@@ -15,6 +15,9 @@ import type {
   StreamEvent,
 } from "@gilly/harness-protocol";
 import { z } from "zod";
+import { gatewayPost } from "../gateway-http.ts";
+
+export { gatewayPost } from "../gateway-http.ts";
 
 // Anchored to the repo root so dev works
 // regardless of cwd; relative WORKSPACES_DIR anchors here, absolute values pass through.
@@ -39,22 +42,6 @@ const TOOL_MAP: Record<string, string[]> = {
 /** Expand Gilly tool abstractions into SDK tool names (unknowns pass through), de-duplicated. */
 export function expandTools(gillyTools: string[]): string[] {
   return [...new Set(gillyTools.flatMap((t) => TOOL_MAP[t] ?? [t]))];
-}
-
-/** POST JSON to `${url}${path}` with a Bearer token. Returns the HTTP ok flag + parsed body. */
-export async function gatewayPost(
-  url: string,
-  token: string,
-  path: string,
-  body: unknown,
-  fetchFn = fetch,
-): Promise<{ ok: boolean; data: unknown }> {
-  const res = await fetchFn(`${url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  return { ok: res.ok, data: await res.json() };
 }
 
 /** Wrap a JSON-serializable value as an MCP tool text result. */
@@ -124,7 +111,11 @@ export function makeGatewayMcpServer(
  * Code's tool-use guidance, bypassed permissions (headless: no human to approve), and a
  * sandboxed workspace. A bare chat agent stays chat-only.
  */
-export function buildOptions(req: InvocationRequest, streaming: boolean): Options {
+export function buildOptions(
+  req: InvocationRequest,
+  streaming: boolean,
+  abortController?: AbortController,
+): Options {
   // `req.agent.tools` holds Gilly abstractions (Read/Write/Bash); expand to real SDK tools here.
   const fsTools = expandTools(req.agent.tools ?? []);
   const skills = req.skills ?? [];
@@ -170,6 +161,7 @@ export function buildOptions(req: InvocationRequest, streaming: boolean): Option
       : {}),
     ...(needsWorkspace ? { cwd: workspaceDir(req) } : {}),
     ...(streaming ? { includePartialMessages: true } : {}),
+    ...(abortController ? { abortController } : {}),
     ...(req.resumeSessionId ? { resume: req.resumeSessionId } : {}),
   };
 }
@@ -272,13 +264,18 @@ export async function runAgentLoop(
 export async function* streamAgentLoop(
   req: InvocationRequest,
   queryFn: typeof query = query,
+  externalSignal?: AbortSignal,
 ): AsyncIterable<StreamEvent> {
+  const abortController = new AbortController();
+  const forwardAbort = () => abortController.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) forwardAbort();
+  else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
   let harnessSessionId: string | null = null;
   let resultText: string | null = null;
   let accumulated = "";
   let pendingNarration: string[] = [];
   try {
-    const options = buildOptions(req, true);
+    const options = buildOptions(req, true, abortController);
     if (options.cwd) {
       mkdirSync(options.cwd, { recursive: true });
       materializeSkills(req.skills ?? [], options.cwd);
@@ -322,5 +319,7 @@ export async function* streamAgentLoop(
     yield { type: "done", finalText: resultText ?? accumulated, harnessSessionId };
   } catch (err) {
     yield { type: "error", error: String(err) };
+  } finally {
+    externalSignal?.removeEventListener("abort", forwardAbort);
   }
 }

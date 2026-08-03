@@ -39,7 +39,7 @@ Gilly's gateway speaks `POST /catalog` and `POST /invoke`; it is not itself an M
 
 ## Tool Boundary
 
-Codex permissions constrain filesystem and network effects but are not themselves a vendor tool allowlist. Without `Bash`, Gilly exposes `Read` and `Write` through a workspace-scoped stdio MCP bridge. With `Bash`, it disables that host-side bridge and uses only Codex's OS-sandboxed shell, avoiding path-validation races between the two lanes. Gilly selects Codex's native `read-only` sandbox unless the agent has `Write` or `Bash`, when it selects `workspace-write`. Bash-enabled agents also receive command network access for remote Git operations. Provider-side web search remains disabled, and Gilly never grants `danger-full-access`.
+Codex permissions constrain filesystem and network effects but are not themselves a vendor tool allowlist. Gilly does not synthesize Codex filesystem tools for `Read` or `Write`; Codex receives its native OS-sandboxed shell only when `Bash` is configured. Gilly selects Codex's native `read-only` sandbox unless the agent has `Write` or `Bash`, when it selects `workspace-write`. Bash-enabled agents also receive command network access for remote Git operations. Provider-side web search remains disabled, and Gilly never grants `danger-full-access`.
 
 The shell environment is allowlisted so model-generated commands do not receive OpenAI or gateway secrets.
 

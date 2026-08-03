@@ -15,7 +15,7 @@ test("InvocationRequest carries inline skills", () => {
     agent: {
       id: "release-bot",
       name: "Release Bot",
-      model: "sonnet",
+      model: "gpt-5.2",
       systemPrompt: "ship it",
       skills: ["cut-release"],
     },

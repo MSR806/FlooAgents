@@ -11,10 +11,12 @@ project-gilly/
 ├── apps/
 │   ├── control-plane/      # Gilly server: channels, session/run engine, management API
 │   ├── harness/            # One AgentCore server with Claude and OpenAI loops
+│   ├── gateway/            # Authenticated connector and control-plane tool gateway
+│   └── web/                # Next.js management UI and web chat
 ├── packages/
 │   ├── core/               # domain model + Zod schemas: Agent, Connection, Session, Run, Workspace
 │   ├── harness-protocol/   # the control-plane ⇄ harness contract (invocation request / result)
-│   ├── runtime/            # RuntimeProvider interface + LocalRuntimeProvider (AgentCore provider = stub)
+│   ├── runtime/            # RuntimeProvider + LocalRuntimeProvider (AgentCore provider planned)
 │   └── db/                 # Drizzle schema + SQLite client for operational state
 ├── config/agents/          # *.json agent definitions, loaded at boot
 ├── docker/                 # Dockerfile.control-plane, Dockerfile.harness, compose.yaml
@@ -57,6 +59,8 @@ subprocesses behind the same HTTP contract.
 - **`Dockerfile.control-plane`** — Bun base. Runs the Slack listener + session engine. Mounts `config/agents` and the SQLite volume.
 - **`Dockerfile.harness`** - unified harness on `:8080`, including a native Codex CLI resolution
   check.
+- **`Dockerfile.gateway`** - connector and control-plane tool gateway on `:4100`.
+- **`Dockerfile.web`** - Next.js management UI on `:3000`.
 - **`compose.yaml`** - wires one harness URL to `RoutingRuntimeProvider`, with persistent shared
   workspaces and separate Codex session state.
 

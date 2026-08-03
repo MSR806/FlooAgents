@@ -1,22 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { gatewayPost } from "../gateway-http.ts";
 
-/** Call Gilly's run-scoped gateway HTTP API from the Codex-facing MCP bridge. */
-export async function gatewayPost(
-  url: string,
-  token: string,
-  path: string,
-  body: unknown,
-  fetchFn = fetch,
-): Promise<{ ok: boolean; data: unknown }> {
-  const response = await fetchFn(`${url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  return { ok: response.ok, data: await response.json() };
-}
+export { gatewayPost } from "../gateway-http.ts";
 
 export function createGatewayMcpServer(url: string, token: string, fetchFn = fetch): McpServer {
   const server = new McpServer({ name: "gilly-gateway", version: "0.0.0" });

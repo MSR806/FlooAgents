@@ -20,7 +20,7 @@ Only the **control plane** is ours. The harness and runtime are kept behind **st
 | Seam | Where | What crosses it |
 | --- | --- | --- |
 | **harness-protocol** | `packages/harness-protocol` | control-plane ⇄ harness contract: `InvocationRequest`, `InvocationResult`, `StreamEvent` (Zod schemas) |
-| **RuntimeProvider** | `packages/runtime/src/provider.ts` | control-plane → runtime: `invoke` / `invokeStream` / `healthy`. `LocalRuntimeProvider` today; AgentCore later |
+| **RuntimeProvider** | `packages/runtime/src/provider.ts` | control-plane → runtime: `invoke` / `invokeStream` / `healthy`. `LocalRuntimeProvider` today; `AgentCoreRuntimeProvider` planned |
 | **Channel** | `apps/control-plane/src/channels/channel.ts` | inbound surfaces (Slack, Web) → the engine |
 | **SkillStore** | `apps/control-plane/src/stores/skill-store.ts` | control-plane → skill registry: `list`/`get`/`detail`/`create`/`update`/`delete`. `LocalSkillStore` (filesystem) today; `S3SkillStore` later |
 
@@ -76,7 +76,7 @@ Extension points are interfaces with small implementations (`class … implement
 
 - **New agent** → create via the web UI or management API (`POST /api/agents`); it persists to the `agents` table via `@gilly/db` repo fns. `AgentConfig` (`packages/core/src/agent.ts`) is `{ id, name, model, systemPrompt, tools?, skills? }`. `config/agents/*.json` are upserted into the DB on every boot by `syncAgents` (files win for the ids they define; agents created only in the DB survive).
 - **New skill** → create via the web UI or management API (`POST /api/skills`) with `{ name, description, content }`; the `SkillStore` composes a `SKILL.md` (YAML frontmatter + body) under `config/skills/<name>/`. The engine ships an agent's attached skills inline to the harness as `SkillBundle`s.
-- **Agent tools** are high-level Gilly abstractions — `Read` / `Write` / `Bash` — stored in config. Each loop maps them to its concrete SDK tools (for example, `apps/harness/src/harness-claude/loop.ts` maps `Read → Read/Glob/Grep`). **Never surface SDK tool names above the harness**; the UI/DB/API see only the abstractions.
+- **Agent tools** are high-level Gilly abstractions — `Read` / `Write` / `Bash` — stored in config. Claude maps them through `expandTools` in `apps/harness/src/harness-claude/loop.ts`; OpenAI enables its native sandboxed shell only for `Bash` through `buildCodexOptions` / `buildThreadOptions` in `apps/harness/src/harness-openai/loop.ts` and does not synthesize Read/Write tools. **Never surface SDK tool names above the harness**; the UI/DB/API see only the abstractions.
 - **New config-store backend** (e.g. S3 skills) → add a class implementing `SkillStore` in `apps/control-plane/src/stores/` (sibling to `local-skill-store.ts`) and swap it in `index.ts`. Nothing above the seam changes.
 - **New channel** (Telegram, etc.) → add `apps/control-plane/src/channels/<x>.ts` implementing `Channel`. Write a **pure** translator (native event → `MessageInput`) + test. Drive `engine.handle(...)` for conversational surfaces that need the one-run-per-session queue/batch, or `engine.stream(...)` for request-scoped surfaces (see `web.ts`). Wire it in `apps/control-plane/src/index.ts` (channels start optionally based on config). Don't put session/queue logic in the channel — that's the engine's job.
 - **New runtime provider** → add a class in `packages/runtime` implementing `RuntimeProvider` (`invoke`, `invokeStream`, `healthy`); export it from `index.ts`. Nothing above the seam changes.
@@ -87,7 +87,7 @@ Extension points are interfaces with small implementations (`class … implement
 ## Boundaries to respect (MVP scope & invariants)
 
 - **Config storage is split by shape.** Agent config → SQLite (`agents` table + repo CRUD in `@gilly/db`, runtime-mutable via the API). Skill blobs (`SKILL.md` + files) → the `SkillStore` seam (filesystem now, S3 later). Operational state (sessions/runs/queue) → `packages/db`. Connections/secrets → env. The rule isn't "config never in the DB" — it's: structured records in SQLite, blobs behind the store seam.
-- **Out of scope right now:** MCP, subagents, triggers (GitHub/Cron), Fleet, real AgentCore cloud, a secrets vault. Don't half-build these into core types; they're deliberately deferred (see `docs/mvp-scope.md`).
+- **MCP scope:** the harness-local gateway MCP bridge is implemented behind the harness contract. General core/control-plane MCP modeling remains deferred, along with subagents, triggers (GitHub/Cron), Fleet, real AgentCore cloud, and a secrets vault. Don't half-build deferred capabilities into core types (see `docs/mvp-scope.md`).
 - **Env:** each app auto-loads its own `apps/<app>/.env` (Bun, from the app's cwd). Control-plane path defaults resolve against the repo root via `import.meta.dir`, with env overrides (so Docker's absolute paths work) — keep new paths cwd-independent the same way.
 - **Side-effect helpers never break the main flow** (e.g. a failed Slack reaction is swallowed and logged, not thrown). Keep that for best-effort UI niceties.
 - **The harness loop never throws** — failures come back as an `{ status: "error" }` result / `error` StreamEvent.

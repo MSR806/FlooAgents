@@ -50,7 +50,7 @@ test("parseAgentValues returns the server agent and rejects malformed responses"
     skills: ["research"],
   };
 
-  expect(parseAgentValues(agent)).toBe(agent);
+  expect(parseAgentValues(agent)).toEqual(agent);
   expect(() => parseAgentValues({ ...agent, model: undefined })).toThrow(
     "Server returned an invalid agent",
   );

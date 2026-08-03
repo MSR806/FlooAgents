@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { InvocationRequest } from "@gilly/harness-protocol";
 import {
@@ -91,13 +91,24 @@ test("runAgentLoop never throws — failures become an error result", async () =
 });
 
 test("workspaceDir joins WORKSPACES_DIR with the workspace handle", () => {
-  process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
-  expect(workspaceDir({ ...req, workspace: { provider: "local", handle: "s1" } })).toBe(
-    "/tmp/gilly-ws/s1",
-  );
-  // No workspace → a stable "default" bucket.
-  expect(workspaceDir(req)).toBe("/tmp/gilly-ws/default");
-  delete process.env.WORKSPACES_DIR;
+  const previous = process.env.WORKSPACES_DIR;
+  const repoRoot = resolve(import.meta.dir, "../../../..");
+  try {
+    process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
+    expect(workspaceDir({ ...req, workspace: { provider: "local", handle: "s1" } })).toBe(
+      "/tmp/gilly-ws/s1",
+    );
+    expect(workspaceDir(req)).toBe("/tmp/gilly-ws/default");
+
+    process.env.WORKSPACES_DIR = "relative-workspaces";
+    expect(workspaceDir(req)).toBe(join(repoRoot, "relative-workspaces", "default"));
+
+    delete process.env.WORKSPACES_DIR;
+    expect(workspaceDir(req)).toBe(join(repoRoot, "data/workspaces/default"));
+  } finally {
+    if (previous === undefined) delete process.env.WORKSPACES_DIR;
+    else process.env.WORKSPACES_DIR = previous;
+  }
 });
 
 test("buildOptions: a tool-less agent stays chat-only (no cwd, plain prompt)", () => {
@@ -269,6 +280,34 @@ test("streamAgentLoop emits a tool event per tool_use block", async () => {
     { type: "tool", name: "Bash", summary: "ls" },
     { type: "done", finalText: "ok", harnessSessionId: "s3" },
   ]);
+});
+
+test("streamAgentLoop forwards external cancellation to the SDK query", async () => {
+  let sdkAbort: AbortController | undefined;
+  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    sdkAbort = abortController;
+    return (async function* () {
+      await new Promise<void>((_resolve, reject) =>
+        abortController.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+          once: true,
+        }),
+      );
+    })();
+  }) as unknown as typeof query;
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+  const pending = iterator.next();
+
+  await Promise.resolve();
+  external.abort();
+
+  expect(sdkAbort?.signal.aborted).toBe(true);
+  expect(await pending).toEqual({
+    done: false,
+    value: { type: "error", error: "Error: aborted" },
+  });
 });
 
 test("streamAgentLoop surfaces a tool-turn's narration as a `message`, then its tools", async () => {

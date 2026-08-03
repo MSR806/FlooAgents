@@ -1,18 +1,7 @@
-export type AgentValues = {
-  id: string;
-  name: string;
-  model: string;
-  systemPrompt: string;
-  tools?: string[];
-  skills?: string[];
-  connectors?: string[];
-};
+import { AgentConfig, ModelInfo as ModelInfoSchema } from "@gilly/core";
 
-export type ModelInfo = {
-  id: string;
-  label: string;
-  provider: "anthropic" | "openai";
-};
+export type AgentValues = ReturnType<typeof AgentConfig.parse>;
+export type ModelInfo = ReturnType<typeof ModelInfoSchema.parse>;
 
 export type ModelOptionGroup = {
   label: string;
@@ -26,22 +15,9 @@ const PROVIDERS = [
 
 /** Validate the model catalog returned by the control plane. */
 export function parseModelCatalog(value: unknown): ModelInfo[] {
-  if (!Array.isArray(value)) throw new Error("Invalid model catalog");
-
-  return value.map((item) => {
-    if (!item || typeof item !== "object") throw new Error("Invalid model catalog");
-    const record = item as Record<string, unknown>;
-    if (
-      typeof record.id !== "string" ||
-      !record.id ||
-      typeof record.label !== "string" ||
-      !record.label ||
-      !PROVIDERS.some(({ provider }) => provider === record.provider)
-    ) {
-      throw new Error("Invalid model catalog");
-    }
-    return record as ModelInfo;
-  });
+  const parsed = ModelInfoSchema.array().safeParse(value);
+  if (!parsed.success) throw new Error("Invalid model catalog");
+  return parsed.data;
 }
 
 /** Group catalog models in picker order, preserving an unlisted current model as a safe fallback. */
@@ -66,23 +42,7 @@ export function modelOptionGroups(models: readonly ModelInfo[], currentModel: st
 
 /** Validate the successful create/update response before reflecting server-owned values in the UI. */
 export function parseAgentValues(value: unknown): AgentValues {
-  if (!value || typeof value !== "object") throw new Error("Server returned an invalid agent");
-  const record = value as Record<string, unknown>;
-  for (const key of ["id", "name", "model", "systemPrompt"] as const) {
-    if (typeof record[key] !== "string" || !record[key]) {
-      throw new Error("Server returned an invalid agent");
-    }
-  }
-
-  const optionalArrays = ["tools", "skills", "connectors"] as const;
-  for (const key of optionalArrays) {
-    if (
-      record[key] !== undefined &&
-      (!Array.isArray(record[key]) || !record[key].every((item) => typeof item === "string"))
-    ) {
-      throw new Error("Server returned an invalid agent");
-    }
-  }
-
-  return value as AgentValues;
+  const parsed = AgentConfig.safeParse(value);
+  if (!parsed.success) throw new Error("Server returned an invalid agent");
+  return parsed.data;
 }

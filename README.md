@@ -39,9 +39,9 @@ without rebuilding infrastructure each time.
 **Active development.** APIs, package boundaries, and docs may change while the
 MVP is being built.
 
-Agents are triggered from Slack or web, routed by their selected model to the
-Claude or OpenAI Codex harness, and persisted in SQLite so follow-ups resume the
-correct provider session.
+Agents are triggered from Slack or web and routed by their selected model to the
+Claude or OpenAI Codex harness. Agent runs and provider session references are
+persisted in SQLite so follow-ups resume the correct provider session.
 
 ## What Gilly Provides
 
@@ -127,6 +127,7 @@ Run the stack with Compose:
 
 ```bash
 cp apps/harness/.env.example apps/harness/.env
+cp apps/control-plane/.env.example apps/control-plane/.env
 
 docker compose -f docker/compose.yaml up --build
 ```
