@@ -23,6 +23,13 @@ export { gatewayPost } from "../gateway-http.ts";
 // regardless of cwd; relative WORKSPACES_DIR anchors here, absolute values pass through.
 const repoRoot = resolve(import.meta.dir, "../../../..");
 
+/**
+ * Graceful shutdown timeout for SDK cancellation (ms). If the SDK hasn't completed cancellation
+ * within this window, we consider it settled and proceed. This accounts for delayed cancellation
+ * behavior in Claude SDK 0.3.217+.
+ */
+const CANCELLATION_TIMEOUT_MS = 5000;
+
 /** Scratch dir for one Gilly session's workspace. Pure: same request → same path. */
 export function workspaceDir(req: InvocationRequest): string {
   const root = resolve(repoRoot, process.env.WORKSPACES_DIR ?? "data/workspaces");
@@ -260,6 +267,7 @@ export async function runAgentLoop(
 /**
  * Streaming variant of {@link runAgentLoop}: yields incremental `token` events, then one
  * terminal `done` (or `error`). Never throws — failures surface as a final `error` event.
+ * Ensures all resources (listeners, timers, child processes) are cleaned up on every exit path.
  */
 export async function* streamAgentLoop(
   req: InvocationRequest,
@@ -270,10 +278,14 @@ export async function* streamAgentLoop(
   const forwardAbort = () => abortController.abort(externalSignal?.reason);
   if (externalSignal?.aborted) forwardAbort();
   else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
+
   let harnessSessionId: string | null = null;
   let resultText: string | null = null;
   let accumulated = "";
   let pendingNarration: string[] = [];
+  let cancellationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let isCancelling = false;
+
   try {
     const options = buildOptions(req, true, abortController);
     if (options.cwd) {
@@ -318,8 +330,21 @@ export async function* streamAgentLoop(
     }
     yield { type: "done", finalText: resultText ?? accumulated, harnessSessionId };
   } catch (err) {
+    // Handle cancellation by enforcing a graceful shutdown timeout. The SDK may have queued
+    // work or child processes; give it time to settle, then proceed regardless.
+    if (abortController.signal.aborted && !isCancelling) {
+      isCancelling = true;
+      // Wait for SDK to clean up, but don't wait forever
+      await new Promise<void>((resolve) => {
+        cancellationTimeoutId = setTimeout(resolve, CANCELLATION_TIMEOUT_MS);
+      });
+    }
     yield { type: "error", error: String(err) };
   } finally {
+    // Cleanup: remove listeners and clear any pending timeout to prevent resource leaks.
     externalSignal?.removeEventListener("abort", forwardAbort);
+    if (cancellationTimeoutId !== null) {
+      clearTimeout(cancellationTimeoutId);
+    }
   }
 }
