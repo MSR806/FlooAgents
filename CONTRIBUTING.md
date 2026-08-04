@@ -14,20 +14,35 @@ bun test
 For local services, copy the app `.env.example` files described in the README.
 Do not commit secrets, local databases, or generated runtime data.
 
-`bun install` also points git at `.githooks/`, which adds a pre-commit hook running
-`biome` over your staged files (~100ms). If it rejects a commit, `bun run format`
-fixes the formatting — then re-stage.
+You also need [gitleaks](https://github.com/gitleaks/gitleaks) for the pre-commit hook:
+
+```bash
+brew install gitleaks
+```
+
+## Hooks
+
+`bun install` sets up husky, which installs a pre-commit hook that runs two fast
+checks over your **staged** files:
+
+- `biome` — formatting and lint. If it fails, `bun run format`, then re-stage.
+- `gitleaks` — secret scanning. If it fails, remove the secret; don't `--no-verify`
+  past it.
+
+The hook deliberately stays under a second. Typecheck, tests, and the web build run
+in CI, because a slow hook just teaches people to skip it.
 
 ## Checks
 
-CI runs on every pull request: `lint`, `typecheck`, `test`, and a web build. To run
-the same gate locally:
+CI runs on every pull request: `lint`, `typecheck`, `test`, a web build, and a
+gitleaks scan of every commit in the branch. To run the same gate locally:
 
 ```bash
 bun run lint
 bun run typecheck
 bun test
 bun run --filter '@gilly/web' build
+gitleaks git . --redact
 ```
 
 ## Pull requests

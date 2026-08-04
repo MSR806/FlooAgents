@@ -16,7 +16,7 @@
     "packages/*"
   ],
   "scripts": {
-    "prepare": "git config core.hooksPath .githooks || true",
+    "prepare": "husky",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
     "lint": "biome check .",
@@ -32,6 +32,7 @@
   "devDependencies": {
     "@biomejs/biome": "latest",
     "@types/bun": "latest",
+    "husky": "^9.1.7",
     "typescript": "latest"
   }
 }

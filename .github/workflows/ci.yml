@@ -38,3 +38,35 @@ jobs:
       # violations, route-level build failures.
       - name: Build web
         run: bun run --filter '@gilly/web' build
+
+  # Separate job so it runs in parallel and keeps its deep clone out of the main
+  # one. This — not the pre-commit hook — is what actually enforces the scan:
+  # hooks can be skipped with --no-verify or never installed at all.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks reads git history, so a shallow clone would hide most of it.
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        env:
+          # Pinned for reproducibility. Dependabot can't see a curl URL — bump by hand.
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # On a PR, scan every commit in the branch — not just the head. A secret
+      # added in commit 2 and removed in commit 4 still lives in the history the
+      # merge would bring along.
+      - name: Scan for secrets
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            gitleaks git --redact --no-banner \
+              --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            gitleaks git --redact --no-banner
+          fi
