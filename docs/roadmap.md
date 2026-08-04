@@ -97,6 +97,13 @@ speaking the AgentCore contract (`POST /invocations`, `GET /ping` on `:8080`) vi
 candidate. Gateway MCP wiring and skill materialization must work identically across
 all of them, or "replaceable" is marketing.
 
+This item must also land a **harness registry** — today there is exactly one harness,
+wired by a single `HARNESS_URL` env var (`apps/control-plane/src/index.ts`). A second
+harness turns that into a set: which harnesses exist, whether each is enabled, its
+endpoint, its provider credentials, and which models it offers. Agent config gains a
+`harness` field selecting from that set. The registry is what item 6 configures — build
+it as data, not env vars, or the dashboard has nothing to edit.
+
 **Done when:** the same agent JSON runs on three harnesses by changing one field, and
 the gateway works on all three.
 
@@ -116,12 +123,21 @@ working Slack connection.
 
 ### 6. Setup / config dashboard for the operator  ·  [#13](https://github.com/MSR806/project-gilly/issues/13)
 Distinct from the existing per-resource pages under `apps/web/app/`. This is the
-first-run surface for whoever installs Gilly: credentials, Slack app, connectors, users
-and grants, health of harness/gateway/control-plane — with a checklist that says what's
-still unconfigured.
+first-run surface for whoever installs Gilly, with a checklist that says what's still
+unconfigured:
 
-**Done when:** a new operator gets from empty install to first working agent without
-touching a `.env` file or reading a doc.
+- **Harnesses** — enable and configure each installed harness (Claude Code, Codex, an
+  open-model one, whatever ships later): endpoint, provider credentials, which models it
+  exposes, default harness for new agents, and a reachability check per harness. Reads
+  and writes the harness registry from item 4, so adding a future harness means it shows
+  up here without new UI.
+- Credentials and connectors (gateway vault, grants)
+- Slack app / channel setup
+- Users and grants
+- Health of control plane, gateway, and each harness
+
+**Done when:** a new operator gets from empty install to first working agent — including
+picking and configuring a harness — without touching a `.env` file or reading a doc.
 
 ---
 
