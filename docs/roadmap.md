@@ -179,10 +179,9 @@ not skills shipped to Gilly's agents (that's item 3):
 - **deployment** — the production path: images, the EC2 CLI (item 5), env and secrets,
   what the operator configures vs what ships in the image, upgrades. Follows item 5.
 
-Fix the drift first: `.claude/skills/` and `.agents/skills/` hold duplicate copies, and
-the `.agents` copy is already wrong — a find/replace produced `apps/harness-Codex/`, a
-path that doesn't exist. Adding three more skills triples that problem. Pick one source
-of truth and symlink the other (or drop `.agents/` until something reads it).
+`.claude/skills/` is the single source of truth; `.agents/skills` is a symlink to it, so
+a new skill is written once. (These were duplicated copies that had already drifted — the
+`.agents` one carried a find/replaced `apps/harness-Codex/` path that never existed.)
 
 ---
 
