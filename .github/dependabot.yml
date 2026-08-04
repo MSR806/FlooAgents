@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # Bun version updates are GA and read the text-based bun.lock. Known sharp edge:
+  # in workspace monorepos Dependabot sometimes bumps package.json without
+  # updating bun.lock, which CI's --frozen-lockfile then rejects. Fix by pushing
+  # a `bun install` to the Dependabot branch.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine noise; anything major still comes in alone.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

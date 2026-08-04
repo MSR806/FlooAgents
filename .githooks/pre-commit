@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fast gate only: biome over staged files, ~100ms. Typecheck, tests, and the web
+# build run in CI — a slow hook only teaches people to reach for --no-verify.
+
+if ! bunx --bun biome check --staged --no-errors-on-unmatched; then
+  echo
+  echo "biome found problems in staged files. Fix with:  bun run format"
+  echo "Then re-stage and commit again."
+  exit 1
+fi

@@ -16,6 +16,7 @@
     "packages/*"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun test",
     "lint": "biome check .",

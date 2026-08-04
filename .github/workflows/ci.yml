@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# A force-push shouldn't queue behind the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Pinned so runs are reproducible and the binary is cached.
+          bun-version: 1.3.5
+
+      # --frozen-lockfile fails when bun.lock is out of sync with package.json,
+      # so a PR can't quietly change dependencies.
+      - run: bun install --frozen-lockfile
+
+      - run: bun run lint
+
+      - run: bun run typecheck
+
+      - run: bun test
+
+      # Catches what `tsc --noEmit` can't: bad imports, server/client boundary
+      # violations, route-level build failures.
+      - name: Build web
+        run: bun run --filter '@gilly/web' build
