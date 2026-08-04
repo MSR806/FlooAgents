@@ -163,16 +163,37 @@ Landing page: the pitch, one honest demo (Slack thread → agent → PR or repor
 harness-agnostic diagram, install command, link to docs and GitHub. Small; the docs
 site does the heavy lifting.
 
+### 10. Repo development skills  ·  [#19](https://github.com/MSR806/project-gilly/issues/19)
+`coding-conventions` and `test-conventions` already make an agent productive in this repo
+on day one. Three gaps, same treatment — these are skills *for people working on Gilly*,
+not skills shipped to Gilly's agents (that's item 3):
+
+- **ui-conventions** — `apps/web` patterns: Tailwind v4 + shadcn (Base UI) with the render
+  prop rather than `asChild`, components vendored in `apps/web/components/ui`, server vs
+  client boundaries, how a page reaches the control plane, and the settled vocabulary
+  (Channels / Tools / Built-in tools). Write this *after* the revamp (item 7) or it
+  documents a UI that's about to change.
+- **local-deployment** — the dev loop: `bun install`, the four `dev:*` scripts and their
+  ports, which `.env` each app reads, the Compose stack, SQLite location and reset,
+  running a harness against a real Slack app. Stable today — **pull forward now.**
+- **deployment** — the production path: images, the EC2 CLI (item 5), env and secrets,
+  what the operator configures vs what ships in the image, upgrades. Follows item 5.
+
+Fix the drift first: `.claude/skills/` and `.agents/skills/` hold duplicate copies, and
+the `.agents` copy is already wrong — a find/replace produced `apps/harness-Codex/`, a
+path that doesn't exist. Adding three more skills triples that problem. Pick one source
+of truth and symlink the other (or drop `.agents/` until something reads it).
+
 ---
 
 ## Phase 5 — Depth after launch
 
-### 10. Cron triggers  ·  [#17](https://github.com/MSR806/project-gilly/issues/17)
+### 11. Cron triggers  ·  [#17](https://github.com/MSR806/project-gilly/issues/17)
 Design is already written ([`trigger.md`](control-plane/trigger.md)) — a cron is a
 trigger with a schedule instead of an event filter, plus the optional "deliver to"
 channel. Small and self-contained; **pull this forward any time as filler.**
 
-### 11. Knowledge bases  ·  [#18](https://github.com/MSR806/project-gilly/issues/18)
+### 12. Knowledge bases  ·  [#18](https://github.com/MSR806/project-gilly/issues/18)
 The one genuinely new concept on the list — needs a design doc before code. Decide
 early whether a knowledge base is a first-class registry entry alongside agents and
 skills, or just a skill that queries a store through the gateway. The lazy answer
@@ -187,7 +208,7 @@ Phase 0  Name                                    ← blocks all branding work
 Phase 1  Composio · git/gh · default skills      ← + fix #6 (launch gate)
 Phase 2  Codex + OpenAI + open-model harness
 Phase 3  EC2 CLI · operator dashboard
-Phase 4  UI revamp · tech docs · website
+Phase 4  UI revamp · tech docs · website · repo dev skills
 Phase 5  Crons · knowledge bases
 ```
 
