@@ -25,7 +25,7 @@ test("catalog posts to /catalog with Bearer header and returns tools", async () 
   const result = await catalog("branch", fn);
   expect(result).toEqual(tools);
   expect(calls[0]?.url).toBe("http://gw.test/catalog");
-  expect((calls[0]?.init.headers as Record<string, string>).authorization).toBe("Bearer tok-123");
+  expect(calls[0]?.init.headers).toMatchObject({ authorization: "Bearer tok-123" });
   expect(calls[0]?.init.body).toBe(JSON.stringify({ query: "branch" }));
 });
 
