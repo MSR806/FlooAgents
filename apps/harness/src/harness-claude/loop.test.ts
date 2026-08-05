@@ -271,11 +271,7 @@ test("buildOptions: no gateway → no mcpServers, no gateway env, no gateway too
 
 test("streamAgentLoop emits a tool event per tool_use block", async () => {
   const queryFn = (() =>
-    stream(
-      init("s3"),
-      toolUse("Bash", { command: "ls" }),
-      result("ok"),
-    )) as unknown as Query;
+    stream(init("s3"), toolUse("Bash", { command: "ls" }), result("ok"))) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -492,7 +488,7 @@ test.skipIf(!process.env.ANTHROPIC_API_KEY)(
         if (next.done) break;
         events.push(next.value);
       }
-    } catch (err) {
+    } catch (_err) {
       // SDK might throw on cancellation; that's fine
     }
 
