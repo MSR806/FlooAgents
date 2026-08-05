@@ -1,0 +1,28 @@
+# Fast gate only — staged files, well under a second. Typecheck, tests, and the
+# web build run in CI; a slow hook only teaches people to reach for --no-verify.
+
+if ! bunx --bun biome check --staged --no-errors-on-unmatched; then
+  echo
+  echo "biome found problems in staged files. Fix with:  bun run format"
+  echo "Then re-stage and commit again."
+  exit 1
+fi
+
+# Hard-fail when gitleaks is absent rather than skipping the scan. A check that
+# silently does nothing is worse than one that tells you to install it. CI
+# enforces this regardless — the hook exists to give you the answer in
+# milliseconds instead of minutes.
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks is not installed, and this repo requires it to commit."
+  echo "  macOS:  brew install gitleaks"
+  echo "  other:  https://github.com/gitleaks/gitleaks#installing"
+  exit 1
+fi
+
+# --redact keeps the secret itself out of your terminal scrollback.
+if ! gitleaks git --staged --redact --no-banner; then
+  echo
+  echo "gitleaks found a secret in your staged changes. Remove it before committing."
+  echo "If it's a false positive, add a rule to .gitleaks.toml or a 'gitleaks:allow' comment."
+  exit 1
+fi
