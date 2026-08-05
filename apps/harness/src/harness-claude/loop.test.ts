@@ -18,6 +18,8 @@ import {
   workspaceDir,
 } from "./loop.ts";
 
+type Query = typeof realQuery;
+
 test("expandTools maps Gilly abstractions to SDK tools and de-dupes; unknowns pass through", () => {
   expect(expandTools(["Read", "Write", "Bash"])).toEqual([
     "Read",
@@ -71,7 +73,7 @@ test("reduceSdkStream falls back to assistant text when no result message", asyn
 });
 
 test("runAgentLoop returns a completed result via an injected query", async () => {
-  const queryFn = (() => stream(init("s2"), result("done"))) as unknown as typeof query;
+  const queryFn = (() => stream(init("s2"), result("done"))) as unknown as Query;
   const out = await runAgentLoop(req, queryFn);
   expect(out).toEqual({
     status: "completed",
@@ -84,7 +86,7 @@ test("runAgentLoop returns a completed result via an injected query", async () =
 test("runAgentLoop never throws — failures become an error result", async () => {
   const queryFn = (() => {
     throw new Error("boom");
-  }) as unknown as typeof query;
+  }) as unknown as Query;
   const out = await runAgentLoop(req, queryFn);
   expect(out.status).toBe("error");
   expect(out.error).toContain("boom");
@@ -273,7 +275,7 @@ test("streamAgentLoop emits a tool event per tool_use block", async () => {
       init("s3"),
       toolUse("Bash", { command: "ls" }),
       result("ok"),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -284,7 +286,7 @@ test("streamAgentLoop emits a tool event per tool_use block", async () => {
 
 test("streamAgentLoop forwards external cancellation to the SDK query", async () => {
   let sdkAbort: AbortController | undefined;
-  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
     const abortController = options?.abortController;
     if (!abortController) throw new Error("missing abort controller");
     sdkAbort = abortController;
@@ -295,7 +297,7 @@ test("streamAgentLoop forwards external cancellation to the SDK query", async ()
         }),
       );
     })();
-  }) as unknown as typeof query;
+  }) as unknown as Query;
   const external = new AbortController();
   const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
   const pending = iterator.next();
@@ -316,7 +318,7 @@ test("streamAgentLoop surfaces a tool-turn's narration as a `message`, then its 
       init("s4"),
       narrateThenTool("Let me check the file.", "Read", { file_path: "a.ts" }),
       result("the answer"),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -336,7 +338,7 @@ test("streamAgentLoop associates a separate narration payload with the following
       toolUse("Bash", { command: "bun test" }),
       assistant("Everything passed."),
       result("Everything passed."),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -354,7 +356,7 @@ test("streamAgentLoop does not surface a final text-only payload as progress", a
       init("s6"),
       assistant("The final answer."),
       result("The final answer."),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -365,7 +367,7 @@ test("streamAgentLoop does not surface a final text-only payload as progress", a
 test("streamAgentLoop enforces cancellation timeout and cleans up listeners/timers", async () => {
   let sdkAbort: AbortController | undefined;
   let streamSettled = false;
-  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
     const abortController = options?.abortController;
     if (!abortController) throw new Error("missing abort controller");
     sdkAbort = abortController;
@@ -382,7 +384,7 @@ test("streamAgentLoop enforces cancellation timeout and cleans up listeners/time
         }),
       );
     })();
-  }) as unknown as typeof query;
+  }) as unknown as Query;
 
   const external = new AbortController();
   const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
@@ -408,7 +410,7 @@ test("streamAgentLoop enforces cancellation timeout and cleans up listeners/time
 });
 
 test("streamAgentLoop cancellation timeout prevents indefinite hang", async () => {
-  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
     const abortController = options?.abortController;
     if (!abortController) throw new Error("missing abort controller");
     return (async function* () {
@@ -421,7 +423,7 @@ test("streamAgentLoop cancellation timeout prevents indefinite hang", async () =
         }),
       );
     })();
-  }) as unknown as typeof query;
+  }) as unknown as Query;
 
   const external = new AbortController();
   const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
@@ -485,8 +487,10 @@ test.skipIf(!process.env.ANTHROPIC_API_KEY)(
       const first = await firstEvent;
       if (!first.done) events.push(first.value);
 
-      for await (const event of iterator) {
-        events.push(event);
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) break;
+        events.push(next.value);
       }
     } catch (err) {
       // SDK might throw on cancellation; that's fine
