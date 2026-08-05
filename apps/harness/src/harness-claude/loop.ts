@@ -30,6 +30,40 @@ const repoRoot = resolve(import.meta.dir, "../../../..");
  */
 const CANCELLATION_TIMEOUT_MS = 5000;
 
+function nextSdkMessage(
+  iterator: AsyncIterator<SDKMessage>,
+  signal: AbortSignal,
+): Promise<IteratorResult<SDKMessage>> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+    const settle = <T>(fn: (value: T) => void, value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const onAbort = () => {
+      timeoutId = setTimeout(() => {
+        settle(reject, new Error("Run cancelled."));
+      }, CANCELLATION_TIMEOUT_MS);
+    };
+
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+
+    iterator.next().then(
+      (value) => settle(resolve, value),
+      (err: unknown) => settle(reject, err),
+    );
+  });
+}
+
 /** Scratch dir for one Gilly session's workspace. Pure: same request → same path. */
 export function workspaceDir(req: InvocationRequest): string {
   const root = resolve(repoRoot, process.env.WORKSPACES_DIR ?? "data/workspaces");
@@ -283,8 +317,6 @@ export async function* streamAgentLoop(
   let resultText: string | null = null;
   let accumulated = "";
   let pendingNarration: string[] = [];
-  let cancellationTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  let isCancelling = false;
 
   try {
     const options = buildOptions(req, true, abortController);
@@ -293,8 +325,13 @@ export async function* streamAgentLoop(
       materializeSkills(req.skills ?? [], options.cwd);
     }
     const messages = queryFn({ prompt: req.userMessage, options });
+    const iterator = messages[Symbol.asyncIterator]();
 
-    for await (const message of messages) {
+    while (true) {
+      const next = await nextSdkMessage(iterator, abortController.signal);
+      if (next.done) break;
+
+      const message = next.value;
       if (message.type === "system" && message.subtype === "init") {
         harnessSessionId = message.session_id;
       } else if (message.type === "stream_event") {
@@ -330,21 +367,8 @@ export async function* streamAgentLoop(
     }
     yield { type: "done", finalText: resultText ?? accumulated, harnessSessionId };
   } catch (err) {
-    // Handle cancellation by enforcing a graceful shutdown timeout. The SDK may have queued
-    // work or child processes; give it time to settle, then proceed regardless.
-    if (abortController.signal.aborted && !isCancelling) {
-      isCancelling = true;
-      // Wait for SDK to clean up, but don't wait forever
-      await new Promise<void>((resolve) => {
-        cancellationTimeoutId = setTimeout(resolve, CANCELLATION_TIMEOUT_MS);
-      });
-    }
     yield { type: "error", error: String(err) };
   } finally {
-    // Cleanup: remove listeners and clear any pending timeout to prevent resource leaks.
     externalSignal?.removeEventListener("abort", forwardAbort);
-    if (cancellationTimeoutId !== null) {
-      clearTimeout(cancellationTimeoutId);
-    }
   }
 }

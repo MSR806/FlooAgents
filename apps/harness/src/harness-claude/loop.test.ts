@@ -363,6 +363,10 @@ test("streamAgentLoop does not surface a final text-only payload as progress", a
 test("streamAgentLoop enforces cancellation timeout and cleans up listeners/timers", async () => {
   let sdkAbort: AbortController | undefined;
   let streamSettled = false;
+  let markAbortListenerRegistered = () => {};
+  const abortListenerRegistered = new Promise<void>((resolve) => {
+    markAbortListenerRegistered = resolve;
+  });
   const queryFn = (({ options }: Parameters<Query>[0]) => {
     const abortController = options?.abortController;
     if (!abortController) throw new Error("missing abort controller");
@@ -370,15 +374,16 @@ test("streamAgentLoop enforces cancellation timeout and cleans up listeners/time
     return (async function* () {
       yield init("cancel-test");
       // Simulate SDK delay: wait for abort, then delay before settling
-      await new Promise<void>((_resolve, reject) =>
+      await new Promise<void>((_resolve, reject) => {
         abortController.signal.addEventListener("abort", () => {
           // Simulate delayed cancellation (SDK 0.3.217+): wait before rejecting
           setTimeout(() => {
             streamSettled = true;
             reject(new Error("cancelled"));
           }, 2000); // SDK takes 2s to settle (< 5s timeout)
-        }),
-      );
+        });
+        markAbortListenerRegistered();
+      });
     })();
   }) as unknown as Query;
 
@@ -388,7 +393,7 @@ test("streamAgentLoop enforces cancellation timeout and cleans up listeners/time
   const startTime = Date.now();
   const pending = iterator.next();
 
-  await Promise.resolve();
+  await abortListenerRegistered;
   external.abort();
 
   const result = await pending;
@@ -412,10 +417,9 @@ test("streamAgentLoop cancellation timeout prevents indefinite hang", async () =
     return (async function* () {
       yield init("hang-test");
       // Simulate SDK that never settles after abort (hangs indefinitely)
-      await new Promise<void>((_resolve, reject) =>
+      await new Promise<void>((_resolve) =>
         abortController.signal.addEventListener("abort", () => {
-          // Never reject - simulate SDK hang
-          setTimeout(() => reject(new Error("cancelled")), 30000); // would take 30s
+          // Never resolve or reject - simulate SDK hang without keeping the test process alive.
         }),
       );
     })();
@@ -438,7 +442,7 @@ test("streamAgentLoop cancellation timeout prevents indefinite hang", async () =
   expect(result.value.type).toBe("error");
   expect(elapsed).toBeGreaterThan(4500); // waited ~5s (timeout)
   expect(elapsed).toBeLessThan(7000); // but not the full 30s
-});
+}, 8000);
 
 /**
  * Integration test: Verify real SDK cancellation behavior settles within timeout.
