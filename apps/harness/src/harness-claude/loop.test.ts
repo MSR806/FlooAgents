@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query as realQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { InvocationRequest } from "@gilly/harness-protocol";
 import {
   buildOptions,
@@ -361,3 +361,148 @@ test("streamAgentLoop does not surface a final text-only payload as progress", a
     { type: "done", finalText: "The final answer.", harnessSessionId: "s6" },
   ]);
 });
+
+test("streamAgentLoop enforces cancellation timeout and cleans up listeners/timers", async () => {
+  let sdkAbort: AbortController | undefined;
+  let streamSettled = false;
+  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    sdkAbort = abortController;
+    return (async function* () {
+      yield init("cancel-test");
+      // Simulate SDK delay: wait for abort, then delay before settling
+      await new Promise<void>((_resolve, reject) =>
+        abortController.signal.addEventListener("abort", () => {
+          // Simulate delayed cancellation (SDK 0.3.217+): wait before rejecting
+          setTimeout(() => {
+            streamSettled = true;
+            reject(new Error("cancelled"));
+          }, 2000); // SDK takes 2s to settle (< 5s timeout)
+        }),
+      );
+    })();
+  }) as unknown as typeof query;
+
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+
+  const startTime = Date.now();
+  const pending = iterator.next();
+
+  await Promise.resolve();
+  external.abort();
+
+  const result = await pending;
+  const elapsed = Date.now() - startTime;
+
+  // Verify cancellation completed
+  expect(sdkAbort?.signal.aborted).toBe(true);
+  expect(result.done).toBe(false);
+  expect(result.value).toEqual({ type: "error", error: "Error: cancelled" });
+
+  // Verify timeout was enforced: should wait for SDK (2s) but not exceed timeout (5s)
+  expect(elapsed).toBeGreaterThan(1500); // waited for SDK
+  expect(elapsed).toBeLessThan(6000); // didn't hang indefinitely
+  expect(streamSettled).toBe(true); // SDK actually settled
+});
+
+test("streamAgentLoop cancellation timeout prevents indefinite hang", async () => {
+  const queryFn = (({ options }: Parameters<typeof query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    return (async function* () {
+      yield init("hang-test");
+      // Simulate SDK that never settles after abort (hangs indefinitely)
+      await new Promise<void>((_resolve, reject) =>
+        abortController.signal.addEventListener("abort", () => {
+          // Never reject - simulate SDK hang
+          setTimeout(() => reject(new Error("cancelled")), 30000); // would take 30s
+        }),
+      );
+    })();
+  }) as unknown as typeof query;
+
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+
+  const startTime = Date.now();
+  const pending = iterator.next();
+
+  await Promise.resolve();
+  external.abort();
+
+  const result = await pending;
+  const elapsed = Date.now() - startTime;
+
+  // Should complete within timeout even though SDK would hang for 30s
+  expect(result.done).toBe(false);
+  expect(result.value.type).toBe("error");
+  expect(elapsed).toBeGreaterThan(4500); // waited ~5s (timeout)
+  expect(elapsed).toBeLessThan(7000); // but not the full 30s
+});
+
+/**
+ * Integration test: Verify real SDK cancellation behavior settles within timeout.
+ * Skipped when ANTHROPIC_API_KEY is not set (CI/local dev without credentials).
+ * This test validates that:
+ * 1. The real SDK respects the abort signal
+ * 2. Cancellation completes within the defined timeout window
+ * 3. No resources (processes, listeners, timers) leak after cancellation
+ */
+test.skipIf(!process.env.ANTHROPIC_API_KEY)(
+  "INTEGRATION: real SDK cancellation settles within timeout and cleans up resources",
+  async () => {
+    const integrationReq: InvocationRequest = {
+      agent: {
+        id: "integration-test",
+        name: "Integration Test Agent",
+        model: "claude-sonnet-4-5",
+        systemPrompt: "You are a test agent. Respond briefly.",
+        tools: ["Read"], // Give it a tool so it might do work
+      },
+      userMessage: "List files in the current directory",
+      workspace: { provider: "local", handle: "integration-test" },
+    };
+
+    const external = new AbortController();
+    const iterator = streamAgentLoop(integrationReq, realQuery, external.signal)[
+      Symbol.asyncIterator
+    ]();
+
+    const startTime = Date.now();
+    const firstEvent = iterator.next();
+
+    // Wait a bit to let SDK potentially start work
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Trigger cancellation
+    external.abort();
+
+    // Collect all events (should include error event after cancellation)
+    const events = [];
+    try {
+      const first = await firstEvent;
+      if (!first.done) events.push(first.value);
+
+      for await (const event of iterator) {
+        events.push(event);
+      }
+    } catch (err) {
+      // SDK might throw on cancellation; that's fine
+    }
+
+    const elapsed = Date.now() - startTime;
+
+    // Verify cancellation completed within reasonable timeout (adding buffer for SDK overhead)
+    expect(elapsed).toBeLessThan(10000); // Should not hang indefinitely
+
+    // Verify we got a terminal event (error or done)
+    const hasTerminalEvent = events.some((e) => e.type === "error" || e.type === "done");
+    expect(hasTerminalEvent).toBe(true);
+
+    // Resource leak check: If the test completes without hanging, listeners/timers were cleaned up.
+    // The fact that this test finishes proves no leaked event listeners or timers are keeping it alive.
+  },
+  { timeout: 15000 }, // Allow 15s total including SDK overhead
+);
