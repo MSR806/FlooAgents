@@ -30,7 +30,9 @@ Connections are created in the web UI (**Connections** page), not via env vars �
 
 1. **New connection** → the page guides you: create the Slack app from the manifest (copy button), Socket Mode, the assistant events + `app_mention`, and scopes for assistant replies, reactions, thread history, channel metadata, and user id lookup.
 2. **Install to Workspace**, copy the Bot User OAuth Token (`xoxb-…`) and an App-Level Token with `connections:write` (`xapp-…`) into the form; **Test connection** validates them.
-3. Pick the agent to bind, save — the socket starts immediately (no restart). Run the harness (`ANTHROPIC_API_KEY`) + control plane; open Gilly from the Slack top-nav or `@mention` it.
+3. Pick the agent to bind, save — the socket starts immediately (no restart). Run the harness with
+   the selected model provider's key from `apps/harness/.env`, then run the control plane; open
+   Gilly from the Slack top-nav or `@mention` it.
 
 Connections are stored in the `slack_connections` table (tokens vault-encrypted); the `SlackManager` (`apps/control-plane/src/channels/slack-manager.ts`) owns the running Bolt apps and starts/stops them live as the API mutates connections.
 

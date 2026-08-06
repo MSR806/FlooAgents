@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { query, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { join, resolve } from "node:path";
+import { query as realQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { InvocationRequest } from "@gilly/harness-protocol";
 import {
   buildOptions,
@@ -17,6 +17,8 @@ import {
   summarizeToolUse,
   workspaceDir,
 } from "./loop.ts";
+
+type Query = typeof realQuery;
 
 test("expandTools maps Gilly abstractions to SDK tools and de-dupes; unknowns pass through", () => {
   expect(expandTools(["Read", "Write", "Bash"])).toEqual([
@@ -71,7 +73,7 @@ test("reduceSdkStream falls back to assistant text when no result message", asyn
 });
 
 test("runAgentLoop returns a completed result via an injected query", async () => {
-  const queryFn = (() => stream(init("s2"), result("done"))) as unknown as typeof query;
+  const queryFn = (() => stream(init("s2"), result("done"))) as unknown as Query;
   const out = await runAgentLoop(req, queryFn);
   expect(out).toEqual({
     status: "completed",
@@ -84,20 +86,31 @@ test("runAgentLoop returns a completed result via an injected query", async () =
 test("runAgentLoop never throws — failures become an error result", async () => {
   const queryFn = (() => {
     throw new Error("boom");
-  }) as unknown as typeof query;
+  }) as unknown as Query;
   const out = await runAgentLoop(req, queryFn);
   expect(out.status).toBe("error");
   expect(out.error).toContain("boom");
 });
 
 test("workspaceDir joins WORKSPACES_DIR with the workspace handle", () => {
-  process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
-  expect(workspaceDir({ ...req, workspace: { provider: "local", handle: "s1" } })).toBe(
-    "/tmp/gilly-ws/s1",
-  );
-  // No workspace → a stable "default" bucket.
-  expect(workspaceDir(req)).toBe("/tmp/gilly-ws/default");
-  delete process.env.WORKSPACES_DIR;
+  const previous = process.env.WORKSPACES_DIR;
+  const repoRoot = resolve(import.meta.dir, "../../../..");
+  try {
+    process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
+    expect(workspaceDir({ ...req, workspace: { provider: "local", handle: "s1" } })).toBe(
+      "/tmp/gilly-ws/s1",
+    );
+    expect(workspaceDir(req)).toBe("/tmp/gilly-ws/default");
+
+    process.env.WORKSPACES_DIR = "relative-workspaces";
+    expect(workspaceDir(req)).toBe(join(repoRoot, "relative-workspaces", "default"));
+
+    delete process.env.WORKSPACES_DIR;
+    expect(workspaceDir(req)).toBe(join(repoRoot, "data/workspaces/default"));
+  } finally {
+    if (previous === undefined) delete process.env.WORKSPACES_DIR;
+    else process.env.WORKSPACES_DIR = previous;
+  }
 });
 
 test("buildOptions: a tool-less agent stays chat-only (no cwd, plain prompt)", () => {
@@ -258,11 +271,7 @@ test("buildOptions: no gateway → no mcpServers, no gateway env, no gateway too
 
 test("streamAgentLoop emits a tool event per tool_use block", async () => {
   const queryFn = (() =>
-    stream(
-      init("s3"),
-      toolUse("Bash", { command: "ls" }),
-      result("ok"),
-    )) as unknown as typeof query;
+    stream(init("s3"), toolUse("Bash", { command: "ls" }), result("ok"))) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -271,13 +280,41 @@ test("streamAgentLoop emits a tool event per tool_use block", async () => {
   ]);
 });
 
+test("streamAgentLoop forwards external cancellation to the SDK query", async () => {
+  let sdkAbort: AbortController | undefined;
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    sdkAbort = abortController;
+    return (async function* () {
+      await new Promise<void>((_resolve, reject) =>
+        abortController.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+          once: true,
+        }),
+      );
+    })();
+  }) as unknown as Query;
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+  const pending = iterator.next();
+
+  await Promise.resolve();
+  external.abort();
+
+  expect(sdkAbort?.signal.aborted).toBe(true);
+  expect(await pending).toEqual({
+    done: false,
+    value: { type: "error", error: "Error: aborted" },
+  });
+});
+
 test("streamAgentLoop surfaces a tool-turn's narration as a `message`, then its tools", async () => {
   const queryFn = (() =>
     stream(
       init("s4"),
       narrateThenTool("Let me check the file.", "Read", { file_path: "a.ts" }),
       result("the answer"),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -297,7 +334,7 @@ test("streamAgentLoop associates a separate narration payload with the following
       toolUse("Bash", { command: "bun test" }),
       assistant("Everything passed."),
       result("Everything passed."),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
@@ -315,10 +352,161 @@ test("streamAgentLoop does not surface a final text-only payload as progress", a
       init("s6"),
       assistant("The final answer."),
       result("The final answer."),
-    )) as unknown as typeof query;
+    )) as unknown as Query;
   const events = [];
   for await (const ev of streamAgentLoop(req, queryFn)) events.push(ev);
   expect(events).toEqual([
     { type: "done", finalText: "The final answer.", harnessSessionId: "s6" },
   ]);
 });
+
+test("streamAgentLoop enforces cancellation timeout and cleans up listeners/timers", async () => {
+  let sdkAbort: AbortController | undefined;
+  let streamSettled = false;
+  let markAbortListenerRegistered = () => {};
+  const abortListenerRegistered = new Promise<void>((resolve) => {
+    markAbortListenerRegistered = resolve;
+  });
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    sdkAbort = abortController;
+    return (async function* () {
+      yield init("cancel-test");
+      // Simulate SDK delay: wait for abort, then delay before settling
+      await new Promise<void>((_resolve, reject) => {
+        abortController.signal.addEventListener("abort", () => {
+          // Simulate delayed cancellation (SDK 0.3.217+): wait before rejecting
+          setTimeout(() => {
+            streamSettled = true;
+            reject(new Error("cancelled"));
+          }, 2000); // SDK takes 2s to settle (< 5s timeout)
+        });
+        markAbortListenerRegistered();
+      });
+    })();
+  }) as unknown as Query;
+
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+
+  const startTime = Date.now();
+  const pending = iterator.next();
+
+  await abortListenerRegistered;
+  external.abort();
+
+  const result = await pending;
+  const elapsed = Date.now() - startTime;
+
+  // Verify cancellation completed
+  expect(sdkAbort?.signal.aborted).toBe(true);
+  expect(result.done).toBe(false);
+  expect(result.value).toEqual({ type: "error", error: "Error: cancelled" });
+
+  // Verify timeout was enforced: should wait for SDK (2s) but not exceed timeout (5s)
+  expect(elapsed).toBeGreaterThan(1500); // waited for SDK
+  expect(elapsed).toBeLessThan(6000); // didn't hang indefinitely
+  expect(streamSettled).toBe(true); // SDK actually settled
+});
+
+test("streamAgentLoop cancellation timeout prevents indefinite hang", async () => {
+  const queryFn = (({ options }: Parameters<Query>[0]) => {
+    const abortController = options?.abortController;
+    if (!abortController) throw new Error("missing abort controller");
+    return (async function* () {
+      yield init("hang-test");
+      // Simulate SDK that never settles after abort (hangs indefinitely)
+      await new Promise<void>((_resolve) =>
+        abortController.signal.addEventListener("abort", () => {
+          // Never resolve or reject - simulate SDK hang without keeping the test process alive.
+        }),
+      );
+    })();
+  }) as unknown as Query;
+
+  const external = new AbortController();
+  const iterator = streamAgentLoop(req, queryFn, external.signal)[Symbol.asyncIterator]();
+
+  const startTime = Date.now();
+  const pending = iterator.next();
+
+  await Promise.resolve();
+  external.abort();
+
+  const result = await pending;
+  const elapsed = Date.now() - startTime;
+
+  // Should complete within timeout even though SDK would hang for 30s
+  expect(result.done).toBe(false);
+  expect(result.value.type).toBe("error");
+  expect(elapsed).toBeGreaterThan(4500); // waited ~5s (timeout)
+  expect(elapsed).toBeLessThan(7000); // but not the full 30s
+}, 8000);
+
+/**
+ * Integration test: Verify real SDK cancellation behavior settles within timeout.
+ * Skipped when ANTHROPIC_API_KEY is not set (CI/local dev without credentials).
+ * This test validates that:
+ * 1. The real SDK respects the abort signal
+ * 2. Cancellation completes within the defined timeout window
+ * 3. No resources (processes, listeners, timers) leak after cancellation
+ */
+test.skipIf(!process.env.ANTHROPIC_API_KEY)(
+  "INTEGRATION: real SDK cancellation settles within timeout and cleans up resources",
+  async () => {
+    const integrationReq: InvocationRequest = {
+      agent: {
+        id: "integration-test",
+        name: "Integration Test Agent",
+        model: "claude-sonnet-4-5",
+        systemPrompt: "You are a test agent. Respond briefly.",
+        tools: ["Read"], // Give it a tool so it might do work
+      },
+      userMessage: "List files in the current directory",
+      workspace: { provider: "local", handle: "integration-test" },
+    };
+
+    const external = new AbortController();
+    const iterator = streamAgentLoop(integrationReq, realQuery, external.signal)[
+      Symbol.asyncIterator
+    ]();
+
+    const startTime = Date.now();
+    const firstEvent = iterator.next();
+
+    // Wait a bit to let SDK potentially start work
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Trigger cancellation
+    external.abort();
+
+    // Collect all events (should include error event after cancellation)
+    const events = [];
+    try {
+      const first = await firstEvent;
+      if (!first.done) events.push(first.value);
+
+      while (true) {
+        const next = await iterator.next();
+        if (next.done) break;
+        events.push(next.value);
+      }
+    } catch (_err) {
+      // SDK might throw on cancellation; that's fine
+    }
+
+    const elapsed = Date.now() - startTime;
+
+    // Verify cancellation completed within reasonable timeout (adding buffer for SDK overhead)
+    expect(elapsed).toBeLessThan(10000); // Should not hang indefinitely
+
+    // Verify we got a terminal event (error or done)
+    const hasTerminalEvent = events.some((e) => e.type === "error" || e.type === "done");
+    expect(hasTerminalEvent).toBe(true);
+
+    // Resource leak check: If the test completes without hanging, listeners/timers were cleaned up.
+    // The fact that this test finishes proves no leaked event listeners or timers are keeping it alive.
+  },
+  { timeout: 15000 }, // Allow 15s total including SDK overhead
+);

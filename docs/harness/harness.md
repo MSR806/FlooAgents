@@ -1,58 +1,53 @@
-# Project Gilly — Harness
+# Project Gilly - Harnesses
 
-**The harness is the agent framework that drives the agent loop. Gilly's primary harness is the Claude Agent SDK.**
+The harness drives one agent loop behind Gilly's stable `harness-protocol` HTTP contract. One
+server hosts both implementations; Claude remains the default.
 
-Below the control plane sit two layers, and both are pluggable:
+## Routing
 
-- **Harness** — the agent framework / loop. *This doc.* **Decided: Claude Agent SDK.**
-- **Runtime** — the sandbox the harness runs inside. *See `runtime.md`.*
+`MODEL_CATALOG` in `packages/core` is the source of truth for the model picker and routing.
+`RoutingRuntimeProvider` sets `InvocationRequest.harnessType` to `anthropic` or `openai`, then sends
+both through the same `HARNESS_URL`. The shared server dispatches to the matching loop. Requests
+that omit `harnessType` use the Claude loop.
 
-We build **one harness and one runtime** to start — Claude is the primary harness. The architecture keeps the harness swappable, but we are not building more than one yet.
+Catalog variants may map display choices to Codex runtime settings. `gpt-5.4-fast` runs model `gpt-5.4` with Codex `service_tier = "fast"`.
 
-**Claude-first, not Claude-only.**
+Session ids are opaque above the runtime seam. The router namespaces them as `anthropic:<id>` or `openai:<id>`, strips the matching prefix before a resume, and starts fresh rather than passing an id to the wrong harness after a provider change. Existing unprefixed ids are treated as legacy Anthropic sessions.
 
----
+## Claude Harness
 
-## The Layering
+`apps/harness/src/harness-claude` wraps the Claude Agent SDK. It maps Gilly's `Read`, `Write`, and
+`Bash` abstractions to Claude SDK tool names, materializes skills under `.claude/skills`, and
+exposes the tooling gateway through an in-process MCP server.
 
-```text
-Control Plane (Gilly)   →  what runs, when, with what access, where results go     [custom server]
-   Harness              →  the agent loop — reasoning, tool calls, file edits,
-                            skills, subagents, structured result                    [Claude Agent SDK]
-   Runtime              →  the sandbox the harness runs inside — FS, shell,
-                            network, lifecycle                                       [the runtime]
-```
+## OpenAI Harness
 
-The harness runs **inside** the runtime. The control plane picks a harness + runtime pair per run, the runtime provisions the box, and the harness runs the agent loop within it.
+`apps/harness/src/harness-openai` wraps `@openai/codex-sdk`. For every invocation it:
 
----
+1. Creates an isolated persistent workspace.
+2. Stores `CODEX_HOME` under a separate persistent state root so the agent cannot edit its own session files.
+3. Injects the agent role through Codex `developer_instructions`.
+4. Materializes attached skills under `.agents/skills`.
+5. Starts or resumes a Codex thread with its native sandbox and web search disabled.
+6. Translates completed Codex items into Gilly `message`, `tool`, `done`, and `error` events.
 
-## What a Harness Does
+The current Codex SDK emits item snapshots rather than token deltas, so this harness streams completed messages and tool events. It does not synthesize fake token events.
 
-Given a task and a workspace, the harness drives the loop to a result: it reasons and plans, calls tools, reads and edits files, runs shell commands, uses skills, delegates to subagents, works through a test/debug loop, and returns a structured result.
+## Gateway Bridge
 
-It does **not** provision its own sandbox, hold long-lived credentials, or decide where results go — those belong to the runtime and the control plane, which stays the source of truth for what may run and with what access.
+Gilly's gateway speaks `POST /catalog` and `POST /invoke`; it is not itself an MCP endpoint. The OpenAI harness configures a local stdio MCP bridge with `gateway_catalog` and `gateway_invoke`. Run-scoped credentials are forwarded by environment-variable name rather than serialized into Codex command-line config. MCP results use the gateway's model-visible direct lane and therefore retain its result-size cap.
 
----
+## Tool Boundary
 
-## Why Claude Is the Primary Harness
+Codex permissions constrain filesystem and network effects but are not themselves a vendor tool allowlist. Gilly does not synthesize Codex filesystem tools for `Read` or `Write`; Codex receives its native OS-sandboxed shell only when `Bash` is configured. Gilly selects Codex's native `read-only` sandbox unless the agent has `Write` or `Bash`, when it selects `workspace-write`. Bash-enabled agents also receive command network access for remote Git operations. Provider-side web search remains disabled, and Gilly never grants `danger-full-access`.
 
-Because Gilly owns the platform layer and the runtime owns the box, the harness only has to be excellent at one thing: driving real work to completion inside a sandbox. The Claude Agent SDK is the strongest harness for exactly that, and especially for **coding work** — reading and editing files, running shell commands, understanding a repository, delegating to subagents, and looping until tests pass.
+The shell environment is allowlisted so model-generated commands do not receive OpenAI or gateway secrets.
 
-That coding strength is the core of Gilly's highest-value cases — PR review, repo audits, package upgrades, test investigation, Fleet — and it carries over to non-coding agents (analytics, support, incident summaries) when tools are scoped right. For an MVP whose first wins are engineering-heavy, the Claude SDK is the obvious default.
+## Persistence
 
----
+Codex resume needs both the thread id and files under `CODEX_HOME`. Docker Compose therefore persists:
 
-## Why the Harness Must Stay Replaceable
+- `/data/workspaces` for both loops.
+- `/data/codex` for OpenAI session state.
 
-The Claude Agent SDK's strength is also its boundary: **it is built around Claude.** It is the best harness for coding, but it is not a neutral, any-model runner — you cannot simply point it at a different model family when a future case calls for one.
-
-That is the whole reason the harness is a **replaceable layer** rather than a fixed part of the platform. Over time Gilly will hit cases the Claude SDK isn't the right tool for — a cheaper model for high-volume simple tasks, a different model family a team prefers, or a workflow some other framework expresses better. When that happens we should be able to drop in a different harness — a model-agnostic one like the OpenAI Agents SDK, say — **without touching the control plane or the runtime**.
-
-So the architecture commits to Claude as the default harness while keeping the harness boundary clean: the control plane talks to a harness through a stable handoff, the harness receives a workspace from the runtime, and nothing above or below it depends on which harness is running. Best harness today, swappable tomorrow.
-
----
-
-## Why Not the Alternatives (as the harness)
-
-The **OpenAI Agents SDK** is itself model- and provider-agnostic — through adapters like LiteLLM it can drive Claude, Gemini, or other models — which makes it a strong candidate the day we need that model flexibility. It isn't the default today only because it's less proven for the repo- and shell-heavy coding execution where the Claude SDK is strongest. **DeepAgents / LangGraph** brings orchestration and durable state that largely duplicate Gilly's control plane, adding layers an MVP doesn't need. A **custom harness from scratch** is unnecessary work. Each stays available behind the replaceable-harness boundary, but none displaces Claude as the default.
+Losing the Codex state volume makes stored OpenAI session ids non-resumable.

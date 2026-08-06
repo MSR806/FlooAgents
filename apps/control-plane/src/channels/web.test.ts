@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MODEL_CATALOG } from "@gilly/core";
 import {
   appendRunStep,
   completeRun,
@@ -29,6 +30,13 @@ const handler = () =>
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
+});
+
+test("GET /api/models returns the model catalog", async () => {
+  const res = await handler()(new Request("http://x/api/models"));
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(MODEL_CATALOG);
 });
 
 test("PUT credentials proxy injects x-admin-token and forwards the body", async () => {

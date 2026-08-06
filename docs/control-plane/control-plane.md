@@ -10,7 +10,7 @@ The harness drives the agent loop and the runtime gives it a box to run in — b
 
 ```text
 Control Plane (Gilly)   →  what runs, when, with what access, where results go     [custom server]  ← THIS LAYER
-   Harness              →  the agent loop                                           [Claude Agent SDK]
+   Harness              →  the agent loop                                           [Claude / OpenAI SDK]
    Runtime              →  the sandbox the harness runs inside                       [AWS Bedrock AgentCore]
 ```
 

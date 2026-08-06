@@ -1,4 +1,5 @@
 export * from "./agent.ts";
+export * from "./model.ts";
 export * from "./session.ts";
 export * from "./skill.ts";
 export * from "./slack-connection.ts";

@@ -8,9 +8,16 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.harness
     env_file:
-      - ../apps/harness-claude/.env   # ANTHROPIC_API_KEY (and optional PORT)
+      - ../apps/harness/.env
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+    environment:
+      PORT: 8080
+      WORKSPACES_DIR: /data/workspaces
+      CODEX_STATE_DIR: /data/codex
+    volumes:
+      - gilly-workspaces:/data/workspaces
+      - gilly-codex:/data/codex
 
   control-plane:
     build:
@@ -68,3 +75,5 @@ services:
 
 volumes:
   gilly-data:
+  gilly-workspaces:
+  gilly-codex:

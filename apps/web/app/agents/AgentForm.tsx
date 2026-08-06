@@ -5,8 +5,26 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import MultiSelect, { type Group } from "../components/MultiSelect";
+import {
+  type AgentValues,
+  type ModelInfo,
+  modelOptionGroups,
+  parseAgentValues,
+  parseModelCatalog,
+} from "./agent-form-helpers";
+
+export type { AgentValues } from "./agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -25,16 +43,6 @@ const TOOL_GROUPS: Group[] = [
     ],
   },
 ];
-
-export type AgentValues = {
-  id: string;
-  name: string;
-  model: string;
-  systemPrompt: string;
-  tools?: string[];
-  skills?: string[];
-  connectors?: string[];
-};
 
 type ConnectorInfo = { name: string; auth: string; connected: boolean };
 
@@ -63,12 +71,27 @@ export default function AgentForm({
 }) {
   const router = useRouter();
   const [values, setValues] = useState<AgentValues>(initial ?? EMPTY);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error">("loading");
   const [allSkills, setAllSkills] = useState<{ name: string; description: string }[]>([]);
   const [allConnectors, setAllConnectors] = useState<ConnectorInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    fetch(`${API_BASE}/models`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        return r.json();
+      })
+      .then((catalog) => {
+        setModels(parseModelCatalog(catalog));
+        setModelStatus("ready");
+      })
+      .catch(() => {
+        setModels([]);
+        setModelStatus("error");
+      });
     fetch(`${API_BASE}/skills`)
       .then((r) => r.json() as Promise<{ name: string; description: string }[]>)
       .then(setAllSkills)
@@ -110,13 +133,19 @@ export default function AgentForm({
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Request failed (${res.status})`);
       }
-      if (onSaved) onSaved({ ...values, id });
+      const saved = parseAgentValues(await res.json());
+      if (onSaved) onSaved(saved);
       else router.push(mode === "create" ? `/chat/${id}` : "/agents");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
       setSaving(false);
     }
   }
+
+  const modelOptions = modelOptionGroups(models, values.model);
+  const selectedModelLabel = modelOptions.groups
+    .flatMap((group) => group.options)
+    .find((option) => option.value === values.model)?.label;
 
   return (
     <form className="flex max-w-2xl flex-col gap-5" onSubmit={submit}>
@@ -142,12 +171,35 @@ export default function AgentForm({
 
       <div className="grid gap-2">
         <Label htmlFor="agent-model">Model</Label>
-        <Input
-          id="agent-model"
-          value={values.model}
-          required
-          onChange={(e) => set("model", e.target.value)}
-        />
+        <Select value={values.model} onValueChange={(model) => model && set("model", model)}>
+          <SelectTrigger id="agent-model" className="w-full">
+            <SelectValue>{selectedModelLabel ?? values.model}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {modelOptions.groups.map((group) => (
+              <SelectGroup key={group.label}>
+                <SelectLabel>{group.label}</SelectLabel>
+                {group.options.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+        {modelStatus === "loading" ? (
+          <p className="text-xs text-muted-foreground">Loading available models…</p>
+        ) : modelStatus === "error" ? (
+          <p className="text-xs text-muted-foreground">
+            Model catalog unavailable. The current selection is preserved and the agent can still be
+            saved.
+          </p>
+        ) : !modelOptions.currentIsCatalogued ? (
+          <p className="text-xs text-muted-foreground">
+            This agent uses a model outside the current catalog. Keep it or select a replacement.
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-2">

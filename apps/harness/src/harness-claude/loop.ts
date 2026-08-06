@@ -15,10 +15,54 @@ import type {
   StreamEvent,
 } from "@gilly/harness-protocol";
 import { z } from "zod";
+import { gatewayPost } from "../gateway-http.ts";
 
-// Anchored to the repo root (this file lives at apps/harness-claude/src/) so dev works
+export { gatewayPost } from "../gateway-http.ts";
+
+// Anchored to the repo root so dev works
 // regardless of cwd; relative WORKSPACES_DIR anchors here, absolute values pass through.
-const repoRoot = resolve(import.meta.dir, "../../..");
+const repoRoot = resolve(import.meta.dir, "../../../..");
+
+/**
+ * Graceful shutdown timeout for SDK cancellation (ms). If the SDK hasn't completed cancellation
+ * within this window, we consider it settled and proceed. This accounts for delayed cancellation
+ * behavior in Claude SDK 0.3.217+.
+ */
+const CANCELLATION_TIMEOUT_MS = 5000;
+
+function nextSdkMessage(
+  iterator: AsyncIterator<SDKMessage>,
+  signal: AbortSignal,
+): Promise<IteratorResult<SDKMessage>> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      signal.removeEventListener("abort", onAbort);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
+    const settle = <T>(fn: (value: T) => void, value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      fn(value);
+    };
+    const onAbort = () => {
+      timeoutId = setTimeout(() => {
+        settle(reject, new Error("Run cancelled."));
+      }, CANCELLATION_TIMEOUT_MS);
+    };
+
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+
+    iterator.next().then(
+      (value) => settle(resolve, value),
+      (err: unknown) => settle(reject, err),
+    );
+  });
+}
 
 /** Scratch dir for one Gilly session's workspace. Pure: same request → same path. */
 export function workspaceDir(req: InvocationRequest): string {
@@ -39,22 +83,6 @@ const TOOL_MAP: Record<string, string[]> = {
 /** Expand Gilly tool abstractions into SDK tool names (unknowns pass through), de-duplicated. */
 export function expandTools(gillyTools: string[]): string[] {
   return [...new Set(gillyTools.flatMap((t) => TOOL_MAP[t] ?? [t]))];
-}
-
-/** POST JSON to `${url}${path}` with a Bearer token. Returns the HTTP ok flag + parsed body. */
-export async function gatewayPost(
-  url: string,
-  token: string,
-  path: string,
-  body: unknown,
-  fetchFn = fetch,
-): Promise<{ ok: boolean; data: unknown }> {
-  const res = await fetchFn(`${url}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  return { ok: res.ok, data: await res.json() };
 }
 
 /** Wrap a JSON-serializable value as an MCP tool text result. */
@@ -124,7 +152,11 @@ export function makeGatewayMcpServer(
  * Code's tool-use guidance, bypassed permissions (headless: no human to approve), and a
  * sandboxed workspace. A bare chat agent stays chat-only.
  */
-export function buildOptions(req: InvocationRequest, streaming: boolean): Options {
+export function buildOptions(
+  req: InvocationRequest,
+  streaming: boolean,
+  abortController?: AbortController,
+): Options {
   // `req.agent.tools` holds Gilly abstractions (Read/Write/Bash); expand to real SDK tools here.
   const fsTools = expandTools(req.agent.tools ?? []);
   const skills = req.skills ?? [];
@@ -170,6 +202,7 @@ export function buildOptions(req: InvocationRequest, streaming: boolean): Option
       : {}),
     ...(needsWorkspace ? { cwd: workspaceDir(req) } : {}),
     ...(streaming ? { includePartialMessages: true } : {}),
+    ...(abortController ? { abortController } : {}),
     ...(req.resumeSessionId ? { resume: req.resumeSessionId } : {}),
   };
 }
@@ -268,24 +301,37 @@ export async function runAgentLoop(
 /**
  * Streaming variant of {@link runAgentLoop}: yields incremental `token` events, then one
  * terminal `done` (or `error`). Never throws — failures surface as a final `error` event.
+ * Ensures all resources (listeners, timers, child processes) are cleaned up on every exit path.
  */
 export async function* streamAgentLoop(
   req: InvocationRequest,
   queryFn: typeof query = query,
+  externalSignal?: AbortSignal,
 ): AsyncIterable<StreamEvent> {
+  const abortController = new AbortController();
+  const forwardAbort = () => abortController.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) forwardAbort();
+  else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
+
   let harnessSessionId: string | null = null;
   let resultText: string | null = null;
   let accumulated = "";
   let pendingNarration: string[] = [];
+
   try {
-    const options = buildOptions(req, true);
+    const options = buildOptions(req, true, abortController);
     if (options.cwd) {
       mkdirSync(options.cwd, { recursive: true });
       materializeSkills(req.skills ?? [], options.cwd);
     }
     const messages = queryFn({ prompt: req.userMessage, options });
+    const iterator = messages[Symbol.asyncIterator]();
 
-    for await (const message of messages) {
+    while (true) {
+      const next = await nextSdkMessage(iterator, abortController.signal);
+      if (next.done) break;
+
+      const message = next.value;
       if (message.type === "system" && message.subtype === "init") {
         harnessSessionId = message.session_id;
       } else if (message.type === "stream_event") {
@@ -322,5 +368,7 @@ export async function* streamAgentLoop(
     yield { type: "done", finalText: resultText ?? accumulated, harnessSessionId };
   } catch (err) {
     yield { type: "error", error: String(err) };
+  } finally {
+    externalSignal?.removeEventListener("abort", forwardAbort);
   }
 }
