@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,17 +41,32 @@ export default function SkillForm({
     setValues((v) => ({ ...v, [key]: value }));
 
   const files = values.files ?? [];
+
+  // React keys for the file rows. Keyed by array index, removing a middle row
+  // shifts every later row's identity, so React keeps the old inputs mounted
+  // against the wrong data. SkillFile is the API payload shape, so the keys live
+  // beside the values rather than on them.
+  const [rowKeys, setRowKeys] = useState<string[]>(() =>
+    (initial?.files ?? []).map((_, i) => `row-${i}`),
+  );
+  const nextRowKey = useRef(initial?.files?.length ?? 0);
+
   const setFile = (i: number, patch: Partial<SkillFile>) =>
     set(
       "files",
       files.map((f, j) => (j === i ? { ...f, ...patch } : f)),
     );
-  const addFile = () => set("files", [...files, { path: "", contents: "" }]);
-  const removeFile = (i: number) =>
+  const addFile = () => {
+    setRowKeys((k) => [...k, `row-${nextRowKey.current++}`]);
+    set("files", [...files, { path: "", contents: "" }]);
+  };
+  const removeFile = (i: number) => {
+    setRowKeys((k) => k.filter((_, j) => j !== i));
     set(
       "files",
       files.filter((_, j) => j !== i),
     );
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -135,7 +150,7 @@ export default function SkillForm({
           them at <code>.claude/skills/{values.name || "<name>"}/&lt;path&gt;</code>.
         </p>
         {files.map((f, i) => (
-          <div key={i} className="grid gap-2 rounded-lg border p-3">
+          <div key={rowKeys[i]} className="grid gap-2 rounded-lg border p-3">
             <div className="flex gap-2">
               <Input
                 value={f.path}

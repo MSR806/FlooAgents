@@ -59,7 +59,11 @@ export function Markdown({ children }: { children: string }) {
 }
 
 export function ActivityBlock({ items, running }: { items: ActivityItem[]; running: boolean }) {
-  const groups = groupActivity(items);
+  // Number the groups before windowing: while a run streams, `slice(-5)` shifts
+  // every position within the window, so a key built from the slice index would
+  // point at a different group each time a step arrives. The absolute position in
+  // the append-only group list stays put.
+  const groups = groupActivity(items).map((group, position) => ({ group, position }));
   const visibleGroups = running ? groups.slice(-5) : groups;
   const omittedGroups = groups.length - visibleGroups.length;
   return (
@@ -82,11 +86,8 @@ export function ActivityBlock({ items, running }: { items: ActivityItem[]; runni
         {omittedGroups > 0 ? (
           <p className="text-muted-foreground/80">{omittedGroups} earlier groups</p>
         ) : null}
-        {visibleGroups.map((group, index) => (
-          <div
-            key={`${group.label}:${group.detail}:${index}`}
-            className="flex min-w-0 gap-2 leading-5"
-          >
+        {visibleGroups.map(({ group, position }) => (
+          <div key={position} className="flex min-w-0 gap-2 leading-5">
             <span className="shrink-0 font-medium text-foreground">{group.label}</span>
             {group.detail ? <span className="min-w-0 truncate">· {group.detail}</span> : null}
           </div>
@@ -119,6 +120,7 @@ function ChatPageContent() {
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `messages` is the trigger, not an input — the body only reads the ref. Dropping it would stop the list from following new output.
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages]);
@@ -458,6 +460,7 @@ function ChatPageContent() {
                 const hasActivity = message.parts.some((part) => part.kind === "activity");
                 return (
                   <div
+                    // biome-ignore lint/suspicious/noArrayIndexKey: chat history is append-only — messages are never reordered or spliced, so the index is the row's identity.
                     key={i}
                     className={
                       message.role === "user"
@@ -468,13 +471,16 @@ function ChatPageContent() {
                     {message.parts.map((part, j) => {
                       if (part.kind === "text") {
                         return message.role === "assistant" ? (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only within a message.
                           <Markdown key={j}>{part.text}</Markdown>
                         ) : (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only within a message.
                           <p key={j}>{part.text}</p>
                         );
                       }
                       if (part.kind === "error") {
                         return (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only within a message.
                           <div key={j} className="flex items-start gap-2 text-sm text-destructive">
                             <AlertCircle className="mt-0.5 size-4 shrink-0" />
                             <span>{part.error}</span>
@@ -483,6 +489,7 @@ function ChatPageContent() {
                       }
                       return (
                         <ActivityBlock
+                          // biome-ignore lint/suspicious/noArrayIndexKey: parts are append-only within a message.
                           key={j}
                           items={part.items}
                           running={streaming && isLast && j === message.parts.length - 1}
