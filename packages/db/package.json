@@ -11,6 +11,6 @@
   },
   "dependencies": {
     "@gilly/core": "workspace:*",
-    "drizzle-orm": "latest"
+    "drizzle-orm": "^0.45.2"
   }
 }
