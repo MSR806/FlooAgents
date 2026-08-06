@@ -13,9 +13,9 @@
     "@gilly/db": "workspace:*",
     "@gilly/harness-protocol": "workspace:*",
     "@gilly/runtime": "workspace:*",
-    "@slack/bolt": "latest",
-    "@slack/types": "latest",
-    "@slack/web-api": "latest",
-    "zod": "latest"
+    "@slack/bolt": "^4.7.3",
+    "@slack/types": "^2.21.1",
+    "@slack/web-api": "^7.17.0",
+    "zod": "^4.4.3"
   }
 }

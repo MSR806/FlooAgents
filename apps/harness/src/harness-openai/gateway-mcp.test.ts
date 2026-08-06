@@ -16,10 +16,11 @@ test("gatewayPost authenticates and forwards JSON to the Gilly gateway", async (
     ok: true,
     data: { tools: [] },
   });
-  expect(seen?.url).toBe("http://gateway/catalog");
-  expect((seen?.init.headers as Record<string, string>).authorization).toBe("Bearer token");
-  expect(seen?.init.body).toBe(JSON.stringify({ query: "git" }));
-  expect(seen?.init.signal).toBeInstanceOf(AbortSignal);
+  if (!seen) throw new Error("expected gateway request");
+  expect(seen.url).toBe("http://gateway/catalog");
+  expect((seen.init.headers as Record<string, string>).authorization).toBe("Bearer token");
+  expect(seen.init.body).toBe(JSON.stringify({ query: "git" }));
+  expect(seen.init.signal).toBeInstanceOf(AbortSignal);
 });
 
 test("gatewayPost preserves non-2xx gateway errors", async () => {

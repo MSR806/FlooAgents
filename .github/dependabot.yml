@@ -9,16 +9,26 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Patch bumps are more noise than value. This does NOT suppress security
+    # updates — those run on a separate track that ignores these conditions, so a
+    # vulnerable patch release still gets its own PR.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
     groups:
-      # One PR for the routine noise; anything major still comes in alone.
-      minor-and-patch:
+      # One PR for the minor bumps; majors arrive individually so each gets looked
+      # at on its own.
+      minor:
         patterns: ["*"]
-        update-types: [minor, patch]
+        update-types: [minor]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-patch"]
     groups:
       actions:
         patterns: ["*"]

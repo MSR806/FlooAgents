@@ -11,6 +11,6 @@
   },
   "dependencies": {
     "@gilly/core": "workspace:*",
-    "zod": "latest"
+    "zod": "^4.4.3"
   }
 }
