@@ -53,7 +53,7 @@ persisted in SQLite so follow-ups resume the correct provider session.
 | Harness | Claude Agent SDK and OpenAI Codex SDK behind one stable HTTP contract |
 | Runtime | Local HTTP runtime provider with an AgentCore-compatible contract |
 | Storage | SQLite operational state via Drizzle |
-| Web | Next.js UI for managing agents, skills, connectors, users, and chats |
+| Web | Next.js UI for managing agents, skills, tools, users, and chats |
 
 ## Architecture
 

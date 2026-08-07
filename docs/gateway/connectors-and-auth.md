@@ -9,7 +9,7 @@ See [`gateway.md`](gateway.md) for the gateway itself. This doc locks how extern
 ## Transport — three kinds, one registry
 
 - **API** — REST/GraphQL services we write tools for (`defineTool` handlers): Branch, Meta, Gmail.
-- **Remote MCP** — a vendor-hosted MCP server (Amplitude). The gateway is the MCP client: it connects, lists tools, and indexes them into the registry under the connector's namespace (`amplitude.query_dataset`). Tools are indexed when the admin connects (plus a manual refresh button) and cached in the DB, so `catalog` works even when the vendor is down.
+- **Remote MCP** — a vendor-hosted MCP server (Amplitude). The gateway is the MCP client: it connects, lists tools, and indexes them under the connector's namespace (`amplitude.query_dataset`). Discovery is cached briefly in-process; unavailable providers are omitted until the next refresh.
 - **Local MCP (stdio)** — an MCP server the gateway spawns as a child process (`npx …`). Spawned lazily on first call, kept alive, restarted on crash.
 
 `gateway_catalog` / `gateway_invoke` look identical for all three — the transport is invisible above the registry.
@@ -58,9 +58,11 @@ App-level OAuth client id/secret (registered once with Google/Meta) live in gate
 
 One credential per provider — the vault stays exactly as [`gateway.md`](gateway.md) defines it: `credentials(provider, key, value)`. All calls to a provider run as the identity the admin connected.
 
-Per-user control is **access resolution, not credential ownership**: the agent's connectors determine catalog visibility, while the `grants` table decides which user may invoke each tool through the run token ([`identity-and-access.md`](identity-and-access.md)). A user without a grant can discover the tool but cannot execute it or receive its data.
+Per-user control is **access resolution, not credential ownership**: the agent's exact `gatewayTools` determine catalog visibility, while the `grants` table decides which user may invoke each tool through the run token ([`identity-and-access.md`](identity-and-access.md)). A user without a grant can discover the tool but cannot execute it or receive its data.
 
-**Missing credential is a first-class answer, not a failure.** When a tool is invoked and the admin hasn't connected the provider yet, the gateway returns `{ error: "not_connected" }` and the agent says so — configuration lives with the admin, not in-conversation.
+Composio-managed connections follow the same shared-identity rule. Gilly keeps the Composio project key; Composio keeps downstream OAuth/API credentials. Composio remains behind the gateway and does not replace Gilly's tool allowlists, grants, result limits, or traces.
+
+**Missing credential is a first-class answer, not a failure.** Static tools with missing credentials return `{ error: "not_connected" }`. Dynamic MCP/Composio tools are absent from current discovery, so stale selections fail closed as `forbidden` until the provider reconnects and discovery refreshes. Configuration lives with the admin, not in-conversation.
 
 ![Auth and invoke flows](../diagrams/gateway-auth-flow.svg)
 

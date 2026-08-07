@@ -22,7 +22,7 @@ Slack is the only identity source for now. Other identities (email login, WhatsA
 grants(userId, toolPattern, createdAt)
 ```
 
-`toolPattern` matches tool names (`gmail.*`, `branch.query`). An agent's `connectors[]` determine its catalog; a user's matching grant patterns determine which catalog tools they may invoke.
+`toolPattern` matches canonical tool names (`gmail.*`, `branch.query`). An agent's exact `gatewayTools[]` determine its catalog; a user's matching grant patterns determine which catalog tools they may invoke. The agent boundary and user grant are checked independently on every call.
 
 **The flow is deliberately admin-mediated.** New user messages an agent → they exist in the DB with a name, but no grants → the agent can discover its connected tools, but invocation returns `user_missing_grant` with instructions to stop and inform the user. The admin finds them in the users list (already there, with their Slack name) and adds grants. No self-service, no approval queue — the org is small enough that a human in the loop *is* the feature.
 

@@ -45,14 +45,14 @@ export const gilly = defineConnector({
     defineTool({
       name: "gilly.create_agent",
       description:
-        "Create a Gilly agent. Input is AgentConfig: id, name, model, systemPrompt, optional tools, skills, connectors.",
+        "Create a Gilly agent. Input is AgentConfig: id, name, model, systemPrompt, optional tools, skills, gatewayTools.",
       input: AgentConfig,
       handler: async (agent) => cp("/api/agents", { method: "POST", body: JSON.stringify(agent) }),
     }),
     defineTool({
       name: "gilly.update_agent",
       description:
-        "Patch a Gilly agent by id. Provide only fields to change: name, model, systemPrompt, tools, skills, connectors.",
+        "Patch a Gilly agent by id. Provide only fields to change: name, model, systemPrompt, tools, skills, gatewayTools.",
       input: z.object({ id: z.string().min(1), patch: agentPatch }),
       handler: async ({ id, patch }) => {
         const current = await cp(`/api/agents/${encodeURIComponent(id)}`);

@@ -18,9 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import MultiSelect, { type Group } from "../components/MultiSelect";
 import {
   type AgentValues,
+  type GatewayTool,
+  gatewayToolGroups,
   type ModelInfo,
   modelOptionGroups,
   parseAgentValues,
+  parseGatewayTools,
   parseModelCatalog,
 } from "./agent-form-helpers";
 
@@ -43,8 +46,6 @@ const TOOL_GROUPS: Group[] = [
     ],
   },
 ];
-
-type ConnectorInfo = { name: string; auth: string; connected: boolean };
 
 const EMPTY: AgentValues = { id: "", name: "", model: "claude-sonnet-4-5", systemPrompt: "" };
 
@@ -74,7 +75,7 @@ export default function AgentForm({
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error">("loading");
   const [allSkills, setAllSkills] = useState<{ name: string; description: string }[]>([]);
-  const [allConnectors, setAllConnectors] = useState<ConnectorInfo[]>([]);
+  const [allGatewayTools, setAllGatewayTools] = useState<GatewayTool[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -96,10 +97,11 @@ export default function AgentForm({
       .then((r) => r.json() as Promise<{ name: string; description: string }[]>)
       .then(setAllSkills)
       .catch(() => setAllSkills([]));
-    fetch(`${API_BASE}/connectors`)
-      .then((r) => r.json() as Promise<{ connectors: ConnectorInfo[] }>)
-      .then((d) => setAllConnectors(d.connectors ?? []))
-      .catch(() => setAllConnectors([]));
+    fetch(`${API_BASE}/tools`)
+      .then((r) => r.json())
+      .then(parseGatewayTools)
+      .then(setAllGatewayTools)
+      .catch(() => setAllGatewayTools([]));
   }, []);
 
   const set = <K extends keyof AgentValues>(key: K, value: AgentValues[K]) =>
@@ -120,7 +122,7 @@ export default function AgentForm({
       id,
       tools: values.tools?.length ? values.tools : undefined,
       skills: values.skills?.length ? values.skills : undefined,
-      connectors: values.connectors?.length ? values.connectors : undefined,
+      gatewayTools: values.gatewayTools?.length ? values.gatewayTools : undefined,
     };
     const url = mode === "create" ? `${API_BASE}/agents` : `${API_BASE}/agents/${id}`;
     try {
@@ -146,6 +148,7 @@ export default function AgentForm({
   const selectedModelLabel = modelOptions.groups
     .flatMap((group) => group.options)
     .find((option) => option.value === values.model)?.label;
+  const concreteToolGroups = gatewayToolGroups(allGatewayTools, values.gatewayTools ?? []);
 
   return (
     <form className="flex max-w-2xl flex-col gap-5" onSubmit={submit}>
@@ -244,8 +247,8 @@ export default function AgentForm({
       </div>
 
       <div className="grid gap-2">
-        <Label>Tools</Label>
-        {allConnectors.length === 0 ? (
+        <Label>Gateway tools</Label>
+        {concreteToolGroups.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             No tools available — configure one on the{" "}
             <a href="/connectors" className="underline">
@@ -255,17 +258,9 @@ export default function AgentForm({
           </p>
         ) : (
           <MultiSelect
-            groups={[
-              {
-                label: "Tools",
-                options: allConnectors.map((c) => ({
-                  value: c.name,
-                  description: `${c.connected ? "connected" : "not connected"} · auth: ${c.auth}`,
-                })),
-              },
-            ]}
-            selected={values.connectors ?? []}
-            onChange={(connectors) => set("connectors", connectors)}
+            groups={concreteToolGroups}
+            selected={values.gatewayTools ?? []}
+            onChange={(gatewayTools) => set("gatewayTools", gatewayTools)}
             placeholder="No tools — agent can't call external tools"
           />
         )}

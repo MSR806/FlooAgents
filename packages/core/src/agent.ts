@@ -22,8 +22,8 @@ export const AgentConfig = z.object({
   tools: z.array(z.string()).optional(),
   /** Skill names this agent loads (folders in the skill registry). */
   skills: z.array(z.string()).optional(),
-  /** Connector names this agent may discover; user grants are checked when a tool is invoked. */
-  connectors: z.array(z.string()).optional(),
+  /** Exact canonical gateway tool names this agent may discover and invoke. */
+  gatewayTools: z.array(z.string()).optional(),
 });
 
 export type AgentConfig = z.infer<typeof AgentConfig>;

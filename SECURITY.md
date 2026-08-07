@@ -27,8 +27,10 @@ reporting or reviewing:
   tokens, agent context, or the sandbox.
 - **Run-scoped gateway tokens** — opaque, checked per call, expiring with their run.
   Anything that lets a token outlive its run or widen its scope is a vulnerability.
-- **Access resolution** (`apps/gateway/src/access.ts`) — the agent-connectors ∩
+- **Access resolution** (`apps/gateway/src/access.ts`) — the agent's exact tool allowlist ∩
   user-grants intersection. A path that reaches a tool without both is a vulnerability.
+- **Composio** — only its project API key belongs in Gilly's vault/environment. Downstream provider
+  tokens remain in Composio and must never reach the harness, model, run token, or sandbox.
 - **The agent sandbox** — agent-authored scripts run in the runtime workspace. Escapes,
   or agents reaching tools and credentials outside their configured access, matter here.
 
@@ -38,3 +40,7 @@ Gilly executes model-authored code and shell commands by design. Self-hosted
 deployments should treat the runtime as untrusted: keep it network-isolated from
 anything you wouldn't grant an agent, and scope provider credentials to the minimum
 the connected tools need.
+
+The current management API and web UI assume a trusted internal deployment and do not authenticate
+the human administrator independently. Do not expose the control-plane management port publicly;
+web authentication is required before operating it as an internet-facing service.

@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { parseGatewayTools } from "../agents/agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -26,7 +27,7 @@ type Grant = { id: string; userId: string; toolPattern: string };
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[] | null>(null);
-  const [connectors, setConnectors] = useState<string[]>([]);
+  const [tools, setTools] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,10 +35,11 @@ export default function UsersPage() {
       .then((r) => r.json() as Promise<User[]>)
       .then(setUsers)
       .catch(() => setError("Failed to load users"));
-    fetch(`${API_BASE}/connectors`)
-      .then((r) => r.json() as Promise<{ connectors: { name: string }[] }>)
-      .then((d) => setConnectors((d.connectors ?? []).map((c) => c.name)))
-      .catch(() => setConnectors([]));
+    fetch(`${API_BASE}/tools`)
+      .then((r) => r.json())
+      .then(parseGatewayTools)
+      .then((catalog) => setTools(catalog.map((tool) => tool.name)))
+      .catch(() => setTools([]));
   }, []);
 
   return (
@@ -65,7 +67,7 @@ export default function UsersPage() {
             </TableHeader>
             <TableBody>
               {users.map((u) => (
-                <UserRow key={u.id} user={u} connectors={connectors} />
+                <UserRow key={u.id} user={u} tools={tools} />
               ))}
             </TableBody>
           </Table>
@@ -75,7 +77,7 @@ export default function UsersPage() {
   );
 }
 
-function UserRow({ user, connectors }: { user: User; connectors: string[] }) {
+function UserRow({ user, tools }: { user: User; tools: string[] }) {
   const [grants, setGrants] = useState<Grant[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -89,14 +91,14 @@ function UserRow({ user, connectors }: { user: User; connectors: string[] }) {
 
   useEffect(load, [load]);
 
-  async function add(connector: string) {
+  async function add(tool: string) {
     setBusy(true);
     setErr(null);
     try {
       const res = await fetch(`${API_BASE}/grants`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userId: user.id, toolPattern: `${connector}.*` }),
+        body: JSON.stringify({ userId: user.id, toolPattern: tool }),
       });
       if (!res.ok) throw new Error(`grant failed (${res.status})`);
       load();
@@ -164,15 +166,15 @@ function UserRow({ user, connectors }: { user: User; connectors: string[] }) {
         {err ? <p className="mt-1 text-xs text-destructive">{err}</p> : null}
       </TableCell>
       <TableCell>
-        {connectors.length > 0 ? (
+        {tools.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" disabled={busy} />}>
               <Plus /> Grant
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {connectors.map((name) => (
+              {tools.map((name) => (
                 <DropdownMenuItem key={name} onClick={() => add(name)}>
-                  {name}.*
+                  {name}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

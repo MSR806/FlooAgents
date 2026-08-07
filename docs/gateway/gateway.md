@@ -70,16 +70,18 @@ Two small packages carry the contract:
 
 Two levels, intersected when the control plane mints the run token:
 
-- **Agent level** — agent config gains `connectors: ["amplitude", "branch", ...]`: what appears in this agent's catalog and what it may touch at all.
+- **Agent level** — agent config carries exact `gatewayTools` names: what appears in this agent's catalog and what it may touch at all. The upstream implementation is irrelevant here.
 - **User level** — a `grants` table (`userId → tool pattern`): what this user may call. Users are auto-provisioned from Slack and granted access by an admin — see [`identity-and-access.md`](identity-and-access.md).
 
-The token is scoped to `{ userId, agentId, connectors, grants }`. Catalog requests use `connectors`; invoke requests require both a connected tool and a matching user grant. Both lanes pass through the token, so access holds even inside agent-written scripts. Mechanically it is an **opaque token in a DB table** (gateway and control plane share the SQLite) — checked per call, expired when its run completes; no JWT machinery.
+The token is scoped to `{ userId, agentId, tools, grants }`. Catalog requests use the exact tool allowlist; invoke requests require both an agent-selected tool and a matching user grant. Both lanes pass through the token, so access holds even inside agent-written scripts. Mechanically it is an **opaque token in a DB table** (gateway and control plane share the SQLite) — checked per call, expired when its run completes; no JWT machinery.
 
-Invoke errors form a closed set: `user_missing_grant` (stop and inform the user), `forbidden` (outside the agent's connectors), `not_connected` (admin hasn't configured the provider), `invalid_input` (schema mismatch), `provider_error`, `timeout`. And the direct lane has a **result-size cap (~50KB)**: a larger result is refused with a pointer to the script lane — the cap is what enforces the context discipline, not just the skill's advice.
+Invoke errors form a closed set: `user_missing_grant` (stop and inform the user), `forbidden` (outside the agent's exact tool allowlist), `not_connected` (admin hasn't configured the upstream), `invalid_input` (schema mismatch), `provider_error`, `timeout`. And the direct lane has a **result-size cap (~50KB)**: a larger result is refused with a pointer to the script lane — the cap is what enforces the context discipline, not just the skill's advice.
 
 ## Credentials
 
 A `credentials` table in the existing SQLite: `(provider, key, value)` — single tenant, so one credential per provider, configured once by an admin and shared by everyone the grants allow. Values are encrypted at rest with a master key from env (`GILLY_VAULT_KEY`, AES-GCM); losing the key means re-entering credentials, which is acceptable at this scale. The gateway resolves a tool's declared `creds` from the vault at invocation time and injects them into `ctx`. Credentials never appear in tool output, tokens, or the sandbox.
+
+Composio is an upstream provider, not an agent connector. The gateway stores only the Composio project API key (vault first, environment fallback) and uses one shared Composio identity. Admins authenticate Gmail, Linear, and other toolkits through hosted Connect Links in the Tools UI; Composio stores and refreshes those provider credentials. Concrete tools then join the same Gilly catalog as custom tools and are selected, granted, invoked, and traced by canonical Gilly name.
 
 ## Tracing
 

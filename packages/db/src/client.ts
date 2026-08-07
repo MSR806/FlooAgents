@@ -4,6 +4,13 @@ import * as schema from "./schema.ts";
 
 export type Db = ReturnType<typeof createDb>;
 
+function addColumn(sqlite: Database, table: string, column: string, definition: string) {
+  const columns = sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((item) => item.name === column)) {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
+  }
+}
+
 /** Idempotent DDL — MVP keeps migrations inline instead of a migration tool. */
 function migrate(sqlite: Database) {
   sqlite.exec(`
@@ -51,30 +58,27 @@ function migrate(sqlite: Database) {
       status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
     );
   `);
-  // Add `ref` to follow_ups created before it existed (ignore if already present).
-  try {
-    sqlite.exec("ALTER TABLE follow_ups ADD COLUMN ref TEXT;");
-  } catch {
-    // column already exists
-  }
-  // Add `connectors` to agents created before it existed (ignore if already present).
-  try {
-    sqlite.exec("ALTER TABLE agents ADD COLUMN connectors TEXT;");
-  } catch {
-    // column already exists
-  }
-  // Existing tokens are short-lived; an empty catalog is the safe migration default.
-  try {
-    sqlite.exec("ALTER TABLE gateway_tokens ADD COLUMN connectors TEXT NOT NULL DEFAULT '[]';");
-  } catch {
-    // column already exists
-  }
+  addColumn(sqlite, "follow_ups", "ref", "TEXT");
+  // Additive agent tool policy. Legacy connectors are intentionally not projected into it.
+  addColumn(sqlite, "agents", "gateway_tools", "TEXT");
+  // Retain the legacy column so old databases remain readable by SQLite/Drizzle.
+  addColumn(sqlite, "agents", "connectors", "TEXT");
+  // Existing tokens fail closed: the exact tool allowlist starts empty.
+  addColumn(sqlite, "gateway_tokens", "tools", "TEXT NOT NULL DEFAULT '[]'");
+  // Retain the legacy column so old databases remain readable by SQLite/Drizzle.
+  addColumn(sqlite, "gateway_tokens", "connectors", "TEXT NOT NULL DEFAULT '[]'");
 }
 
 /** Open the SQLite store, apply DDL, and return a Drizzle client. */
 export function createDb(path: string) {
   const sqlite = new Database(path, { create: true });
-  sqlite.exec("PRAGMA journal_mode = WAL;");
-  migrate(sqlite);
+  sqlite.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; BEGIN IMMEDIATE;");
+  try {
+    migrate(sqlite);
+    sqlite.exec("COMMIT;");
+  } catch (error) {
+    sqlite.exec("ROLLBACK;");
+    throw error;
+  }
   return drizzle(sqlite, { schema });
 }

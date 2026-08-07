@@ -38,7 +38,7 @@ function rowToAgent(row: AgentRow): AgentConfig {
     systemPrompt: row.systemPrompt,
     tools: row.tools ? JSON.parse(row.tools) : undefined,
     skills: row.skills ? JSON.parse(row.skills) : undefined,
-    connectors: row.connectors ? JSON.parse(row.connectors) : undefined,
+    gatewayTools: row.gatewayTools ? JSON.parse(row.gatewayTools) : undefined,
   });
 }
 
@@ -52,7 +52,8 @@ function agentToRow(cfg: AgentConfig): AgentRow {
     systemPrompt: a.systemPrompt,
     tools: a.tools?.length ? JSON.stringify(a.tools) : null,
     skills: a.skills?.length ? JSON.stringify(a.skills) : null,
-    connectors: a.connectors?.length ? JSON.stringify(a.connectors) : null,
+    gatewayTools: a.gatewayTools?.length ? JSON.stringify(a.gatewayTools) : null,
+    connectors: null,
     createdAt: now(),
   };
 }
@@ -90,7 +91,7 @@ export function updateAgent(db: Db, id: string, cfg: AgentConfig): AgentConfig {
       systemPrompt: row.systemPrompt,
       tools: row.tools,
       skills: row.skills,
-      connectors: row.connectors,
+      gatewayTools: row.gatewayTools,
     })
     .where(eq(agents.id, id))
     .run();
@@ -399,14 +400,14 @@ export function insertToolCall(
 
 type GatewayTokenRow = typeof gatewayTokens.$inferSelect;
 
-/** Mint an opaque token carrying catalog connectors and invocation grants. */
+/** Mint an opaque token carrying exact agent tools and user invocation grants. */
 export function createGatewayToken(
   db: Db,
   input: {
     runId: string;
     userId: string;
     agentId: string;
-    connectors: string[];
+    tools: string[];
     grants: string[];
     ttlMs: number;
   },
@@ -418,7 +419,8 @@ export function createGatewayToken(
       runId: input.runId,
       userId: input.userId,
       agentId: input.agentId,
-      connectors: JSON.stringify(input.connectors),
+      tools: JSON.stringify(input.tools),
+      connectors: "[]",
       grants: JSON.stringify(input.grants),
       expiresAt: now() + input.ttlMs,
       createdAt: now(),
@@ -432,8 +434,8 @@ export function getGatewayToken(
   db: Db,
   token: string,
 ):
-  | (Omit<GatewayTokenRow, "connectors" | "grants"> & {
-      connectors: string[];
+  | (Omit<GatewayTokenRow, "tools" | "connectors" | "grants"> & {
+      tools: string[];
       grants: string[];
     })
   | undefined {
@@ -441,7 +443,7 @@ export function getGatewayToken(
   return row
     ? {
         ...row,
-        connectors: JSON.parse(row.connectors),
+        tools: JSON.parse(row.tools),
         grants: JSON.parse(row.grants),
       }
     : undefined;

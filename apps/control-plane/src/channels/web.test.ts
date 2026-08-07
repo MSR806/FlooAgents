@@ -88,6 +88,59 @@ test("connect proxy bounces back to the connectors page when already connected (
   expect(res.headers.get("location")).toBe("/connectors?connected=jira");
 });
 
+test("GET /api/tools proxies the unified gateway catalog", async () => {
+  globalThis.fetch = (async () =>
+    Response.json({
+      tools: [
+        {
+          name: "gmail.send_email",
+          description: "Send email",
+          source: "composio",
+          toolkit: "gmail",
+          connected: true,
+        },
+      ],
+    })) as unknown as typeof fetch;
+
+  const res = await handler()(new Request("http://x/api/tools"));
+  expect(await res.json()).toEqual({
+    tools: [
+      {
+        name: "gmail.send_email",
+        description: "Send email",
+        source: "composio",
+        toolkit: "gmail",
+        connected: true,
+      },
+    ],
+  });
+});
+
+test("Composio toolkit proxies preserve query, inject admin auth, and relay redirects", async () => {
+  const seen: Request[] = [];
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    const req = new Request(input as string, init);
+    seen.push(req);
+    if (req.url.includes("/connect")) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://connect.composio.dev" },
+      });
+    }
+    return Response.json({ configured: true, items: [], nextCursor: "next" });
+  }) as unknown as typeof fetch;
+
+  const list = await handler()(new Request("http://x/api/composio/toolkits?query=mail&cursor=one"));
+  expect(await list.json()).toEqual({ configured: true, items: [], nextCursor: "next" });
+  expect(seen[0]?.url).toBe("http://gw/admin/composio/toolkits?query=mail&cursor=one");
+  expect(seen[0]?.headers.get("x-admin-token")).toBe("admin-secret");
+
+  const connect = await handler()(new Request("http://x/api/composio/toolkits/gmail/connect"));
+  expect(connect.status).toBe(302);
+  expect(connect.headers.get("location")).toBe("https://connect.composio.dev");
+  expect(seen[1]?.headers.get("x-admin-token")).toBe("admin-secret");
+});
+
 test("POST /api/skills persists a skill with supporting files; GET returns them", async () => {
   const dir = mkdtempSync(join(tmpdir(), "gilly-web-skills-"));
   const fetch = createWebHandler({

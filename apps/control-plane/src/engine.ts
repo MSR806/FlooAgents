@@ -64,7 +64,7 @@ export function createEngine(deps: {
   getAgent: (id: string) => AgentConfig | undefined;
   /** Resolve a skill bundle by name (the SkillStore seam); defaults to "no skills". */
   getSkill?: (name: string) => SkillBundle | undefined;
-  /** Tooling gateway base URL; when set, runs with matching grants get a per-run gateway token. */
+  /** Tooling gateway base URL; attached only when an agent has exact gateway tools. */
   gatewayUrl?: string;
   /** Max silence between runtime stream events before the run is failed. */
   runIdleTimeoutMs?: number;
@@ -122,31 +122,29 @@ export function createEngine(deps: {
       // (unknown skill name) — caught below and recorded as a failed run.
       const skillBundles = skillsFor(agent);
 
-      // The agent's connectors define catalog visibility. Grants are checked only on invocation,
+      // The agent's exact tools define catalog visibility. Grants are checked only on invocation,
       // so an ungranted user can discover a relevant tool and receive a useful access error.
-      const conns = new Set(agent.connectors ?? []);
+      const gatewayTools = [...new Set(agent.gatewayTools ?? [])];
       const user = userId ? getUser(db, userId) : undefined;
       const grants = !user
         ? []
         : user.isAdmin
-          ? [...conns].map((c) => `${c}.*`)
-          : listGrants(db, user.id)
-              .map((g) => g.toolPattern)
-              .filter((p) => conns.has(p.split(".")[0] ?? ""));
+          ? gatewayTools
+          : listGrants(db, user.id).map((g) => g.toolPattern);
       let gateway: { url: string; token: string } | undefined;
-      if (gatewayUrl && userId && conns.size > 0) {
+      if (gatewayUrl && userId && gatewayTools.length > 0) {
         const token = createGatewayToken(db, {
           runId,
           userId,
           agentId: agent.id,
-          connectors: [...conns],
+          tools: gatewayTools,
           grants,
           ttlMs: 60 * 60 * 1000,
         });
         gateway = { url: gatewayUrl, token };
       }
       console.log(
-        `[engine] run start run=${runId} agent=${agent.id} session=${sessionId} connectors=${[...conns].join(",") || "-"} grants=${grants.join(",") || "-"} input=${JSON.stringify(message.slice(0, 80))}`,
+        `[engine] run start run=${runId} agent=${agent.id} session=${sessionId} gatewayTools=${gatewayTools.join(",") || "-"} grants=${grants.join(",") || "-"} input=${JSON.stringify(message.slice(0, 80))}`,
       );
 
       iterator = runtime

@@ -6,6 +6,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { z } from "zod";
 import { isAllowed } from "./access.ts";
 import {
+  ComposioNotConfiguredError,
+  ComposioNotConnectedError,
+  ComposioProviderError,
+  type ComposioService,
+  createComposioService,
+} from "./composio.ts";
+import {
   type CatalogTool,
   type McpGateway,
   McpToolError,
@@ -13,7 +20,7 @@ import {
   NotConnectedError,
 } from "./mcp.ts";
 import { clearOAuth, VaultOAuthProvider } from "./oauth.ts";
-import { allTools, connectorMeta, getMcpConnector, getTool, mcpConnectors } from "./registry.ts";
+import { allTools, connectorMeta, getTool, mcpConnectors } from "./registry.ts";
 import type { Vault } from "./vault.ts";
 
 const TIMEOUT_MS = 30_000;
@@ -21,13 +28,17 @@ const TIMEOUT_MS = 30_000;
 // one that accepts the connection but never responds would otherwise hang the whole catalog request
 // (and the agent turn waiting on it) forever. A timeout is treated like a down provider — skipped.
 const CATALOG_TIMEOUT_MS = 10_000;
+const MANAGEMENT_TOOLS_TTL_MS = 5_000;
 
 /** Race a promise against a timeout; rejects with `reason` if it doesn't settle in time. */
 function withDeadline<T>(promise: Promise<T>, ms: number, reason: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout>;
   return Promise.race([
     promise,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(reason)), ms)),
-  ]);
+    new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error(reason)), ms);
+    }),
+  ]).finally(() => clearTimeout(timeout));
 }
 // Direct-lane result cap. Enforced here (not per-harness) so every harness — current or future —
 // is protected by default: an /invoke result over this size is refused with a pointer to the
@@ -56,14 +67,20 @@ function bearer(req: Request): string | undefined {
   return match?.[1];
 }
 
-type Token = { userId: string; runId: string; connectors: string[]; grants: string[] };
+type Token = { userId: string; runId: string; tools: string[]; grants: string[] };
+
+type ManagementTool = CatalogTool & {
+  source: "custom" | "composio";
+  toolkit: string;
+  connected: boolean;
+};
 
 const USER_MISSING_GRANT_MESSAGE =
   "Stop whatever you are doing and first inform the user that they do not have access to this tool. Wait for the user to respond before continuing, and do not retry this tool unless access is granted.";
 
 /**
  * The gateway fetch handler as a factory (no port binding) so tests drive it directly.
- * Routes: POST /catalog, POST /invoke, GET /connectors, PUT /admin/credentials/:provider.
+ * Routes: POST /catalog, POST /invoke, GET /tools, GET /connectors, and admin configuration.
  */
 export function createGatewayServer(deps: {
   db: Db;
@@ -74,14 +91,61 @@ export function createGatewayServer(deps: {
   /** Web app base URL to bounce back to after an OAuth connect (so the same tab returns to the UI). */
   webUrl?: string;
   mcp?: McpGateway;
+  composio?: ComposioService;
   /** Per-connector catalog discovery timeout (ms). Overridable so tests don't wait the full default. */
   catalogTimeoutMs?: number;
+  managementToolsTtlMs?: number;
 }) {
   const { db, vault, adminToken } = deps;
   const catalogTimeoutMs = deps.catalogTimeoutMs ?? CATALOG_TIMEOUT_MS;
+  const managementToolsTtlMs = deps.managementToolsTtlMs ?? MANAGEMENT_TOOLS_TTL_MS;
   const gatewayUrl = deps.gatewayUrl ?? "http://localhost:4100";
   const webUrl = deps.webUrl ?? "http://localhost:3000";
   const mcp = deps.mcp ?? makeRealMcp({ db, vault, gatewayUrl });
+  const composio =
+    deps.composio ??
+    createComposioService({
+      getApiKey: () => {
+        const stored = getCredential(db, "composio").find((row) => row.key === "api_key");
+        return (stored ? vault.decrypt(stored.value) : undefined) || process.env.COMPOSIO_API_KEY;
+      },
+      userId: process.env.GILLY_COMPOSIO_USER_ID ?? "gilly-shared",
+    });
+  type DynamicRoute = { kind: "mcp"; connector: string } | { kind: "composio" };
+  type ToolDiscovery = { tools: ManagementTool[]; routes: Map<string, DynamicRoute> };
+  let dynamicRoutes = new Map<string, DynamicRoute>();
+  let managementToolsCache: { value: ToolDiscovery; expiresAt: number } | undefined;
+  let managementToolsInFlight: Promise<ToolDiscovery> | undefined;
+  let managementToolsGeneration = 0;
+
+  function invalidateManagementTools() {
+    managementToolsGeneration += 1;
+    managementToolsCache = undefined;
+    managementToolsInFlight = undefined;
+    dynamicRoutes = new Map();
+  }
+
+  function managementTools(): Promise<ToolDiscovery> {
+    if (managementToolsCache && managementToolsCache.expiresAt > Date.now()) {
+      return Promise.resolve(managementToolsCache.value);
+    }
+    if (managementToolsInFlight) return managementToolsInFlight;
+
+    const generation = managementToolsGeneration;
+    const pending = discoverManagementTools().then((value) => {
+      if (generation === managementToolsGeneration) {
+        dynamicRoutes = value.routes;
+        managementToolsCache = { value, expiresAt: Date.now() + managementToolsTtlMs };
+      }
+      return value;
+    });
+    managementToolsInFlight = pending;
+    const clearInFlight = () => {
+      if (managementToolsInFlight === pending) managementToolsInFlight = undefined;
+    };
+    void pending.then(clearInFlight, clearInFlight);
+    return pending;
+  }
 
   /** Resolve the bearer token, rejecting missing/expired with a 401 Response. */
   function auth(req: Request): { token: Token } | { error: Response } {
@@ -93,7 +157,7 @@ export function createGatewayServer(deps: {
       token: {
         userId: row.userId,
         runId: row.runId,
-        connectors: row.connectors,
+        tools: row.tools,
         grants: row.grants,
       },
     };
@@ -131,51 +195,83 @@ export function createGatewayServer(deps: {
     });
   }
 
+  /** Concrete custom, MCP, and Composio tools for management and runtime discovery. */
+  async function discoverManagementTools(): Promise<ToolDiscovery> {
+    const apiEntries: ManagementTool[] = allTools().map((tool) => {
+      const entry = getTool(tool.name) as NonNullable<ReturnType<typeof getTool>>;
+      const meta = connectors().find((connector) => connector.name === entry.connector.name);
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: z.toJSONSchema(tool.input),
+        source: "custom",
+        toolkit: entry.connector.name,
+        connected: !!meta?.connected,
+      };
+    });
+
+    const mcpDiscovery = Promise.all(
+      mcpConnectors().map(async (connector): Promise<ManagementTool[]> => {
+        try {
+          const creds = resolveCreds(
+            connector.name,
+            connector.auth.kind === "api_key" ? connector.auth.creds : [],
+          );
+          if (!creds) return [];
+          const listed = await withDeadline(
+            mcp.listTools(connector, creds),
+            catalogTimeoutMs,
+            `listTools timed out for ${connector.name}`,
+          );
+          return listed.map((tool) => ({
+            ...tool,
+            source: "custom",
+            toolkit: connector.name,
+            connected: true,
+          }));
+        } catch (err) {
+          if (!(err instanceof NotConnectedError))
+            console.warn(`[gateway] listTools failed for ${connector.name}:`, err);
+          return [];
+        }
+      }),
+    );
+    const composioDiscovery = composio.configured()
+      ? withDeadline(
+          composio.listTools(),
+          catalogTimeoutMs,
+          "Composio tool discovery timed out",
+        ).catch((err) => {
+          console.warn("[gateway] Composio tool discovery failed:", err);
+          return [];
+        })
+      : Promise.resolve([]);
+    const [mcpGroups, composioTools] = await Promise.all([mcpDiscovery, composioDiscovery]);
+    const mcpEntries = mcpGroups.flat();
+
+    const claimed = new Set([...apiEntries, ...mcpEntries].map((tool) => tool.name));
+    const composioEntries: ManagementTool[] = [];
+    for (const { upstreamSlug: _, ...tool } of composioTools) {
+      if (claimed.has(tool.name)) continue;
+      composioEntries.push(tool);
+    }
+
+    const routes = new Map<string, DynamicRoute>();
+    for (const tool of mcpEntries) routes.set(tool.name, { kind: "mcp", connector: tool.toolkit });
+    for (const tool of composioEntries) routes.set(tool.name, { kind: "composio" });
+    return { tools: [...apiEntries, ...mcpEntries, ...composioEntries], routes };
+  }
+
   async function catalog(req: Request): Promise<Response> {
     const a = auth(req);
     if ("error" in a) return a.error;
     const body = ((await readJson(req)) ?? {}) as { query?: string };
     const q = body.query?.toLowerCase();
-
-    // Static API tools (local zod schema → JSON schema).
-    const apiEntries = allTools().map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: z.toJSONSchema(t.input),
-    }));
-
-    // Discovered MCP tools. A connector that is unconfigured (no creds) or down (listTools throws)
-    // is skipped — the catalog must never 500 because one provider is unavailable.
-    const mcpEntries: CatalogTool[] = [];
-    for (const connector of mcpConnectors()) {
-      if (!a.token.connectors.includes(connector.name)) continue;
-      const creds = resolveCreds(
-        connector.name,
-        connector.auth.kind === "api_key" ? connector.auth.creds : [],
-      );
-      if (!creds) continue;
-      try {
-        const listed = withDeadline(
-          mcp.listTools(connector, creds),
-          catalogTimeoutMs,
-          `listTools timed out for ${connector.name}`,
-        );
-        for (const t of await listed) mcpEntries.push(t);
-      } catch (err) {
-        // not_connected is expected (unconfigured OAuth connector) — skip quietly; log real failures
-        // (including a discovery timeout, so a stalled upstream is visible in the logs).
-        if (!(err instanceof NotConnectedError))
-          console.warn(`[gateway] listTools failed for ${connector.name}:`, err);
-      }
-    }
-
-    const tools = [...apiEntries, ...mcpEntries].filter(
-      (t) =>
-        isAllowed(
-          t.name,
-          a.token.connectors.map((connector) => `${connector}.*`),
-        ) &&
-        (!q || t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)),
+    const allowed = new Set(a.token.tools);
+    const tools = (await managementTools()).tools.filter(
+      (tool) =>
+        allowed.has(tool.name) &&
+        (!q || tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q)),
     );
     return json({ tools });
   }
@@ -183,7 +279,7 @@ export function createGatewayServer(deps: {
   async function invoke(req: Request): Promise<Response> {
     const a = auth(req);
     if ("error" in a) return a.error;
-    const { userId, runId, connectors, grants } = a.token;
+    const { userId, runId, tools, grants } = a.token;
     const body = ((await readJson(req)) ?? {}) as { tool?: string; input?: unknown };
     const toolName = body.tool ?? "";
 
@@ -216,8 +312,7 @@ export function createGatewayServer(deps: {
     return json(result);
 
     async function run(): Promise<unknown> {
-      const connectorPatterns = connectors.map((connector) => `${connector}.*`);
-      if (!isAllowed(toolName, connectorPatterns)) return { error: "forbidden" };
+      if (!tools.includes(toolName)) return { error: "forbidden" };
       if (!isAllowed(toolName, grants)) {
         return {
           error: "user_missing_grant",
@@ -243,8 +338,15 @@ export function createGatewayServer(deps: {
         return withTimeout(() => tool.handler(parsed.data, ctx));
       }
 
+      await managementTools();
+      const route = dynamicRoutes.get(toolName);
+      if (!route) return { error: "forbidden" };
+      if (route.kind === "composio") {
+        return withTimeout(() => composio.execute(toolName, body.input));
+      }
+
       // MCP tool: no local schema (the upstream server validates); resolve api_key creds, dispatch.
-      const connector = getMcpConnector(toolName);
+      const connector = mcpConnectors().find((item) => item.name === route.connector);
       if (!connector) return { error: "forbidden" };
       const creds = resolveCreds(
         connector.name,
@@ -267,7 +369,10 @@ export function createGatewayServer(deps: {
       } catch (err) {
         // An OAuth connector with no/invalid tokens is not_connected, not a provider fault.
         if (err instanceof NotConnectedError) return { error: "not_connected" };
+        if (err instanceof ComposioNotConfiguredError) return { error: "not_connected" };
+        if (err instanceof ComposioNotConnectedError) return { error: "not_connected" };
         if (err instanceof McpToolError) return { error: "provider_error", details: err.details };
+        if (err instanceof ComposioProviderError) return { error: "provider_error" };
         return { error: "provider_error" };
       }
       if (result === timeout) return { error: "timeout" };
@@ -284,8 +389,49 @@ export function createGatewayServer(deps: {
         return json({ error: "key and value are required" }, 400);
       }
       setCredential(db, provider, body.key, vault.encrypt(body.value));
+      invalidateManagementTools();
       return json({ ok: true });
     })();
+  }
+
+  async function composioToolkitsRoute(req: Request): Promise<Response> {
+    if (req.headers.get("x-admin-token") !== adminToken)
+      return json({ error: "unauthorized" }, 401);
+    const { searchParams } = new URL(req.url);
+    try {
+      return json(
+        await withDeadline(
+          composio.listToolkits({
+            ...(searchParams.get("query") ? { query: searchParams.get("query") as string } : {}),
+            ...(searchParams.get("cursor") ? { cursor: searchParams.get("cursor") as string } : {}),
+          }),
+          catalogTimeoutMs,
+          "Composio toolkit discovery timed out",
+        ),
+      );
+    } catch {
+      return json({ configured: true, items: [], error: "provider_error" }, 502);
+    }
+  }
+
+  async function composioConnectRoute(req: Request, slug: string): Promise<Response> {
+    if (req.headers.get("x-admin-token") !== adminToken)
+      return json({ error: "unauthorized" }, 401);
+    if (!composio.configured()) {
+      return json({ configured: false, error: "not_configured" }, 503);
+    }
+    try {
+      const callbackUrl = `${webUrl}/connectors?connected=${encodeURIComponent(slug)}`;
+      const location = await withDeadline(
+        composio.authorize(slug, callbackUrl),
+        catalogTimeoutMs,
+        "Composio authorization timed out",
+      );
+      invalidateManagementTools();
+      return new Response(null, { status: 302, headers: { location } });
+    } catch {
+      return json({ configured: true, error: "provider_error" }, 502);
+    }
   }
 
   /** The oauth MCP connector for `provider`, or undefined if unknown / not oauth / not http. */
@@ -362,6 +508,7 @@ export function createGatewayServer(deps: {
       return htmlPage(`Authorization failed: ${(e as Error).message}`, 400);
     }
     clearOAuth(db, provider); // tokens + client info remain; verifier/state/discovery are done.
+    invalidateManagementTools();
     // Bounce back to the web app's Connectors page in the same tab (the Connect button navigated here).
     const back = `${webUrl}/connectors?connected=${encodeURIComponent(provider)}`;
     return new Response(null, { status: 302, headers: { Location: back } });
@@ -373,7 +520,17 @@ export function createGatewayServer(deps: {
 
     if (method === "POST" && pathname === "/catalog") return catalog(req);
     if (method === "POST" && pathname === "/invoke") return invoke(req);
+    if (method === "GET" && pathname === "/tools")
+      return managementTools().then(({ tools }) => json({ tools }));
     if (method === "GET" && pathname === "/connectors") return json({ connectors: connectors() });
+    if (method === "GET" && pathname === "/admin/composio/toolkits") {
+      return composioToolkitsRoute(req);
+    }
+
+    const composioConnect = /^\/admin\/composio\/toolkits\/([^/]+)\/connect$/.exec(pathname);
+    if (method === "GET" && composioConnect) {
+      return composioConnectRoute(req, decodeURIComponent(composioConnect[1] as string));
+    }
 
     const oauthMatch = /^\/oauth\/([^/]+)\/(start|callback)$/.exec(pathname);
     if (method === "GET" && oauthMatch) {

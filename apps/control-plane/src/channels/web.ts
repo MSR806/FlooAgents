@@ -69,7 +69,7 @@ type WebDeps = {
   db: Db;
   skillStore: SkillStore;
   port: number;
-  /** Tooling gateway base URL; proxied by GET /api/connectors so the UI can list connectors. */
+  /** Tooling gateway base URL; proxied for management tool and connector APIs. */
   gatewayUrl?: string;
   /** Gateway admin token; injected server-side so the browser never handles it. */
   adminToken?: string;
@@ -196,7 +196,7 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       return json({ ok: true });
     }
 
-    // Proxy the gateway's connector catalog so the UI can populate an agent's connectors list.
+    // Proxy custom connector setup metadata for the Tools page.
     if (method === "GET" && pathname === "/api/connectors") {
       if (!gatewayUrl) return json({ connectors: [] });
       try {
@@ -206,6 +206,32 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
         return json({ connectors: [] });
       }
     }
+
+    if (method === "GET" && pathname === "/api/tools") {
+      if (!gatewayUrl) return json({ tools: [] });
+      try {
+        const res = await globalThis.fetch(`${gatewayUrl}/tools`);
+        return json(await res.json(), res.status);
+      } catch {
+        return json({ tools: [] });
+      }
+    }
+
+    if (method === "GET" && pathname === "/api/composio/toolkits") {
+      if (!gatewayUrl || !adminToken) return json({ configured: false, items: [] });
+      try {
+        const query = new URL(req.url).search;
+        const res = await globalThis.fetch(`${gatewayUrl}/admin/composio/toolkits${query}`, {
+          headers: { "x-admin-token": adminToken },
+        });
+        return json(await res.json(), res.status);
+      } catch (e) {
+        return errorResponse(e);
+      }
+    }
+
+    const composioToolkit = pathParam(pathname, "/api/composio/toolkits/", "/connect");
+    if (method === "GET" && composioToolkit) return startComposioConnect(composioToolkit);
 
     // Admin connector auth. The browser calls these WITHOUT any secret; we inject x-admin-token
     // when calling the gateway so the token never reaches the client.
@@ -350,6 +376,23 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
           : `/connectors?connected=${encodeURIComponent(provider)}`;
       if (!location) return json({ error: "gateway returned no redirect" }, 502);
       return new Response(null, { status: 302, headers: { location, ...cors } });
+    } catch (e) {
+      return errorResponse(e);
+    }
+  }
+
+  async function startComposioConnect(slug: string): Promise<Response> {
+    if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
+    try {
+      const res = await globalThis.fetch(
+        `${gatewayUrl}/admin/composio/toolkits/${encodeURIComponent(slug)}/connect`,
+        { redirect: "manual", headers: { "x-admin-token": adminToken } },
+      );
+      const location = res.headers.get("location");
+      if (res.status === 302 && location) {
+        return new Response(null, { status: 302, headers: { location, ...cors } });
+      }
+      return json(await res.json(), res.status);
     } catch (e) {
       return errorResponse(e);
     }

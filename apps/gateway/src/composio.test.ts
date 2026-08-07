@@ -1,0 +1,153 @@
+import { expect, test } from "bun:test";
+import {
+  ComposioNotConnectedError,
+  ComposioProviderError,
+  canonicalComposioToolName,
+  createComposioService,
+} from "./composio.ts";
+
+function fakeClient(log: string[], options: { redirectUrl?: string | URL } = {}) {
+  const redirectUrl =
+    "redirectUrl" in options ? options.redirectUrl : new URL("https://connect.composio.dev/link/1");
+  const tools = [
+    {
+      slug: "GMAIL_SEND_EMAIL",
+      name: "Send email",
+      description: "Send an email",
+      inputParameters: { type: "object", properties: {} },
+      toolkit: { slug: "gmail" },
+    },
+    { slug: "HACKERNEWS_GET_USER", name: "Get user", toolkit: { slug: "hackernews" } },
+    { slug: "COMPOSIO_EXECUTE_TOOL", name: "Execute tool", toolkit: { slug: "composio" } },
+    {
+      slug: "COMPOSIO_SEARCH_EXA",
+      name: "Search Exa",
+      toolkit: { slug: "composio_search" },
+    },
+    { slug: "GMAIL_FAIL", name: "Fail", toolkit: { slug: "gmail" } },
+  ];
+  return {
+    sessions: {
+      async create(userId: string) {
+        log.push(`create:${userId}`);
+        return {
+          async toolkits(options?: { search?: string }) {
+            log.push(`toolkits:${options?.search ?? ""}`);
+            return {
+              items: [
+                { slug: "gmail", name: "Gmail", isNoAuth: false, connection: { isActive: true } },
+                { slug: "hackernews", name: "Hacker News", isNoAuth: true },
+                { slug: "composio", name: "Composio", isNoAuth: true },
+                { slug: "composio_search", name: "Composio Search", isNoAuth: true },
+                { slug: "slack", name: "Slack", isNoAuth: false },
+              ],
+            };
+          },
+          async authorize(slug: string, options: { callbackUrl: string }) {
+            log.push(`authorize:${slug}:${options.callbackUrl}`);
+            return { redirectUrl };
+          },
+          async execute(slug: string) {
+            log.push(`execute:${slug}`);
+            return slug === "GMAIL_FAIL"
+              ? { error: "No connected account" }
+              : { data: { ok: true } };
+          },
+        };
+      },
+    },
+    toolkits: {
+      async get(slug: string) {
+        return {
+          slug,
+          name: slug === "gmail" ? "Gmail" : slug,
+          noAuth: slug === "hackernews",
+          meta: { description: `${slug} tools`, logo: `${slug}.png`, toolsCount: 2 },
+        };
+      },
+    },
+    tools: {
+      async getRawComposioTools(query: { toolkits: string[]; limit: number }) {
+        const toolkit = query.toolkits[0] as string;
+        log.push(`raw:${toolkit}:${query.limit}`);
+        return tools.filter((tool) => tool.toolkit.slug === toolkit);
+      },
+    },
+  };
+}
+
+test("canonical names remove the toolkit prefix", () => {
+  expect(canonicalComposioToolName("gmail", "GMAIL_SEND_EMAIL")).toBe("gmail.send_email");
+});
+
+test("service lists connected/no-auth tools and recreates the session when the key changes", async () => {
+  const log: string[] = [];
+  let key = "key-1";
+  const service = createComposioService({
+    getApiKey: () => key,
+    userId: "gilly-shared",
+    createClient: () => fakeClient(log),
+  });
+
+  expect((await service.listTools()).map((tool) => tool.name)).toEqual([
+    "gmail.send_email",
+    "gmail.fail",
+    "hackernews.get_user",
+  ]);
+  expect(log.filter((entry) => entry.startsWith("raw:"))).toEqual([
+    "raw:gmail:1000",
+    "raw:hackernews:1000",
+  ]);
+  const page = await service.listToolkits({ query: "mail" });
+  expect(page.configured).toBe(true);
+  expect(page.items[0]).toEqual({
+    slug: "gmail",
+    name: "Gmail",
+    description: "gmail tools",
+    logo: "gmail.png",
+    toolsCount: 2,
+    connected: true,
+    noAuth: false,
+  });
+  expect(page.items.some((item) => item.slug.startsWith("composio"))).toBe(false);
+  expect(await service.authorize("gmail", "https://gilly.example/callback")).toBe(
+    "https://connect.composio.dev/link/1",
+  );
+  expect(await service.execute("gmail.send_email", {})).toEqual({ ok: true });
+  key = "key-2";
+  await service.listTools();
+  expect(log.filter((entry) => entry === "create:gilly-shared")).toHaveLength(2);
+});
+
+test("service reports missing connections distinctly", async () => {
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () => fakeClient([]),
+  });
+  await expect(service.execute("gmail.fail", {})).rejects.toBeInstanceOf(ComposioNotConnectedError);
+});
+
+test("unconfigured service returns structured toolkit status without creating a client", async () => {
+  const service = createComposioService({
+    getApiKey: () => undefined,
+    userId: "gilly-shared",
+    createClient: () => {
+      throw new Error("must not create");
+    },
+  });
+  expect(await service.listToolkits({})).toEqual({ configured: false, items: [] });
+});
+
+test("authorize requires an absolute HTTPS redirect URL", async () => {
+  for (const redirectUrl of [undefined, "/relative", "http://connect.composio.dev/link/1"]) {
+    const service = createComposioService({
+      getApiKey: () => "key",
+      userId: "gilly-shared",
+      createClient: () => fakeClient([], { redirectUrl }),
+    });
+    await expect(
+      service.authorize("gmail", "https://gilly.example/callback"),
+    ).rejects.toBeInstanceOf(ComposioProviderError);
+  }
+});
