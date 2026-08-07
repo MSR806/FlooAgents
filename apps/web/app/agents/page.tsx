@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
-type Agent = { id: string; name: string; model: string };
+type Agent = { id: string; name: string; harness: { id: string; config: { model: string } } };
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[] | null>(null);
@@ -69,7 +69,9 @@ export default function AgentsPage() {
                 <p className="truncate text-sm text-muted-foreground">
                   <code className="font-mono text-xs">{agent.id}</code>
                   <span className="mx-2">·</span>
-                  <code className="font-mono text-xs">{agent.model}</code>
+                  <code className="font-mono text-xs">
+                    {agent.harness.id} · {agent.harness.config.model}
+                  </code>
                 </p>
               </Link>
               <div className="flex shrink-0 gap-2">

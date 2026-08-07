@@ -39,20 +39,21 @@ without rebuilding infrastructure each time.
 **Active development.** APIs, package boundaries, and docs may change while the
 MVP is being built.
 
-Agents are triggered from Slack or web and routed by their selected model to the
-Claude or OpenAI Codex harness. Agent runs and provider session references are
-persisted in SQLite so follow-ups resume the correct provider session.
+Agents are triggered from Slack or web and routed by their explicit `harness.id` to the Claude or
+Codex loop. The data-backed harness registry owns enabled state and offered models. Agent runs and
+harness-owned session references are persisted in SQLite so follow-ups resume only on the matching
+harness.
 
 ## What Gilly Provides
 
 | Area | Today |
 | --- | --- |
-| Agent config | JSON agent definitions loaded from `config/agents/` |
+| Agent config | DB-backed definitions with `config/agents/` bootstraps |
 | Channels | Slack Socket Mode plus a web channel surface in progress |
 | Control plane | Session/run engine, follow-up queue, channel translation |
 | Harness | Claude Agent SDK and OpenAI Codex SDK behind one stable HTTP contract |
 | Runtime | Local HTTP runtime provider with an AgentCore-compatible contract |
-| Storage | SQLite operational state via Drizzle |
+| Storage | SQLite agents, harness registry, and operational state via Drizzle |
 | Web | Next.js UI for managing agents, skills, connectors, users, and chats |
 
 ## Architecture
@@ -65,7 +66,7 @@ apps/control-plane
    |  resolves agent config, sessions, runs
    v
 packages/runtime
-   |  adds harnessType and calls one URL
+   |  posts the explicit agent config to one HARNESS_URL
    v
 apps/harness
    +--> harness-claude --> Claude Agent SDK
@@ -77,7 +78,7 @@ Key boundaries:
 - `packages/core` - shared domain model and Zod schemas.
 - `packages/harness-protocol` - control-plane to harness request/response contract.
 - `packages/runtime` - runtime provider seam; local now, cloud provider later.
-- `packages/db` - operational records for sessions, runs, and follow-up queues.
+- `packages/db` - agents, harness registry, sessions, runs, and follow-up queues.
 - `apps/gateway` and `packages/gateway-*` - connector gateway pieces.
 
 ## Vision

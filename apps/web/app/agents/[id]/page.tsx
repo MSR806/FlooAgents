@@ -48,7 +48,9 @@ export default function AgentDetailPage() {
               <p className="text-sm text-muted-foreground">
                 <code className="font-mono text-xs">{agent.id}</code>
                 <span className="mx-2">·</span>
-                <code className="font-mono text-xs">{agent.model}</code>
+                <code className="font-mono text-xs">
+                  {agent.harness.id} · {agent.harness.config.model}
+                </code>
               </p>
             </div>
             {!editing ? (

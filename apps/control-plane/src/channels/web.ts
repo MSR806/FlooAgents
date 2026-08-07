@@ -1,6 +1,6 @@
 import {
   AgentConfig,
-  MODEL_CATALOG,
+  HarnessDefinition,
   type SkillFile,
   type SlackConnection,
   SlackConnectionInput,
@@ -15,17 +15,20 @@ import {
   deleteGrant,
   deleteSlackConnection,
   getAgent,
+  getHarness,
   getRun,
   getSessionBySourceKey,
   getSlackConnection,
   listAgents,
   listGrants,
+  listHarnesses,
   listRunSteps,
   listRuns,
   listSessions,
   listSlackConnections,
   listUsers,
   updateAgent,
+  updateHarness,
   updateSlackConnection,
 } from "@gilly/db";
 import type { StreamEvent } from "@gilly/runtime";
@@ -120,12 +123,16 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     const { method } = req;
     if (method === "OPTIONS") return new Response(null, { headers: cors });
 
+    // --- Harnesses ---
+    if (method === "GET" && pathname === "/api/harnesses") return json(listHarnesses(db));
+    const harnessId = pathParam(pathname, "/api/harnesses/");
+    if (harnessId && method === "PUT") return updateHarnessRoute(req, harnessId);
+
     // --- Agents ---
-    if (method === "GET" && pathname === "/api/models") return json(MODEL_CATALOG);
 
     if (pathname === "/api/agents") {
       if (method === "GET") {
-        return json(listAgents(db).map(({ id, name, model }) => ({ id, name, model })));
+        return json(listAgents(db).map(({ id, name, harness }) => ({ id, name, harness })));
       }
       if (method === "POST") return createAgentRoute(req);
     }
@@ -380,6 +387,19 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       return json(createAgent(db, cfg.data), 201);
     } catch (e) {
       return errorResponse(e);
+    }
+  }
+
+  async function updateHarnessRoute(req: Request, id: string): Promise<Response> {
+    if (!getHarness(db, id)) return json({ error: `Harness "${id}" not found` }, 404);
+    const parsed = await readJson(req);
+    if ("error" in parsed) return parsed.error;
+    const harness = HarnessDefinition.safeParse({ ...(parsed.body as object), id });
+    if (!harness.success) return json({ error: harness.error.message }, 400);
+    try {
+      return json(updateHarness(db, id, harness.data));
+    } catch (error) {
+      return errorResponse(error);
     }
   }
 

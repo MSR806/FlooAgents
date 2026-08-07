@@ -8,11 +8,21 @@ export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   model: text("model").notNull(),
+  harnessId: text("harness_id").notNull(),
+  serviceTier: text("service_tier"),
   systemPrompt: text("system_prompt").notNull(),
   tools: text("tools"),
   skills: text("skills"),
   connectors: text("connectors"),
   createdAt: integer("created_at").notNull(),
+});
+
+/** Operator-editable harness registry. `models` is validated JSON `HarnessModel[]`. */
+export const harnesses = sqliteTable("harnesses", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  enabled: integer("enabled").notNull(),
+  models: text("models").notNull(),
 });
 
 /** Durable conversation/work context. One Slack thread maps to one row. */
@@ -23,6 +33,7 @@ export const sessions = sqliteTable("sessions", {
   /** Surface-native conversation key, e.g. "<channel>:<thread_ts>". */
   sourceKey: text("source_key").notNull().unique(),
   harnessSessionId: text("harness_session_id"),
+  harnessId: text("harness_id"),
   createdAt: integer("created_at").notNull(),
 });
 

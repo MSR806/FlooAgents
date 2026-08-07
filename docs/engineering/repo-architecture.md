@@ -14,10 +14,10 @@ project-gilly/
 │   ├── gateway/            # Authenticated connector and control-plane tool gateway
 │   └── web/                # Next.js management UI and web chat
 ├── packages/
-│   ├── core/               # domain model + Zod schemas: Agent, Connection, Session, Run, Workspace
+│   ├── core/               # domain model + Zod schemas: Agent, Harness, Session, Run, Workspace
 │   ├── harness-protocol/   # the control-plane ⇄ harness contract (invocation request / result)
 │   ├── runtime/            # RuntimeProvider + LocalRuntimeProvider (AgentCore provider planned)
-│   └── db/                 # Drizzle schema + SQLite client for operational state
+│   └── db/                 # Drizzle schema + SQLite client for registries and operational state
 ├── config/agents/          # *.json agent definitions, loaded at boot
 ├── docker/                 # Dockerfile.control-plane, Dockerfile.harness, compose.yaml
 └── docs/
@@ -28,7 +28,8 @@ project-gilly/
 - `runtime/` is the **control plane → runtime** seam — swap `LocalRuntimeProvider` for `AgentCoreRuntimeProvider` and nothing above changes.
 - `harness-protocol/` is the **control plane → harness** seam — the payload any harness receives (agent config, user message, resume id, workspace ref) and returns (final text, harness session id, status).
 
-`core/` is the shared domain model. `db/` holds only operational records (Sessions, Runs, follow-up queue) — never agent config, which lives in JSON.
+`core/` is the shared domain model. `db/` holds structured agent and harness registry records plus
+operational Sessions, Runs, and follow-ups. `config/agents/*.json` bootstrap selected agents at boot.
 
 A third seam lives inside the control plane: the **`Channel` interface** (`apps/control-plane/src/channels/channel.ts`) is the named inbound surface. Slack conforms to it today; Web/Telegram are future implementations, each translating its native event into the engine's input — interface + composition, no inheritance.
 
@@ -61,7 +62,7 @@ subprocesses behind the same HTTP contract.
   check.
 - **`Dockerfile.gateway`** - connector and control-plane tool gateway on `:4100`.
 - **`Dockerfile.web`** - Next.js management UI on `:3000`.
-- **`compose.yaml`** - wires one harness URL to `RoutingRuntimeProvider`, with persistent shared
+- **`compose.yaml`** - wires one harness URL to `LocalRuntimeProvider`, with persistent shared
   workspaces and separate Codex session state.
 
 ---
@@ -78,11 +79,10 @@ subprocesses behind the same HTTP contract.
 
 ```text
 Slack thread message
-  → control plane: resolve agent (JSON) + Session (SQLite)
+  → control plane: resolve agent + harness registry selection + Session (SQLite)
   → RuntimeProvider.invoke({ agentConfig, userMessage, resumeSessionId, workspaceRef })
-  → RoutingRuntimeProvider adds harnessType from the model catalog
-  → LocalRuntimeProvider POSTs the shared harness /invocations
-  → harness selects its Claude or OpenAI loop → { finalText, harnessSessionId, status }
+  → LocalRuntimeProvider POSTs the explicit request to the universal harness /invocations
+  → harness selects its Claude or Codex loop from agent.harness.id
   → control plane records Run, posts reply to the thread
 ```
 
@@ -93,8 +93,8 @@ Slack thread message
 | Decision | Why |
 | --- | --- |
 | **Bun** over pnpm+Vitest+tsx | One tool; fast; native TS; built-in test. Runs both harness SDKs directly. |
-| **JSON agent config**, no API | MVP needs no authoring surface; agents are files loaded at boot. |
-| **SQLite** for operational state | Sessions/Runs must survive restarts (to resume threads) without an extra container. Same Drizzle schema swaps to Postgres later. |
+| **SQLite registries** | Agent and harness definitions are runtime-editable; bootstrap files and built-ins use idempotent upserts/inserts. |
+| **SQLite** for operational state | Sessions/Runs must survive restarts without an extra container. Same Drizzle schema swaps to Postgres later. |
 | **Slack Socket Mode** | No public URL/tunnel for local dev. |
 | **AgentCore contract from day one** | Same harness image runs locally and (later) in AgentCore; runtime swap is a provider change, not a rewrite. |
 | **`runtime/` + `harness-protocol/` as packages** | Makes the design's "replaceable layers" real, enforced boundaries. |

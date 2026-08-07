@@ -70,7 +70,7 @@ const post = (
 type Agent = {
   id: string;
   name: string;
-  model: string;
+  harness: { id: string; config: { model: string; serviceTier?: string } };
   systemPrompt: string;
   tools?: string[];
   skills?: string[];
@@ -106,7 +106,15 @@ async function withControlPlane<T>(
   const oldUrl = process.env.GILLY_CONTROL_PLANE_URL;
   const state = {
     agents: new Map<string, Agent>([
-      ["coder", { id: "coder", name: "Coder", model: "sonnet", systemPrompt: "code" }],
+      [
+        "coder",
+        {
+          id: "coder",
+          name: "Coder",
+          harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+          systemPrompt: "code",
+        },
+      ],
     ]),
     skills: new Map<string, Skill>([
       ["tooling", { name: "tooling", description: "Use gateway tools.", content: "# Tools" }],
@@ -140,8 +148,20 @@ async function withControlPlane<T>(
     }
 
     const agentId = url.pathname.match(/^\/api\/agents\/([^/]+)$/)?.[1];
+    if (url.pathname === "/api/harnesses" && method === "GET") {
+      return json([
+        {
+          id: "claude",
+          name: "Claude",
+          enabled: true,
+          models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
+        },
+      ]);
+    }
     if (url.pathname === "/api/agents" && method === "GET") {
-      return json([...state.agents.values()].map(({ id, name, model }) => ({ id, name, model })));
+      return json(
+        [...state.agents.values()].map(({ id, name, harness }) => ({ id, name, harness })),
+      );
     }
     if (url.pathname === "/api/agents" && method === "POST") {
       state.agents.set(body.id, body);
@@ -203,6 +223,7 @@ test("catalog includes connected gilly tools", async () => {
   const res = await post(fetch, "/catalog", auth(token), {});
   const { tools } = (await res.json()) as { tools: { name: string }[] };
   expect(tools.map((t) => t.name)).toContain("gilly.create_agent");
+  expect(tools.map((t) => t.name)).toContain("gilly.list_harnesses");
   expect(tools.map((t) => t.name)).toContain("gilly.start_agent");
   expect(tools.map((t) => t.name)).toContain("gilly.get_run");
   expect(tools.map((t) => t.name)).not.toContain("gilly.invoke_agent");
@@ -212,12 +233,24 @@ test("catalog includes connected gilly tools", async () => {
 test("gilly.update_agent patches through the control-plane API", async () => {
   await withControlPlane(async ({ agents }) => {
     const { fetch, token } = setup(["gilly.*"]);
+    const harnesses = await post(fetch, "/invoke", auth(token), {
+      tool: "gilly.list_harnesses",
+      input: {},
+    });
+    expect(await harnesses.json()).toEqual([
+      {
+        id: "claude",
+        name: "Claude",
+        enabled: true,
+        models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
+      },
+    ]);
     const create = await post(fetch, "/invoke", auth(token), {
       tool: "gilly.create_agent",
       input: {
         id: "helper",
         name: "Helper",
-        model: "sonnet",
+        harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
         systemPrompt: "Help.",
         connectors: ["gilly"],
       },
@@ -225,7 +258,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
     expect(await create.json()).toEqual({
       id: "helper",
       name: "Helper",
-      model: "sonnet",
+      harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "Help.",
       connectors: ["gilly"],
     });
@@ -238,7 +271,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
     expect(await res.json()).toEqual({
       id: "coder",
       name: "Coder 2",
-      model: "sonnet",
+      harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "code",
       connectors: ["gilly"],
     });

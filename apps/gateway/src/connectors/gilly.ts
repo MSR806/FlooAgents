@@ -31,8 +31,14 @@ export const gilly = defineConnector({
   auth: { kind: "none" },
   tools: [
     defineTool({
+      name: "gilly.list_harnesses",
+      description: "List Gilly harnesses, including enabled state and offered models.",
+      input: z.object({}),
+      handler: async () => cp("/api/harnesses"),
+    }),
+    defineTool({
       name: "gilly.list_agents",
-      description: "List Gilly agents with id, name, and model.",
+      description: "List Gilly agents with id, name, and nested harness selection.",
       input: z.object({}),
       handler: async () => cp("/api/agents"),
     }),
@@ -45,14 +51,14 @@ export const gilly = defineConnector({
     defineTool({
       name: "gilly.create_agent",
       description:
-        "Create a Gilly agent. Input is AgentConfig: id, name, model, systemPrompt, optional tools, skills, connectors.",
+        "Create a Gilly agent. Select an enabled harness and one of its models with harness: { id, config: { model, optional serviceTier } }.",
       input: AgentConfig,
       handler: async (agent) => cp("/api/agents", { method: "POST", body: JSON.stringify(agent) }),
     }),
     defineTool({
       name: "gilly.update_agent",
       description:
-        "Patch a Gilly agent by id. Provide only fields to change: name, model, systemPrompt, tools, skills, connectors.",
+        "Patch a Gilly agent by id. Harness changes use the full nested harness field; other fields are name, systemPrompt, tools, skills, connectors.",
       input: z.object({ id: z.string().min(1), patch: agentPatch }),
       handler: async ({ id, patch }) => {
         const current = await cp(`/api/agents/${encodeURIComponent(id)}`);

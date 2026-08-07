@@ -8,9 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -18,10 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import MultiSelect, { type Group } from "../components/MultiSelect";
 import {
   type AgentValues,
-  type ModelInfo,
-  modelOptionGroups,
+  type HarnessDefinition,
+  harnessSelection,
   parseAgentValues,
-  parseModelCatalog,
+  parseHarnessRegistry,
 } from "./agent-form-helpers";
 
 export type { AgentValues } from "./agent-form-helpers";
@@ -46,7 +44,12 @@ const TOOL_GROUPS: Group[] = [
 
 type ConnectorInfo = { name: string; auth: string; connected: boolean };
 
-const EMPTY: AgentValues = { id: "", name: "", model: "claude-sonnet-4-5", systemPrompt: "" };
+const EMPTY: AgentValues = {
+  id: "",
+  name: "",
+  harness: { id: "", config: { model: "" } },
+  systemPrompt: "",
+};
 
 /** Derive a URL-safe handle from the agent's name (lowercase, hyphenated). */
 const slugify = (s: string) =>
@@ -71,26 +74,26 @@ export default function AgentForm({
 }) {
   const router = useRouter();
   const [values, setValues] = useState<AgentValues>(initial ?? EMPTY);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [harnesses, setHarnesses] = useState<HarnessDefinition[]>([]);
+  const [harnessStatus, setHarnessStatus] = useState<"loading" | "ready" | "error">("loading");
   const [allSkills, setAllSkills] = useState<{ name: string; description: string }[]>([]);
   const [allConnectors, setAllConnectors] = useState<ConnectorInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`${API_BASE}/models`)
+    fetch(`${API_BASE}/harnesses`)
       .then((r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
       })
-      .then((catalog) => {
-        setModels(parseModelCatalog(catalog));
-        setModelStatus("ready");
+      .then((registry) => {
+        setHarnesses(parseHarnessRegistry(registry));
+        setHarnessStatus("ready");
       })
       .catch(() => {
-        setModels([]);
-        setModelStatus("error");
+        setHarnesses([]);
+        setHarnessStatus("error");
       });
     fetch(`${API_BASE}/skills`)
       .then((r) => r.json() as Promise<{ name: string; description: string }[]>)
@@ -142,10 +145,11 @@ export default function AgentForm({
     }
   }
 
-  const modelOptions = modelOptionGroups(models, values.model);
-  const selectedModelLabel = modelOptions.groups
-    .flatMap((group) => group.options)
-    .find((option) => option.value === values.model)?.label;
+  const selection = harnessSelection(harnesses, values.harness);
+  const selectedHarnessName = selection.selected?.name ?? values.harness.id;
+  const selectedModelName = selection.selected?.models.find(
+    (model) => model.id === values.harness.config.model,
+  )?.name;
 
   return (
     <form className="flex max-w-2xl flex-col gap-5" onSubmit={submit}>
@@ -170,34 +174,60 @@ export default function AgentForm({
       </div>
 
       <div className="grid gap-2">
-        <Label htmlFor="agent-model">Model</Label>
-        <Select value={values.model} onValueChange={(model) => model && set("model", model)}>
-          <SelectTrigger id="agent-model" className="w-full">
-            <SelectValue>{selectedModelLabel ?? values.model}</SelectValue>
+        <Label htmlFor="agent-harness">Harness</Label>
+        <Select
+          value={values.harness.id}
+          onValueChange={(id) => id && set("harness", { id, config: { model: "" } })}
+        >
+          <SelectTrigger id="agent-harness" className="w-full">
+            <SelectValue placeholder="Select a harness">
+              {selectedHarnessName || undefined}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {modelOptions.groups.map((group) => (
-              <SelectGroup key={group.label}>
-                <SelectLabel>{group.label}</SelectLabel>
-                {group.options.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
+            {selection.enabled.map((harness) => (
+              <SelectItem key={harness.id} value={harness.id}>
+                {harness.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {modelStatus === "loading" ? (
-          <p className="text-xs text-muted-foreground">Loading available models…</p>
-        ) : modelStatus === "error" ? (
-          <p className="text-xs text-muted-foreground">
-            Model catalog unavailable. The current selection is preserved and the agent can still be
-            saved.
+        {harnessStatus === "loading" ? (
+          <p className="text-xs text-muted-foreground">Loading available harnesses…</p>
+        ) : harnessStatus === "error" ? (
+          <p className="text-xs text-destructive">Harness registry unavailable.</p>
+        ) : values.harness.id && !selection.selected ? (
+          <p className="text-xs text-destructive">
+            This harness is unavailable or disabled. Select a replacement before saving.
           </p>
-        ) : !modelOptions.currentIsCatalogued ? (
-          <p className="text-xs text-muted-foreground">
-            This agent uses a model outside the current catalog. Keep it or select a replacement.
+        ) : null}
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="agent-model">Model</Label>
+        <Select
+          value={values.harness.config.model}
+          disabled={!selection.selected}
+          onValueChange={(model) =>
+            model && set("harness", { id: values.harness.id, config: { model } })
+          }
+        >
+          <SelectTrigger id="agent-model" className="w-full">
+            <SelectValue placeholder="Select a model">
+              {(selectedModelName ?? values.harness.config.model) || undefined}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {selection.selected?.models.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                {model.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {selection.selected && values.harness.config.model && !selection.modelValid ? (
+          <p className="text-xs text-destructive">
+            This model is not offered by the selected harness. Select a replacement before saving.
           </p>
         ) : null}
       </div>
@@ -277,7 +307,7 @@ export default function AgentForm({
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={saving || !selection.valid}>
           {saving ? "Saving…" : mode === "create" ? "Create & chat" : "Save"}
         </Button>
         <Button

@@ -2,11 +2,16 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAgent, createDb, getAgent, listAgents } from "@gilly/db";
+import { createAgent, createDb, getAgent, getHarness, listAgents, updateHarness } from "@gilly/db";
 import { loadAgents, loadSkills, syncAgents } from "./config.ts";
 
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
-const agent = { id: "echo", name: "Echo", model: "claude-sonnet-4-5", systemPrompt: "Be terse." };
+const agent = {
+  id: "echo",
+  name: "Echo",
+  harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+  systemPrompt: "Be terse.",
+};
 
 test("loadAgents reads and keys configs by id", () => {
   const dir = tmp("gilly-agents-");
@@ -19,6 +24,29 @@ test("loadAgents throws on invalid config", () => {
   const dir = tmp("gilly-agents-");
   writeFileSync(join(dir, "bad.json"), JSON.stringify({ id: "x" }));
   expect(() => loadAgents(dir)).toThrow();
+});
+
+test("legacy flat model configs normalize in memory and custom models remain loadable", () => {
+  const dir = tmp("gilly-agents-");
+  writeFileSync(
+    join(dir, "legacy.json"),
+    JSON.stringify({ id: "legacy", name: "Legacy", model: "private-model", systemPrompt: "x" }),
+  );
+  expect(loadAgents(dir).get("legacy")?.harness).toEqual({
+    id: "claude",
+    config: { model: "private-model" },
+  });
+  const db = createDb(":memory:");
+  syncAgents(db, dir);
+  expect(getAgent(db, "legacy")?.harness.config.model).toBe("private-model");
+
+  const claude = getHarness(db, "claude");
+  updateHarness(db, "claude", {
+    ...(claude as NonNullable<typeof claude>),
+    models: claude?.models.filter(({ id }) => id !== "private-model") ?? [],
+  });
+  syncAgents(db, dir);
+  expect(getHarness(db, "claude")?.models.some(({ id }) => id === "private-model")).toBe(false);
 });
 
 test("loadSkills bundles a folder's files; requires SKILL.md", () => {
@@ -71,4 +99,16 @@ test("syncAgents leaves DB-only agents (no config file) untouched", () => {
       .map((a) => a.id)
       .sort(),
   ).toEqual(["echo", "ui-made"]);
+});
+
+test("syncAgents keeps booting after a file-backed harness becomes unavailable", () => {
+  const dir = tmp("gilly-agents-");
+  writeFileSync(join(dir, "echo.json"), JSON.stringify(agent));
+  const db = createDb(":memory:");
+  syncAgents(db, dir);
+
+  const claude = getHarness(db, "claude");
+  updateHarness(db, "claude", { ...(claude as NonNullable<typeof claude>), enabled: false });
+  expect(() => syncAgents(db, dir)).not.toThrow();
+  expect(getAgent(db, "echo")).toEqual(agent);
 });
