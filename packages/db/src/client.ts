@@ -59,7 +59,7 @@ function migrate(sqlite: Database) {
     );
   `);
   addColumn(sqlite, "follow_ups", "ref", "TEXT");
-  // Additive agent tool policy. Legacy connectors are intentionally not projected into it.
+  // Additive agent tool policy.
   addColumn(sqlite, "agents", "gateway_tools", "TEXT");
   // Retain the legacy column so old databases remain readable by SQLite/Drizzle.
   addColumn(sqlite, "agents", "connectors", "TEXT");

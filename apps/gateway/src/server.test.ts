@@ -554,6 +554,20 @@ test("GET /tools unifies custom, connected MCP, and Composio metadata", async ()
   );
 });
 
+test("a failing Composio configuration check does not hide custom tools", async () => {
+  const composio = fakeComposio();
+  composio.configured = () => {
+    throw new Error("decrypt failed");
+  };
+  const { fetch } = setup([], { composio });
+
+  const response = await fetch(new Request("http://x/tools"));
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { tools: { name: string }[] };
+  expect(body.tools.some((tool) => tool.name === "echo.ping")).toBe(true);
+  expect(body.tools.some((tool) => tool.name === "gmail.send_email")).toBe(false);
+});
+
 test("management discovery shares in-flight work, caches briefly, and invalidates on credentials", async () => {
   let githubLists = 0;
   const mcp = fakeMcp();

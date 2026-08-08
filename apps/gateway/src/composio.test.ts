@@ -139,6 +139,21 @@ test("unconfigured service returns structured toolkit status without creating a 
   expect(await service.listToolkits({})).toEqual({ configured: false, items: [] });
 });
 
+test("malformed stored credentials are recoverable as unconfigured", async () => {
+  const service = createComposioService({
+    getApiKey: () => {
+      throw new Error("decrypt failed");
+    },
+    userId: "gilly-shared",
+    createClient: () => {
+      throw new Error("must not create");
+    },
+  });
+
+  expect(service.configured()).toBe(false);
+  expect(await service.listToolkits({})).toEqual({ configured: false, items: [] });
+});
+
 test("authorize requires an absolute HTTPS redirect URL", async () => {
   for (const redirectUrl of [undefined, "/relative", "http://connect.composio.dev/link/1"]) {
     const service = createComposioService({

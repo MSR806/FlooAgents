@@ -236,16 +236,21 @@ export function createGatewayServer(deps: {
         }
       }),
     );
-    const composioDiscovery = composio.configured()
-      ? withDeadline(
-          composio.listTools(),
-          catalogTimeoutMs,
-          "Composio tool discovery timed out",
-        ).catch((err) => {
-          console.warn("[gateway] Composio tool discovery failed:", err);
-          return [];
-        })
-      : Promise.resolve([]);
+    const composioDiscovery = Promise.resolve()
+      .then(() => composio.configured())
+      .then((configured) =>
+        configured
+          ? withDeadline(
+              composio.listTools(),
+              catalogTimeoutMs,
+              "Composio tool discovery timed out",
+            )
+          : [],
+      )
+      .catch((err) => {
+        console.warn("[gateway] Composio tool discovery failed:", err);
+        return [];
+      });
     const [mcpGroups, composioTools] = await Promise.all([mcpDiscovery, composioDiscovery]);
     const mcpEntries = mcpGroups.flat();
 
@@ -417,10 +422,10 @@ export function createGatewayServer(deps: {
   async function composioConnectRoute(req: Request, slug: string): Promise<Response> {
     if (req.headers.get("x-admin-token") !== adminToken)
       return json({ error: "unauthorized" }, 401);
-    if (!composio.configured()) {
-      return json({ configured: false, error: "not_configured" }, 503);
-    }
     try {
+      if (!composio.configured()) {
+        return json({ configured: false, error: "not_configured" }, 503);
+      }
       const callbackUrl = `${webUrl}/connectors?connected=${encodeURIComponent(slug)}`;
       const location = await withDeadline(
         composio.authorize(slug, callbackUrl),

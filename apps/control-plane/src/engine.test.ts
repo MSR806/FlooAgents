@@ -4,6 +4,7 @@ import {
   addGrant,
   createDb,
   enqueueFollowUp,
+  getAgent as getDbAgent,
   getGatewayToken,
   getOrCreateSession,
   getRun,
@@ -289,6 +290,41 @@ test("mints a gateway token with exact agent tools and user grant patterns", asy
   expect(seen.req?.gateway?.token).toBeTruthy();
   expect(seen.tools).toEqual(["echo.ping"]);
   expect(seen.grants).toEqual(["echo.*"]);
+});
+
+test("migrates legacy connector policy into exact custom gateway tools before minting", async () => {
+  const db = createDb(":memory:");
+  db.insert(schema.agents)
+    .values({
+      id: "legacy",
+      name: "Legacy",
+      model: "m",
+      systemPrompt: "Old",
+      gatewayTools: null,
+      connectors: JSON.stringify(["echo"]),
+      createdAt: 1,
+    })
+    .run();
+  const user = upsertUserBySlackId(db, { slackUserId: "legacy-admin", name: "Admin" });
+  setAdmin(db, user.id, true);
+  const { runtime, seen } = capturingRuntime(db);
+  const engine = createEngine({
+    db,
+    runtime,
+    getAgent: (id) => getDbAgent(db, id),
+    gatewayUrl: "http://gw",
+    listGatewayTools: async () => [
+      { name: "echo.ping", toolkit: "echo", source: "custom" },
+      { name: "echo.send", toolkit: "echo", source: "composio" },
+    ],
+  });
+
+  await collect(
+    engine.stream({ ...baseInput, agentId: "legacy", userMessage: "hi", userId: user.id }),
+  );
+  expect(seen.tools).toEqual(["echo.ping"]);
+  expect(seen.grants).toEqual(["echo.ping"]);
+  expect(getDbAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
 });
 
 test("mints a catalog-only gateway token when the user's grants don't match", async () => {

@@ -108,10 +108,13 @@ Create local env files:
 ```bash
 cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
+cp apps/gateway/.env.example apps/gateway/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
-Set the provider credentials you use in `apps/harness/.env`. `HARNESS_URL` is the single endpoint
-for Claude and OpenAI models.
+Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY_ADMIN_TOKEN` in
+the control-plane, gateway, and web env files, and set `GILLY_WEB_ADMIN_PASSWORD` for the Tools
+page login. `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
 Then run the services you need:
 
@@ -128,6 +131,8 @@ Run the stack with Compose:
 ```bash
 cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
+cp apps/gateway/.env.example apps/gateway/.env
+cp apps/web/.env.example apps/web/.env
 
 docker compose -f docker/compose.yaml up --build
 ```

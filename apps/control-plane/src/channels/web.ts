@@ -115,6 +115,14 @@ async function slackAuthTest(
 export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Response> {
   const { db, skillStore, gatewayUrl, adminToken, vault, slackManager } = deps;
 
+  function requireAdmin(req: Request): Response | undefined {
+    if (!adminToken) return json({ error: "admin authentication not configured" }, 503);
+    if (req.headers.get("x-admin-token") !== adminToken) {
+      return json({ error: "unauthorized" }, 401);
+    }
+    return undefined;
+  }
+
   async function fetch(req: Request): Promise<Response> {
     const { pathname, searchParams } = new URL(req.url);
     const { method } = req;
@@ -218,6 +226,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/composio/toolkits") {
+      const denied = requireAdmin(req);
+      if (denied) return denied;
       if (!gatewayUrl || !adminToken) return json({ configured: false, items: [] });
       try {
         const query = new URL(req.url).search;
@@ -231,14 +241,14 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     const composioToolkit = pathParam(pathname, "/api/composio/toolkits/", "/connect");
-    if (method === "GET" && composioToolkit) return startComposioConnect(composioToolkit);
+    if (method === "GET" && composioToolkit) return startComposioConnect(req, composioToolkit);
 
     // Admin connector auth. The browser calls these WITHOUT any secret; we inject x-admin-token
     // when calling the gateway so the token never reaches the client.
     const credProvider = pathParam(pathname, "/api/connectors/", "/credentials");
     if (method === "PUT" && credProvider) return saveCredential(req, credProvider);
     const connectProvider = pathParam(pathname, "/api/connectors/", "/connect");
-    if (method === "GET" && connectProvider) return startConnect(connectProvider);
+    if (method === "GET" && connectProvider) return startConnect(req, connectProvider);
 
     // --- Slack connections ---
     if (pathname === "/api/slack/connections/test" && method === "POST") return testConnection(req);
@@ -345,6 +355,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
 
   /** PUT /api/connectors/:provider/credentials — inject x-admin-token, forward the {key,value} body. */
   async function saveCredential(req: Request, provider: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/admin/credentials/${provider}`, {
@@ -363,7 +375,9 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
    * token; a 302 carries the Atlassian consent URL, which we relay to the browser so it navigates
    * there. A 200 means already-connected → bounce back to the connectors page.
    */
-  async function startConnect(provider: string): Promise<Response> {
+  async function startConnect(req: Request, provider: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/oauth/${provider}/start`, {
@@ -381,7 +395,9 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
   }
 
-  async function startComposioConnect(slug: string): Promise<Response> {
+  async function startComposioConnect(req: Request, slug: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(

@@ -92,10 +92,73 @@ export function updateAgent(db: Db, id: string, cfg: AgentConfig): AgentConfig {
       tools: row.tools,
       skills: row.skills,
       gatewayTools: row.gatewayTools,
+      connectors: null,
     })
     .where(eq(agents.id, id))
     .run();
   return { ...cfg, id };
+}
+
+type GatewayToolIdentity = {
+  name: string;
+  toolkit: string;
+  source: "custom" | "composio";
+};
+
+function storedStrings(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getLegacyAgentConnectors(db: Db, agentId: string): string[] {
+  const row = db
+    .select({ connectors: agents.connectors })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  return storedStrings(row?.connectors ?? null);
+}
+
+export function migrateLegacyAgentTools(
+  db: Db,
+  agentId: string,
+  catalog: readonly GatewayToolIdentity[],
+): string[] {
+  const row = db
+    .select({ connectors: agents.connectors, gatewayTools: agents.gatewayTools })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  if (!row) return [];
+
+  const legacy = storedStrings(row.connectors);
+  const existing = storedStrings(row.gatewayTools);
+  const customTools = catalog.filter((tool) => tool.source === "custom");
+  const resolved = new Set(
+    legacy.filter((connector) => customTools.some((tool) => tool.toolkit === connector)),
+  );
+  if (resolved.size === 0) return existing;
+
+  const tools = [
+    ...new Set([
+      ...existing,
+      ...customTools.filter((tool) => resolved.has(tool.toolkit)).map((tool) => tool.name),
+    ]),
+  ];
+  const remaining = legacy.filter((connector) => !resolved.has(connector));
+  db.update(agents)
+    .set({
+      gatewayTools: tools.length ? JSON.stringify(tools) : null,
+      connectors: remaining.length ? JSON.stringify(remaining) : null,
+    })
+    .where(eq(agents.id, agentId))
+    .run();
+  return tools;
 }
 
 export function deleteAgent(db: Db, id: string): void {

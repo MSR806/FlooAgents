@@ -4,9 +4,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "./client.ts";
-import { getAgent, getGatewayToken } from "./repo.ts";
+import {
+  getAgent,
+  getGatewayToken,
+  getLegacyAgentConnectors,
+  migrateLegacyAgentTools,
+} from "./repo.ts";
 
-test("migrates legacy connector schemas with empty exact tool policy", () => {
+test("migrates legacy connectors to exact custom tools without widening providers", () => {
   const path = join(mkdtempSync(join(tmpdir(), "gilly-db-migration-")), "legacy.db");
   const legacy = new Database(path);
   legacy.exec(`
@@ -29,5 +34,14 @@ test("migrates legacy connector schemas with empty exact tool policy", () => {
 
   const db = createDb(path);
   expect(getAgent(db, "legacy")?.gatewayTools).toBeUndefined();
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual(["echo"]);
+  expect(
+    migrateLegacyAgentTools(db, "legacy", [
+      { name: "echo.ping", toolkit: "echo", source: "custom" },
+      { name: "echo.send", toolkit: "echo", source: "composio" },
+    ]),
+  ).toEqual(["echo.ping"]);
+  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
   expect(getGatewayToken(db, "legacy-token")?.tools).toEqual([]);
 });

@@ -125,6 +125,14 @@ export function createComposioService(deps: {
     | undefined;
   let toolsByName = new Map<string, ComposioTool>();
 
+  function configured(): boolean {
+    try {
+      return !!deps.getApiKey();
+    } catch {
+      return false;
+    }
+  }
+
   function apiKey(): string {
     const key = deps.getApiKey();
     if (!key) throw new ComposioNotConfiguredError("Composio is not configured");
@@ -197,10 +205,10 @@ export function createComposioService(deps: {
   }
 
   return {
-    configured: () => !!deps.getApiKey(),
+    configured,
     listTools,
     async listToolkits(input) {
-      if (!deps.getApiKey()) return { configured: false, items: [] };
+      if (!configured()) return { configured: false, items: [] };
       const { client, session } = state();
       const page = await (await session).toolkits({
         ...(input.query ? { search: input.query } : {}),

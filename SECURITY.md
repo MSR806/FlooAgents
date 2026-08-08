@@ -41,6 +41,6 @@ deployments should treat the runtime as untrusted: keep it network-isolated from
 anything you wouldn't grant an agent, and scope provider credentials to the minimum
 the connected tools need.
 
-The current management API and web UI assume a trusted internal deployment and do not authenticate
-the human administrator independently. Do not expose the control-plane management port publicly;
-web authentication is required before operating it as an internet-facing service.
+The Tools administration page uses HTTP Basic authentication and the control-plane setup routes
+require the internal gateway admin token. Other management pages still assume a trusted internal
+deployment. Do not expose the control-plane management port publicly.

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentConfig, SlackConnection } from "@gilly/core";
+import { eq } from "drizzle-orm";
 import { createDb } from "./client.ts";
 import {
   addGrant,
@@ -19,6 +20,7 @@ import {
   getAgent,
   getCredential,
   getGatewayToken,
+  getLegacyAgentConnectors,
   getOrCreateSession,
   getRun,
   getSessionBySourceKey,
@@ -30,6 +32,7 @@ import {
   listRuns,
   listSessions,
   listSlackConnections,
+  migrateLegacyAgentTools,
   setCredential,
   setSlackConnectionStatus,
   updateAgent,
@@ -236,7 +239,7 @@ test("agent gateway tools round-trip through get/update", () => {
   expect(getAgent(db, "coder")?.gatewayTools).toEqual(["branch.query", "gmail.send_email"]);
 });
 
-test("legacy connector columns do not grant gateway tools", () => {
+test("legacy connectors migrate only from the custom catalog and edits retire the fallback", () => {
   const db = freshDb();
   db.insert(agents)
     .values({
@@ -249,7 +252,27 @@ test("legacy connector columns do not grant gateway tools", () => {
       createdAt: 1,
     })
     .run();
-  expect(getAgent(db, "legacy")?.gatewayTools).toBeUndefined();
+  expect(
+    migrateLegacyAgentTools(db, "legacy", [
+      { name: "echo.ping", toolkit: "echo", source: "custom" },
+      { name: "echo.send", toolkit: "echo", source: "composio" },
+    ]),
+  ).toEqual(["echo.ping"]);
+  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
+
+  db.update(agents)
+    .set({ connectors: JSON.stringify(["echo"]) })
+    .where(eq(agents.id, "legacy"))
+    .run();
+  updateAgent(db, "legacy", {
+    id: "legacy",
+    name: "Legacy",
+    model: "sonnet",
+    systemPrompt: "Edited config",
+    gatewayTools: ["echo.ping"],
+  });
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
 
   db.insert(gatewayTokens)
     .values({

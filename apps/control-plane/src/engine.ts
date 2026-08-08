@@ -9,17 +9,25 @@ import {
   dequeueAllFollowUps,
   enqueueFollowUp,
   failRun,
+  getLegacyAgentConnectors,
   getOrCreateSession,
   getSessionById,
   getUser,
   hasActiveRun,
   listGrants,
+  migrateLegacyAgentTools,
   setHarnessSession,
 } from "@gilly/db";
 import type { SkillBundle } from "@gilly/harness-protocol";
 import type { RuntimeProvider, StreamEvent } from "@gilly/runtime";
 
 const RUN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+type GatewayToolIdentity = {
+  name: string;
+  toolkit: string;
+  source: "custom" | "composio";
+};
 
 /** One run handed to a conversational channel: the messages it answers, the raw prompt, the stream. */
 export type RunContext = {
@@ -66,12 +74,36 @@ export function createEngine(deps: {
   getSkill?: (name: string) => SkillBundle | undefined;
   /** Tooling gateway base URL; attached only when an agent has exact gateway tools. */
   gatewayUrl?: string;
+  listGatewayTools?: (gatewayUrl: string) => Promise<GatewayToolIdentity[]>;
   /** Max silence between runtime stream events before the run is failed. */
   runIdleTimeoutMs?: number;
 }) {
   const { db, runtime, getAgent, gatewayUrl } = deps;
   const getSkill = deps.getSkill ?? (() => undefined);
   const runIdleTimeoutMs = deps.runIdleTimeoutMs ?? RUN_IDLE_TIMEOUT_MS;
+  const listGatewayTools = deps.listGatewayTools ?? fetchGatewayTools;
+
+  async function fetchGatewayTools(url: string): Promise<GatewayToolIdentity[]> {
+    const response = await fetch(`${url}/tools`);
+    if (!response.ok) throw new Error(`Gateway tool discovery failed with status ${response.status}`);
+    const body: unknown = await response.json();
+    if (!body || typeof body !== "object" || !("tools" in body) || !Array.isArray(body.tools)) {
+      throw new Error("Gateway returned an invalid tool catalog");
+    }
+    const tools = body.tools.filter(
+      (tool): tool is GatewayToolIdentity =>
+        !!tool &&
+        typeof tool === "object" &&
+        "name" in tool &&
+        typeof tool.name === "string" &&
+        "toolkit" in tool &&
+        typeof tool.toolkit === "string" &&
+        "source" in tool &&
+        (tool.source === "custom" || tool.source === "composio"),
+    );
+    if (tools.length !== body.tools.length) throw new Error("Gateway returned an invalid tool catalog");
+    return tools;
+  }
 
   function withRunTimeout<T>(promise: Promise<T>): Promise<T> {
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -124,7 +156,14 @@ export function createEngine(deps: {
 
       // The agent's exact tools define catalog visibility. Grants are checked only on invocation,
       // so an ungranted user can discover a relevant tool and receive a useful access error.
-      const gatewayTools = [...new Set(agent.gatewayTools ?? [])];
+      let gatewayTools = [...new Set(agent.gatewayTools ?? [])];
+      if (gatewayUrl && userId && getLegacyAgentConnectors(db, agent.id).length > 0) {
+        gatewayTools = migrateLegacyAgentTools(
+          db,
+          agent.id,
+          await listGatewayTools(gatewayUrl),
+        );
+      }
       const user = userId ? getUser(db, userId) : undefined;
       const grants = !user
         ? []
