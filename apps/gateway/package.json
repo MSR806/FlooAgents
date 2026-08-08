@@ -12,6 +12,7 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
+    "@composio/core": "^0.15.0",
     "@gilly/core": "workspace:*",
     "@gilly/db": "workspace:*",
     "@gilly/gateway-kit": "workspace:*",

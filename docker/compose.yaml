@@ -65,7 +65,7 @@ services:
     depends_on:
       - control-plane
     env_file:
-      - path: ../apps/web/.env        # optional today — web has no required env
+      - path: ../apps/web/.env        # admin password and matching GILLY_ADMIN_TOKEN
         required: false
     environment:
       # Next.js rewrites /api/* to the control-plane over the Docker network.

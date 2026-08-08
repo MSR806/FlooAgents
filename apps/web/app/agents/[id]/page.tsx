@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AgentForm, { type AgentValues } from "../AgentForm";
+import { parseAgentValues } from "../agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -21,8 +22,9 @@ export default function AgentDetailPage() {
     fetch(`${API_BASE}/agents/${id}`)
       .then((r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
-        return r.json() as Promise<AgentValues>;
+        return r.json();
       })
+      .then(parseAgentValues)
       .then(setAgent)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load agent"));
   }, [id]);
@@ -92,8 +94,8 @@ export default function AgentDetailPage() {
                     href={(skill) => `/skills/${skill}`}
                   />
                   <CapabilityRow
-                    label="Tools"
-                    items={agent.connectors}
+                    label="Gateway tools"
+                    items={agent.gatewayTools}
                     empty="None"
                     href={() => "/connectors"}
                   />

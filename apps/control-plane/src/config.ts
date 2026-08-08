@@ -4,16 +4,20 @@ import { AgentConfig } from "@gilly/core";
 import { createAgent, type Db, getAgent, updateAgent } from "@gilly/db";
 import type { SkillBundle } from "@gilly/harness-protocol";
 import { Glob } from "bun";
+import { z } from "zod";
+
+const LegacyAgentFileConfig = AgentConfig.extend({ connectors: z.array(z.string()).optional() });
+type LegacyAgentFileConfig = z.infer<typeof LegacyAgentFileConfig>;
 
 /** Load every `*.json` agent config in `dir`, keyed by id. Throws on invalid or empty. */
-export function loadAgents(dir: string): Map<string, AgentConfig> {
+export function loadAgents(dir: string): Map<string, LegacyAgentFileConfig> {
   const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
-  const agents = new Map<string, AgentConfig>();
+  const agents = new Map<string, LegacyAgentFileConfig>();
   for (const file of files) {
     const path = join(dir, file);
-    let agent: AgentConfig;
+    let agent: LegacyAgentFileConfig;
     try {
-      agent = AgentConfig.parse(JSON.parse(readFileSync(path, "utf8")));
+      agent = LegacyAgentFileConfig.parse(JSON.parse(readFileSync(path, "utf8")));
     } catch (e) {
       throw new Error(`Invalid agent config ${path}: ${e}`);
     }
@@ -56,8 +60,12 @@ export function loadSkills(dir: string): Map<string, SkillBundle> {
  * need no seed; the LocalSkillStore loads them from disk each boot.
  */
 export function syncAgents(db: Db, agentsDir: string): void {
-  for (const agent of loadAgents(agentsDir).values()) {
-    if (getAgent(db, agent.id)) updateAgent(db, agent.id, agent);
-    else createAgent(db, agent);
+  for (const loaded of loadAgents(agentsDir).values()) {
+    const { connectors, ...agent } = loaded;
+    const options = {
+      legacyConnectors: agent.gatewayTools === undefined ? connectors : undefined,
+    };
+    if (getAgent(db, agent.id)) updateAgent(db, agent.id, agent, options);
+    else createAgent(db, agent, options);
   }
 }

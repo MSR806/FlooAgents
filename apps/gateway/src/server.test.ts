@@ -1,19 +1,23 @@
 import { expect, test } from "bun:test";
 import { createDb, createGatewayToken, getCredential, schema, setCredential } from "@gilly/db";
+import { ComposioNotConnectedError, type ComposioService } from "./composio.ts";
 import { type McpGateway, McpToolError, NotConnectedError } from "./mcp.ts";
+import { allTools } from "./registry.ts";
 import { createGatewayServer } from "./server.ts";
 import { makeVault } from "./vault.ts";
 
 const ADMIN = "admin-secret";
 
-/** Build a fresh in-memory gateway with a token carrying connectors and grants. */
+/** Build a fresh in-memory gateway with a token carrying exact tools and grants. */
 function setup(
   grants: string[],
   opts: {
-    connectors?: string[];
+    tools?: string[];
     ttlMs?: number;
     mcp?: McpGateway;
+    composio?: ComposioService;
     catalogTimeoutMs?: number;
+    managementToolsTtlMs?: number;
   } = {},
 ) {
   const db = createDb(":memory:");
@@ -23,13 +27,30 @@ function setup(
     vault,
     adminToken: ADMIN,
     mcp: opts.mcp,
+    composio: opts.composio,
     catalogTimeoutMs: opts.catalogTimeoutMs,
+    managementToolsTtlMs: opts.managementToolsTtlMs,
   });
   const token = createGatewayToken(db, {
     runId: "run-1",
     userId: "user-1",
     agentId: "agent-1",
-    connectors: opts.connectors ?? [...new Set(grants.map((grant) => grant.split(".")[0] ?? ""))],
+    tools:
+      opts.tools ??
+      grants.flatMap((grant) =>
+        grant.endsWith(".*")
+          ? [
+              ...allTools()
+                .map((tool) => tool.name)
+                .filter((name) => name.startsWith(grant.slice(0, -1))),
+              ...(grant === "github.*"
+                ? ["github.create_issue"]
+                : grant === "jira.*"
+                  ? ["jira.getIssue"]
+                  : []),
+            ]
+          : [grant],
+      ),
     grants,
     ttlMs: opts.ttlMs ?? 60_000,
   });
@@ -55,6 +76,62 @@ function fakeMcp(opts: { throwOnCall?: boolean } = {}): McpGateway {
   };
 }
 
+function fakeComposio(
+  opts: {
+    configured?: boolean;
+    connected?: boolean;
+    notConnectedOnExecute?: boolean;
+    providerErrorOnExecute?: boolean;
+  } = {},
+): ComposioService {
+  const configured = opts.configured ?? true;
+  return {
+    configured: () => configured,
+    async listTools() {
+      return configured && (opts.connected ?? true)
+        ? [
+            {
+              name: "gmail.send_email",
+              description: "Send an email",
+              inputSchema: { type: "object" },
+              source: "composio",
+              toolkit: "gmail",
+              connected: true,
+              upstreamSlug: "GMAIL_SEND_EMAIL",
+            },
+          ]
+        : [];
+    },
+    async listToolkits() {
+      return configured
+        ? {
+            configured: true,
+            items: [
+              {
+                slug: "gmail",
+                name: "Gmail",
+                description: "Email tools",
+                logo: "gmail.png",
+                toolsCount: 10,
+                connected: opts.connected ?? true,
+                noAuth: false,
+              },
+            ],
+            nextCursor: "next",
+          }
+        : { configured: false, items: [] };
+    },
+    async authorize() {
+      return "https://connect.composio.dev/link/1";
+    },
+    async execute() {
+      if (opts.notConnectedOnExecute) throw new ComposioNotConnectedError("Not connected");
+      if (opts.providerErrorOnExecute) throw new Error("upstream failed");
+      return { sent: true };
+    },
+  };
+}
+
 const auth = (token: string) => ({
   authorization: `Bearer ${token}`,
   "content-type": "application/json",
@@ -67,6 +144,9 @@ const post = (
   body: unknown,
 ) => fetch(new Request(`http://x${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
 
+const getTools = (fetch: ReturnType<typeof createGatewayServer>) =>
+  fetch(new Request("http://x/tools", { headers: { "x-admin-token": ADMIN } }));
+
 type Agent = {
   id: string;
   name: string;
@@ -74,7 +154,7 @@ type Agent = {
   systemPrompt: string;
   tools?: string[];
   skills?: string[];
-  connectors?: string[];
+  gatewayTools?: string[];
 };
 type Skill = {
   name: string;
@@ -188,7 +268,7 @@ async function withControlPlane<T>(
   }
 }
 
-test("catalog returns agent-connected tools only", async () => {
+test("catalog returns exact agent gateway tools only", async () => {
   const { fetch, token } = setup(["echo.*"]);
   const res = await post(fetch, "/catalog", auth(token), {});
   const { tools } = (await res.json()) as { tools: { name: string; inputSchema: unknown }[] };
@@ -219,7 +299,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
         name: "Helper",
         model: "sonnet",
         systemPrompt: "Help.",
-        connectors: ["gilly"],
+        gatewayTools: ["gilly.list_agents"],
       },
     });
     expect(await create.json()).toEqual({
@@ -227,20 +307,23 @@ test("gilly.update_agent patches through the control-plane API", async () => {
       name: "Helper",
       model: "sonnet",
       systemPrompt: "Help.",
-      connectors: ["gilly"],
+      gatewayTools: ["gilly.list_agents"],
     });
-    expect(agents.get("helper")?.connectors).toEqual(["gilly"]);
+    expect(agents.get("helper")?.gatewayTools).toEqual(["gilly.list_agents"]);
 
     const res = await post(fetch, "/invoke", auth(token), {
       tool: "gilly.update_agent",
-      input: { id: "coder", patch: { name: "Coder 2", connectors: ["gilly"] } },
+      input: {
+        id: "coder",
+        patch: { name: "Coder 2", gatewayTools: ["gilly.list_agents"] },
+      },
     });
     expect(await res.json()).toEqual({
       id: "coder",
       name: "Coder 2",
       model: "sonnet",
       systemPrompt: "code",
-      connectors: ["gilly"],
+      gatewayTools: ["gilly.list_agents"],
     });
     expect(agents.get("coder")?.name).toBe("Coder 2");
   });
@@ -375,14 +458,14 @@ test("invoke caps a large result by default, but the script lane opts out", asyn
 });
 
 test("catalog shows an agent-connected tool without a user grant", async () => {
-  const { fetch, token } = setup([], { connectors: ["echo"] });
+  const { fetch, token } = setup([], { tools: ["echo.ping"] });
   const res = await post(fetch, "/catalog", auth(token), {});
   const body = (await res.json()) as { tools: { name: string }[] };
   expect(body.tools.map((tool) => tool.name)).toContain("echo.ping");
 });
 
 test("invoke connected but ungranted tool → user_missing_grant instructions", async () => {
-  const { fetch, token } = setup([], { connectors: ["echo"] });
+  const { fetch, token } = setup([], { tools: ["echo.ping"] });
   const res = await post(fetch, "/invoke", auth(token), {
     tool: "echo.ping",
     input: { message: "hi" },
@@ -395,8 +478,8 @@ test("invoke connected but ungranted tool → user_missing_grant instructions", 
   });
 });
 
-test("invoke tool outside the agent's connectors → forbidden", async () => {
-  const { fetch, token } = setup(["github.*"], { connectors: ["echo"] });
+test("invoke tool outside the agent's exact tools → forbidden", async () => {
+  const { fetch, token } = setup(["github.*"], { tools: ["echo.ping"] });
   const res = await post(fetch, "/invoke", auth(token), {
     tool: "github.create_issue",
     input: {},
@@ -449,6 +532,407 @@ test("admin credentials: no header → 401; with header → stores encrypted", a
   expect(await ok.json()).toEqual({ ok: true });
   const stored = getCredential(db, "github");
   expect(stored[0]?.value).not.toBe("SECRET");
+});
+
+test("GET /tools unifies custom, connected MCP, and Composio metadata", async () => {
+  const { db, fetch, vault } = setup([], { mcp: fakeMcp(), composio: fakeComposio() });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+
+  expect((await fetch(new Request("http://x/tools"))).status).toBe(401);
+  const res = await getTools(fetch);
+  const body = (await res.json()) as { tools: { name: string; source: string; toolkit: string }[] };
+  expect(body.tools).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "echo.ping", source: "custom", toolkit: "echo" }),
+      expect.objectContaining({
+        name: "github.create_issue",
+        source: "custom",
+        toolkit: "github",
+      }),
+      expect.objectContaining({
+        name: "gmail.send_email",
+        source: "composio",
+        toolkit: "gmail",
+      }),
+    ]),
+  );
+});
+
+test("a failing Composio configuration check does not hide custom tools", async () => {
+  const composio = fakeComposio();
+  composio.configured = () => {
+    throw new Error("decrypt failed");
+  };
+  const { fetch } = setup([], { composio });
+
+  const response = await getTools(fetch);
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { tools: { name: string }[] };
+  expect(body.tools.some((tool) => tool.name === "echo.ping")).toBe(true);
+  expect(body.tools.some((tool) => tool.name === "gmail.send_email")).toBe(false);
+});
+
+test("management discovery shares in-flight work, caches briefly, and invalidates on credentials", async () => {
+  let githubLists = 0;
+  const mcp = fakeMcp();
+  const listTools = mcp.listTools;
+  mcp.listTools = async (connector, creds) => {
+    if (connector.name === "github") githubLists += 1;
+    return listTools(connector, creds);
+  };
+  const { db, fetch, vault } = setup([], {
+    mcp,
+    composio: fakeComposio(),
+    managementToolsTtlMs: 100,
+  });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+
+  await Promise.all([getTools(fetch), getTools(fetch)]);
+  await getTools(fetch);
+  expect(githubLists).toBe(1);
+
+  await Bun.sleep(110);
+  await getTools(fetch);
+  expect(githubLists).toBe(2);
+
+  await fetch(
+    new Request("http://x/admin/credentials/github", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
+    }),
+  );
+  await getTools(fetch);
+  expect(githubLists).toBe(3);
+});
+
+test("dynamic invocation uses its exact discovery across cache invalidation", async () => {
+  let discoveries = 0;
+  let calls = 0;
+  let release = () => {};
+  let markStarted = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const mcp: McpGateway = {
+    async listTools(connector) {
+      if (connector.name !== "github") return [];
+      discoveries += 1;
+      if (discoveries === 1) {
+        markStarted();
+        await gate;
+        return [{ name: "github.create_issue", description: "Create issue" }];
+      }
+      return [];
+    },
+    async callTool() {
+      calls += 1;
+      return { ok: true };
+    },
+  };
+  const { db, fetch, token, vault } = setup(["github.*"], {
+    tools: ["github.create_issue"],
+    mcp,
+    composio: fakeComposio({ configured: false }),
+  });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+
+  const invocation = post(fetch, "/invoke", auth(token), {
+    tool: "github.create_issue",
+    input: {},
+  });
+  await started;
+  await fetch(
+    new Request("http://x/admin/credentials/github", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
+    }),
+  );
+  release();
+
+  expect(await (await invocation).json()).toEqual({ ok: true });
+  expect(calls).toBe(1);
+  const refreshed = (await (await getTools(fetch)).json()) as { tools: { name: string }[] };
+  expect(refreshed.tools.some((tool) => tool.name === "github.create_issue")).toBe(false);
+});
+
+test("Composio invocation preserves its discovered upstream slug across invalidation", async () => {
+  let discoveries = 0;
+  let release = () => {};
+  let markStarted = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const executed: string[] = [];
+  const composio: ComposioService = {
+    configured: () => true,
+    async listTools() {
+      discoveries += 1;
+      if (discoveries === 1) {
+        markStarted();
+        await gate;
+      }
+      return [
+        {
+          name: "gmail.send_email",
+          description: "Send email",
+          source: "composio",
+          toolkit: "gmail",
+          connected: true,
+          upstreamSlug: discoveries === 1 ? "GMAIL_SEND_EMAIL_OLD" : "GMAIL_SEND_EMAIL_NEW",
+        },
+      ];
+    },
+    async listToolkits() {
+      return { configured: true, items: [] };
+    },
+    async authorize() {
+      return "https://connect.composio.dev/link/1";
+    },
+    async execute(upstreamSlug) {
+      executed.push(upstreamSlug);
+      return { ok: true };
+    },
+  };
+  const { fetch, token } = setup(["gmail.send_email"], { composio });
+
+  const invocation = post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: {},
+  });
+  await started;
+  await fetch(
+    new Request("http://x/admin/credentials/composio", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "api_key", value: "new-key" }),
+    }),
+  );
+  release();
+
+  expect(await (await invocation).json()).toEqual({ ok: true });
+  expect(
+    await (
+      await post(fetch, "/invoke", auth(token), { tool: "gmail.send_email", input: {} })
+    ).json(),
+  ).toEqual({
+    ok: true,
+  });
+  expect(executed).toEqual(["GMAIL_SEND_EMAIL_OLD", "GMAIL_SEND_EMAIL_NEW"]);
+});
+
+test("MCP providers discover concurrently with independent deadlines", async () => {
+  const seen: string[] = [];
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const mcp: McpGateway = {
+    async listTools(connector) {
+      seen.push(connector.name);
+      if (seen.includes("github") && seen.includes("jira")) release();
+      await gate;
+      return [{ name: `${connector.name}.tool`, description: connector.name }];
+    },
+    async callTool() {
+      return {};
+    },
+  };
+  const { db, fetch, vault } = setup([], {
+    mcp,
+    composio: fakeComposio({ configured: false }),
+    catalogTimeoutMs: 30,
+  });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+
+  const res = await getTools(fetch);
+  const body = (await res.json()) as { tools: { name: string }[] };
+  expect(body.tools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(["github.tool", "jira.tool"]),
+  );
+});
+
+test("removed and unknown dynamic tools never dispatch", async () => {
+  let available = true;
+  let mcpCalls = 0;
+  let composioCalls = 0;
+  const mcp: McpGateway = {
+    async listTools(connector) {
+      return available && connector.name === "github"
+        ? [{ name: "github.create_issue", description: "Create issue" }]
+        : [];
+    },
+    async callTool() {
+      mcpCalls += 1;
+      return {};
+    },
+  };
+  const composio = fakeComposio();
+  composio.execute = async () => {
+    composioCalls += 1;
+    return {};
+  };
+  const { db, fetch, token, vault } = setup(["github.*", "gmail.*"], {
+    tools: ["github.create_issue", "github.removed", "gmail.removed"],
+    mcp,
+    composio,
+  });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+  await getTools(fetch);
+  available = false;
+  await fetch(
+    new Request("http://x/admin/credentials/github", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
+    }),
+  );
+
+  for (const tool of ["github.create_issue", "github.removed", "gmail.removed"]) {
+    const res = await post(fetch, "/invoke", auth(token), { tool, input: {} });
+    expect(await res.json()).toEqual({ error: "forbidden" });
+  }
+  expect(mcpCalls).toBe(0);
+  expect(composioCalls).toBe(0);
+});
+
+test("Composio discovery and toolkit routes time out boundedly", async () => {
+  const composio = fakeComposio();
+  composio.listTools = () => new Promise(() => {});
+  composio.listToolkits = () => new Promise(() => {});
+  const { fetch, token } = setup(["gmail.*"], {
+    tools: ["gmail.send_email"],
+    mcp: { listTools: async () => [], callTool: async () => ({}) },
+    composio,
+    catalogTimeoutMs: 20,
+  });
+
+  const invoke = await post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: {},
+  });
+  expect(await invoke.json()).toEqual({ error: "forbidden" });
+  const tools = await getTools(fetch);
+  expect(tools.status).toBe(200);
+  const toolkits = await fetch(
+    new Request("http://x/admin/composio/toolkits", {
+      headers: { "x-admin-token": ADMIN },
+    }),
+  );
+  expect(toolkits.status).toBe(502);
+  expect(await toolkits.json()).toEqual({ configured: true, items: [], error: "provider_error" });
+});
+
+test("Composio catalog and invocation use canonical names", async () => {
+  const { fetch, token } = setup(["gmail.*"], {
+    tools: ["gmail.send_email"],
+    composio: fakeComposio(),
+  });
+  const catalog = await post(fetch, "/catalog", auth(token), {});
+  const body = (await catalog.json()) as { tools: { name: string }[] };
+  expect(body.tools.map((tool) => tool.name)).toEqual(["gmail.send_email"]);
+
+  const invoke = await post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: { to: "user@example.com" },
+  });
+  expect(await invoke.json()).toEqual({ sent: true });
+});
+
+test("Composio missing connection maps to not_connected", async () => {
+  const { fetch, token } = setup(["gmail.*"], {
+    tools: ["gmail.send_email"],
+    composio: fakeComposio({ notConnectedOnExecute: true }),
+  });
+  const res = await post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: {},
+  });
+  expect(await res.json()).toEqual({ error: "not_connected" });
+});
+
+test("unknown Composio provider failures map to provider_error", async () => {
+  const { fetch, token } = setup(["gmail.*"], {
+    tools: ["gmail.send_email"],
+    composio: fakeComposio({ providerErrorOnExecute: true }),
+  });
+  const res = await post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: {},
+  });
+  expect(await res.json()).toEqual({ error: "provider_error" });
+});
+
+test("custom tools win canonical-name collisions with Composio", async () => {
+  const composio = fakeComposio();
+  composio.listTools = async () => [
+    {
+      name: "echo.ping",
+      description: "Remote echo",
+      source: "composio",
+      toolkit: "echo",
+      connected: true,
+      upstreamSlug: "ECHO_PING",
+    },
+  ];
+  const { fetch } = setup([], { composio });
+  const res = await getTools(fetch);
+  const body = (await res.json()) as { tools: { name: string; source: string }[] };
+  expect(body.tools.filter((tool) => tool.name === "echo.ping")).toEqual([
+    expect.objectContaining({ name: "echo.ping", source: "custom" }),
+  ]);
+});
+
+test("Composio admin routes are gated and relay toolkit metadata and auth redirect", async () => {
+  const { fetch } = setup([], { composio: fakeComposio() });
+  const unauthorized = await fetch(new Request("http://x/admin/composio/toolkits"));
+  expect(unauthorized.status).toBe(401);
+
+  const list = await fetch(
+    new Request("http://x/admin/composio/toolkits?query=mail&cursor=one", {
+      headers: { "x-admin-token": ADMIN },
+    }),
+  );
+  expect(await list.json()).toEqual({
+    configured: true,
+    items: [
+      {
+        slug: "gmail",
+        name: "Gmail",
+        description: "Email tools",
+        logo: "gmail.png",
+        toolsCount: 10,
+        connected: true,
+        noAuth: false,
+      },
+    ],
+    nextCursor: "next",
+  });
+
+  const connect = await fetch(
+    new Request("http://x/admin/composio/toolkits/gmail/connect", {
+      headers: { "x-admin-token": ADMIN },
+    }),
+  );
+  expect(connect.status).toBe(302);
+  expect(connect.headers.get("location")).toBe("https://connect.composio.dev/link/1");
+});
+
+test("Composio toolkit route returns structured not configured response", async () => {
+  const { fetch } = setup([], { composio: fakeComposio({ configured: false }) });
+  const res = await fetch(
+    new Request("http://x/admin/composio/toolkits", {
+      headers: { "x-admin-token": ADMIN },
+    }),
+  );
+  expect(await res.json()).toEqual({ configured: false, items: [] });
 });
 
 type Status = {
@@ -548,13 +1032,13 @@ test("no github credential → catalog skips github tools", async () => {
   expect(tools.map((t) => t.name)).not.toContain("github.create_issue");
 });
 
-test("no github credential → invoke mcp tool returns not_connected", async () => {
+test("no github credential → invoke mcp tool fails closed", async () => {
   const { fetch, token } = setup(["github.*"], { mcp: fakeMcp() });
   const res = await post(fetch, "/invoke", auth(token), {
     tool: "github.create_issue",
     input: {},
   });
-  expect(await res.json()).toEqual({ error: "not_connected" });
+  expect(await res.json()).toEqual({ error: "forbidden" });
 });
 
 test("mcp callTool throwing → provider_error", async () => {
@@ -603,10 +1087,10 @@ test("oauth connector not connected → catalog omits its tools", async () => {
   expect(tools.some((t) => t.name.startsWith("jira."))).toBe(false);
 });
 
-test("oauth connector not connected → invoke returns not_connected", async () => {
+test("oauth connector not connected → invoke fails closed", async () => {
   const { fetch, token } = setup(["jira.*"], { mcp: notConnectedMcp });
   const res = await post(fetch, "/invoke", auth(token), { tool: "jira.getIssue", input: {} });
-  expect(await res.json()).toEqual({ error: "not_connected" });
+  expect(await res.json()).toEqual({ error: "forbidden" });
 });
 
 test("GET /oauth/jira/start without admin token → 401", async () => {

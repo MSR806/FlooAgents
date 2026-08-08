@@ -26,12 +26,6 @@ export function mcpConnectors(): McpConnector[] {
   return mcp;
 }
 
-/** Find the MCP connector owning a dotted tool name (`github.create_issue` → github). */
-export function getMcpConnector(toolName: string): McpConnector | undefined {
-  const ns = toolName.split(".")[0];
-  return mcp.find((c) => c.name === ns);
-}
-
 /** Static (credential-free) connector metadata. `connected` is layered on in the server from the db. */
 export type ConnectorMeta = {
   name: string;

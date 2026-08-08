@@ -27,6 +27,12 @@ const handler = () =>
     adminToken: "admin-secret",
   });
 
+const adminRequest = (url: string, init: RequestInit = {}) => {
+  const headers = new Headers(init.headers);
+  headers.set("x-admin-token", "admin-secret");
+  return new Request(url, { ...init, headers });
+};
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -50,7 +56,7 @@ test("PUT credentials proxy injects x-admin-token and forwards the body", async 
   }) as unknown as typeof fetch;
 
   const res = await handler()(
-    new Request("http://x/api/connectors/github/credentials", {
+    adminRequest("http://x/api/connectors/github/credentials", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ key: "github_pat", value: "SECRET" }),
@@ -71,7 +77,7 @@ test("connect proxy relays the gateway's 302 Location to the browser", async () 
       headers: { location: "https://auth.atlassian.com/authorize" },
     })) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
+  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("https://auth.atlassian.com/authorize");
 });
@@ -83,9 +89,121 @@ test("connect proxy bounces back to the connectors page when already connected (
       headers: { "content-type": "application/json" },
     })) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
+  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("/connectors?connected=jira");
+});
+
+test("GET /api/tools proxies the unified gateway catalog", async () => {
+  let seen: Request | undefined;
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    seen = new Request(input as string, init);
+    return Response.json({
+      tools: [
+        {
+          name: "gmail.send_email",
+          description: "Send email",
+          source: "composio",
+          toolkit: "gmail",
+          connected: true,
+        },
+      ],
+    });
+  }) as unknown as typeof fetch;
+
+  const res = await handler()(adminRequest("http://x/api/tools"));
+  expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
+  expect(await res.json()).toEqual({
+    tools: [
+      {
+        name: "gmail.send_email",
+        description: "Send email",
+        source: "composio",
+        toolkit: "gmail",
+        connected: true,
+      },
+    ],
+  });
+});
+
+test("GET /api/tools requires admin authentication", async () => {
+  const res = await handler()(new Request("http://x/api/tools"));
+  expect(res.status).toBe(401);
+});
+
+test("GET /api/tools reports an unavailable gateway", async () => {
+  globalThis.fetch = (async () => {
+    throw new Error("offline");
+  }) as unknown as typeof fetch;
+
+  const res = await handler()(adminRequest("http://x/api/tools"));
+  expect(res.status).toBe(502);
+  expect(await res.json()).toEqual({ error: "gateway unavailable" });
+});
+
+test("GET /api/tools fails closed when internal admin auth is not configured", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return Response.json({ tools: [] });
+  }) as unknown as typeof fetch;
+  const webFetch = createWebHandler({
+    engine: {} as ReturnType<typeof createEngine>,
+    db: createDb(":memory:"),
+    skillStore: {} as SkillStore,
+    port: 0,
+    gatewayUrl: "http://gw",
+  });
+
+  const res = await webFetch(new Request("http://x/api/tools"));
+  expect(res.status).toBe(503);
+  expect(calls).toBe(0);
+});
+
+test("Composio toolkit proxies preserve query, inject admin auth, and relay redirects", async () => {
+  const seen: Request[] = [];
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    const req = new Request(input as string, init);
+    seen.push(req);
+    if (req.url.includes("/connect")) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://connect.composio.dev" },
+      });
+    }
+    return Response.json({ configured: true, items: [], nextCursor: "next" });
+  }) as unknown as typeof fetch;
+
+  const list = await handler()(
+    adminRequest("http://x/api/composio/toolkits?query=mail&cursor=one"),
+  );
+  expect(await list.json()).toEqual({ configured: true, items: [], nextCursor: "next" });
+  expect(seen[0]?.url).toBe("http://gw/admin/composio/toolkits?query=mail&cursor=one");
+  expect(seen[0]?.headers.get("x-admin-token")).toBe("admin-secret");
+
+  const connect = await handler()(adminRequest("http://x/api/composio/toolkits/gmail/connect"));
+  expect(connect.status).toBe(302);
+  expect(connect.headers.get("location")).toBe("https://connect.composio.dev");
+  expect(seen[1]?.headers.get("x-admin-token")).toBe("admin-secret");
+});
+
+test("connector and Composio administration rejects unauthenticated callers", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return Response.json({ ok: true });
+  }) as unknown as typeof fetch;
+
+  const requests = [
+    new Request("http://x/api/composio/toolkits"),
+    new Request("http://x/api/composio/toolkits/gmail/connect"),
+    new Request("http://x/api/connectors/jira/connect"),
+    new Request("http://x/api/connectors/composio/credentials", { method: "PUT" }),
+  ];
+  for (const request of requests) {
+    expect((await handler()(request)).status).toBe(401);
+  }
+  expect(calls).toBe(0);
 });
 
 test("POST /api/skills persists a skill with supporting files; GET returns them", async () => {

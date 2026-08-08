@@ -28,6 +28,9 @@ const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8080";
 const WEB_PORT = Number(process.env.WEB_PORT ?? 4000);
 const GILLY_GATEWAY_URL = process.env.GILLY_GATEWAY_URL;
 const GILLY_ADMIN_TOKEN = process.env.GILLY_ADMIN_TOKEN;
+const GATEWAY_DISCOVERY_TIMEOUT_MS = Number(
+  process.env.GILLY_GATEWAY_DISCOVERY_TIMEOUT_MS ?? 10_000,
+);
 
 const vaultKey = process.env.GILLY_VAULT_KEY;
 if (!vaultKey) throw new Error("GILLY_VAULT_KEY is required (encrypts Slack connection tokens)");
@@ -45,7 +48,7 @@ const skillStore = new LocalSkillStore(SKILLS_DIR);
 const vault = makeVault(vaultKey);
 
 // Web chat has no auth yet: every web request runs as one shared admin user, so it gets full
-// access to whatever an agent's connectors allow. Replace with real identity when web auth lands.
+// access to the agent's exact gateway tools. Replace with real identity when web auth lands.
 const webUser = upsertUserBySlackId(db, { slackUserId: "web", name: "Web (shared)" });
 setAdmin(db, webUser.id, true);
 
@@ -56,6 +59,8 @@ const engine = createEngine({
   getAgent: (id) => getAgent(db, id),
   getSkill: (name) => skillStore.get(name),
   gatewayUrl: GILLY_GATEWAY_URL,
+  gatewayAdminToken: GILLY_ADMIN_TOKEN,
+  gatewayDiscoveryTimeoutMs: GATEWAY_DISCOVERY_TIMEOUT_MS,
 });
 
 // The Slack manager owns all web-configured connections (started from the DB); it's also handed to

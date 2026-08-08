@@ -2,7 +2,14 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAgent, createDb, getAgent, listAgents } from "@gilly/db";
+import {
+  createAgent,
+  createDb,
+  getAgent,
+  getLegacyAgentConnectors,
+  listAgents,
+  schema,
+} from "@gilly/db";
 import { loadAgents, loadSkills, syncAgents } from "./config.ts";
 
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
@@ -71,4 +78,17 @@ test("syncAgents leaves DB-only agents (no config file) untouched", () => {
       .map((a) => a.id)
       .sort(),
   ).toEqual(["echo", "ui-made"]);
+});
+
+test("syncAgents preserves legacy connectors until they can migrate", () => {
+  const dir = tmp("gilly-agents-");
+  writeFileSync(join(dir, "echo.json"), JSON.stringify({ ...agent, connectors: ["echo"] }));
+  const db = createDb(":memory:");
+  db.insert(schema.agents)
+    .values({ ...agent, gatewayTools: null, connectors: JSON.stringify(["echo"]), createdAt: 1 })
+    .run();
+
+  syncAgents(db, dir);
+
+  expect(getLegacyAgentConnectors(db, "echo")).toEqual(["echo"]);
 });

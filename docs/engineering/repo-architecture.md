@@ -17,8 +17,8 @@ project-gilly/
 │   ├── core/               # domain model + Zod schemas: Agent, Connection, Session, Run, Workspace
 │   ├── harness-protocol/   # the control-plane ⇄ harness contract (invocation request / result)
 │   ├── runtime/            # RuntimeProvider + LocalRuntimeProvider (AgentCore provider planned)
-│   └── db/                 # Drizzle schema + SQLite client for operational state
-├── config/agents/          # *.json agent definitions, loaded at boot
+│   └── db/                 # Drizzle schema + SQLite client for state and agent config
+├── config/agents/          # *.json seed agent definitions, upserted at boot
 ├── docker/                 # Dockerfile.control-plane, Dockerfile.harness, compose.yaml
 └── docs/
 ```
@@ -28,7 +28,9 @@ project-gilly/
 - `runtime/` is the **control plane → runtime** seam — swap `LocalRuntimeProvider` for `AgentCoreRuntimeProvider` and nothing above changes.
 - `harness-protocol/` is the **control plane → harness** seam — the payload any harness receives (agent config, user message, resume id, workspace ref) and returns (final text, harness session id, status).
 
-`core/` is the shared domain model. `db/` holds only operational records (Sessions, Runs, follow-up queue) — never agent config, which lives in JSON.
+`core/` is the shared domain model. `db/` holds operational records (Sessions, Runs, follow-up
+queue) and runtime-mutable agent config. JSON files under `config/agents/` seed selected agents at
+boot and remain authoritative for those ids.
 
 A third seam lives inside the control plane: the **`Channel` interface** (`apps/control-plane/src/channels/channel.ts`) is the named inbound surface. Slack conforms to it today; Web/Telegram are future implementations, each translating its native event into the engine's input — interface + composition, no inheritance.
 
@@ -78,7 +80,7 @@ subprocesses behind the same HTTP contract.
 
 ```text
 Slack thread message
-  → control plane: resolve agent (JSON) + Session (SQLite)
+  → control plane: resolve agent + Session (SQLite)
   → RuntimeProvider.invoke({ agentConfig, userMessage, resumeSessionId, workspaceRef })
   → RoutingRuntimeProvider adds harnessType from the model catalog
   → LocalRuntimeProvider POSTs the shared harness /invocations
@@ -93,7 +95,7 @@ Slack thread message
 | Decision | Why |
 | --- | --- |
 | **Bun** over pnpm+Vitest+tsx | One tool; fast; native TS; built-in test. Runs both harness SDKs directly. |
-| **JSON agent config**, no API | MVP needs no authoring surface; agents are files loaded at boot. |
+| **SQLite agent config + JSON seeds** | Agents are editable through the management API; shipped JSON definitions are upserted at boot. |
 | **SQLite** for operational state | Sessions/Runs must survive restarts (to resume threads) without an extra container. Same Drizzle schema swaps to Postgres later. |
 | **Slack Socket Mode** | No public URL/tunnel for local dev. |
 | **AgentCore contract from day one** | Same harness image runs locally and (later) in AgentCore; runtime swap is a provider change, not a rewrite. |
