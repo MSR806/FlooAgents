@@ -111,18 +111,16 @@ export function createGatewayServer(deps: {
       },
       userId: process.env.GILLY_COMPOSIO_USER_ID ?? "gilly-shared",
     });
-  type DynamicRoute = { kind: "mcp"; connector: string } | { kind: "composio" };
+  type DynamicRoute =
+    | { kind: "mcp"; connector: string }
+    | { kind: "composio"; upstreamSlug: string };
   type ToolDiscovery = { tools: ManagementTool[]; routes: Map<string, DynamicRoute> };
-  let dynamicRoutes = new Map<string, DynamicRoute>();
   let managementToolsCache: { value: ToolDiscovery; expiresAt: number } | undefined;
   let managementToolsInFlight: Promise<ToolDiscovery> | undefined;
-  let managementToolsGeneration = 0;
 
   function invalidateManagementTools() {
-    managementToolsGeneration += 1;
     managementToolsCache = undefined;
     managementToolsInFlight = undefined;
-    dynamicRoutes = new Map();
   }
 
   function managementTools(): Promise<ToolDiscovery> {
@@ -131,10 +129,8 @@ export function createGatewayServer(deps: {
     }
     if (managementToolsInFlight) return managementToolsInFlight;
 
-    const generation = managementToolsGeneration;
     const pending = discoverManagementTools().then((value) => {
-      if (generation === managementToolsGeneration) {
-        dynamicRoutes = value.routes;
+      if (managementToolsInFlight === pending) {
         managementToolsCache = { value, expiresAt: Date.now() + managementToolsTtlMs };
       }
       return value;
@@ -256,14 +252,18 @@ export function createGatewayServer(deps: {
 
     const claimed = new Set([...apiEntries, ...mcpEntries].map((tool) => tool.name));
     const composioEntries: ManagementTool[] = [];
-    for (const { upstreamSlug: _, ...tool } of composioTools) {
+    const composioRoutes = new Map<string, string>();
+    for (const { upstreamSlug, ...tool } of composioTools) {
       if (claimed.has(tool.name)) continue;
       composioEntries.push(tool);
+      composioRoutes.set(tool.name, upstreamSlug);
     }
 
     const routes = new Map<string, DynamicRoute>();
     for (const tool of mcpEntries) routes.set(tool.name, { kind: "mcp", connector: tool.toolkit });
-    for (const tool of composioEntries) routes.set(tool.name, { kind: "composio" });
+    for (const [name, upstreamSlug] of composioRoutes) {
+      routes.set(name, { kind: "composio", upstreamSlug });
+    }
     return { tools: [...apiEntries, ...mcpEntries, ...composioEntries], routes };
   }
 
@@ -343,11 +343,10 @@ export function createGatewayServer(deps: {
         return withTimeout(() => tool.handler(parsed.data, ctx));
       }
 
-      await managementTools();
-      const route = dynamicRoutes.get(toolName);
+      const route = (await managementTools()).routes.get(toolName);
       if (!route) return { error: "forbidden" };
       if (route.kind === "composio") {
-        return withTimeout(() => composio.execute(toolName, body.input));
+        return withTimeout(() => composio.execute(route.upstreamSlug, body.input));
       }
 
       // MCP tool: no local schema (the upstream server validates); resolve api_key creds, dispatch.
@@ -525,8 +524,12 @@ export function createGatewayServer(deps: {
 
     if (method === "POST" && pathname === "/catalog") return catalog(req);
     if (method === "POST" && pathname === "/invoke") return invoke(req);
-    if (method === "GET" && pathname === "/tools")
+    if (method === "GET" && pathname === "/tools") {
+      if (req.headers.get("x-admin-token") !== adminToken) {
+        return json({ error: "unauthorized" }, 401);
+      }
       return managementTools().then(({ tools }) => json({ tools }));
+    }
     if (method === "GET" && pathname === "/connectors") return json({ connectors: connectors() });
     if (method === "GET" && pathname === "/admin/composio/toolkits") {
       return composioToolkitsRoute(req);

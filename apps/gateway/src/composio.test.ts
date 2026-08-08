@@ -6,7 +6,21 @@ import {
   createComposioService,
 } from "./composio.ts";
 
-function fakeClient(log: string[], options: { redirectUrl?: string | URL } = {}) {
+function fakeClient(
+  log: string[],
+  options: {
+    redirectUrl?: string | URL;
+    toolkitPage?: (input?: { cursor?: string; limit?: number; search?: string }) => {
+      items: {
+        slug: string;
+        name: string;
+        isNoAuth: boolean;
+        connection?: { isActive: boolean };
+      }[];
+      cursor?: string;
+    };
+  } = {},
+) {
   const redirectUrl =
     "redirectUrl" in options ? options.redirectUrl : new URL("https://connect.composio.dev/link/1");
   const tools = [
@@ -31,8 +45,9 @@ function fakeClient(log: string[], options: { redirectUrl?: string | URL } = {})
       async create(userId: string) {
         log.push(`create:${userId}`);
         return {
-          async toolkits(options?: { search?: string }) {
-            log.push(`toolkits:${options?.search ?? ""}`);
+          async toolkits(input?: { cursor?: string; limit?: number; search?: string }) {
+            log.push(`toolkits:${input?.search ?? ""}`);
+            if (options.toolkitPage) return options.toolkitPage(input);
             return {
               items: [
                 { slug: "gmail", name: "Gmail", isNoAuth: false, connection: { isActive: true } },
@@ -113,10 +128,93 @@ test("service lists connected/no-auth tools and recreates the session when the k
   expect(await service.authorize("gmail", "https://gilly.example/callback")).toBe(
     "https://connect.composio.dev/link/1",
   );
-  expect(await service.execute("gmail.send_email", {})).toEqual({ ok: true });
+  expect(await service.execute("GMAIL_SEND_EMAIL", {})).toEqual({ ok: true });
   key = "key-2";
   await service.listTools();
   expect(log.filter((entry) => entry === "create:gilly-shared")).toHaveLength(2);
+});
+
+test("a rejected cached session is cleared so the next call retries", async () => {
+  let attempts = 0;
+  const client = fakeClient([]);
+  const create = client.sessions.create;
+  client.sessions.create = async (userId: string) => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("session failed");
+    return create(userId);
+  };
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () => client,
+  });
+
+  await expect(service.listTools()).rejects.toThrow("session failed");
+  await service.listTools();
+  expect(attempts).toBe(2);
+});
+
+test("a rejected old session does not clear the replacement for a new key", async () => {
+  let key = "old";
+  const oldClient = fakeClient([]);
+  const rejection = { reject: (_error: Error) => {} };
+  oldClient.sessions.create = () =>
+    new Promise((_, reject) => {
+      rejection.reject = reject;
+    });
+  let clients = 0;
+  const service = createComposioService({
+    getApiKey: () => key,
+    userId: "gilly-shared",
+    createClient: (apiKey) => {
+      clients += 1;
+      return apiKey === "old" ? oldClient : fakeClient([]);
+    },
+  });
+
+  const oldRequest = service.listTools();
+  key = "new";
+  await service.listTools();
+  rejection.reject(new Error("old session failed"));
+  await expect(oldRequest).rejects.toThrow("old session failed");
+  await service.listTools();
+  expect(clients).toBe(2);
+});
+
+test("connected toolkit discovery stops on a non-advancing cursor", async () => {
+  let pages = 0;
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: () => {
+          pages += 1;
+          return { items: [], cursor: "same" };
+        },
+      }),
+  });
+
+  expect(await service.listTools()).toEqual([]);
+  expect(pages).toBe(2);
+});
+
+test("connected toolkit discovery has a maximum page count", async () => {
+  let pages = 0;
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: () => {
+          pages += 1;
+          return { items: [], cursor: `page-${pages}` };
+        },
+      }),
+  });
+
+  expect(await service.listTools()).toEqual([]);
+  expect(pages).toBe(100);
 });
 
 test("service reports missing connections distinctly", async () => {
@@ -125,7 +223,7 @@ test("service reports missing connections distinctly", async () => {
     userId: "gilly-shared",
     createClient: () => fakeClient([]),
   });
-  await expect(service.execute("gmail.fail", {})).rejects.toBeInstanceOf(ComposioNotConnectedError);
+  await expect(service.execute("GMAIL_FAIL", {})).rejects.toBeInstanceOf(ComposioNotConnectedError);
 });
 
 test("unconfigured service returns structured toolkit status without creating a client", async () => {

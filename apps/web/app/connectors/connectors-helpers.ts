@@ -71,8 +71,10 @@ export function parseConnectionFeedback(search: string): ConnectionFeedback | nu
   const connected = params.get("connected");
   const status = params.get("status");
   if (!connected && !status) return null;
+  if (connected !== null && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(connected)) return null;
+  if (status !== null && !["success", "connected", "error"].includes(status)) return null;
 
-  const failed = status !== null && status !== "success" && status !== "connected";
+  const failed = status === "error";
   const target = connected ?? "Composio toolkit";
   return failed
     ? { kind: "error", message: `Could not connect ${target} (${status}).` }

@@ -1,6 +1,7 @@
 import { Composio } from "@composio/core";
 
 const TOOLKIT_PAGE_SIZE = 50;
+const TOOLKIT_MAX_PAGES = 100;
 const TOOL_PAGE_SIZE = 1_000;
 
 export type ComposioTool = {
@@ -87,7 +88,7 @@ export interface ComposioService {
   listTools(): Promise<ComposioTool[]>;
   listToolkits(input: { query?: string; cursor?: string }): Promise<ComposioToolkitPage>;
   authorize(slug: string, callbackUrl: string): Promise<string>;
-  execute(name: string, input: unknown): Promise<unknown>;
+  execute(upstreamSlug: string, input: unknown): Promise<unknown>;
 }
 
 export class ComposioNotConfiguredError extends Error {}
@@ -123,7 +124,6 @@ export function createComposioService(deps: {
   let current:
     | { apiKey: string; client: ComposioClient; session: Promise<ComposioSession> }
     | undefined;
-  let toolsByName = new Map<string, ComposioTool>();
 
   function configured(): boolean {
     try {
@@ -143,12 +143,15 @@ export function createComposioService(deps: {
     const key = apiKey();
     if (!current || current.apiKey !== key) {
       const client = createClient(key);
-      current = {
+      const next = {
         apiKey: key,
         client,
         session: client.sessions.create(deps.userId, { manageConnections: false }),
       };
-      toolsByName = new Map();
+      current = next;
+      void next.session.catch(() => {
+        if (current === next) current = undefined;
+      });
     }
     return current;
   }
@@ -157,15 +160,16 @@ export function createComposioService(deps: {
     const session = await state().session;
     const slugs: string[] = [];
     let cursor: string | undefined;
-    do {
+    for (let pageNumber = 0; pageNumber < TOOLKIT_MAX_PAGES; pageNumber += 1) {
       const page = await session.toolkits({ cursor, limit: TOOLKIT_PAGE_SIZE });
       for (const item of page.items) {
         if (!item.slug.startsWith("composio") && (item.isNoAuth || item.connection?.isActive)) {
           slugs.push(item.slug);
         }
       }
+      if (!page.cursor || page.cursor === cursor) break;
       cursor = page.cursor;
-    } while (cursor);
+    }
     return slugs;
   }
 
@@ -200,7 +204,6 @@ export function createComposioService(deps: {
         upstreamSlug: tool.slug,
       });
     }
-    toolsByName = byName;
     return [...byName.values()];
   }
 
@@ -250,17 +253,11 @@ export function createComposioService(deps: {
       }
       return redirect.toString();
     },
-    async execute(name, input) {
-      let tool = toolsByName.get(name);
-      if (!tool) {
-        await listTools();
-        tool = toolsByName.get(name);
-      }
-      if (!tool) throw new ComposioProviderError(`Unknown Composio tool: ${name}`);
+    async execute(upstreamSlug, input) {
       let result: { data?: unknown; error?: unknown };
       try {
         result = await (await state().session).execute(
-          tool.upstreamSlug,
+          upstreamSlug,
           (input as Record<string, unknown>) ?? {},
         );
       } catch (error) {

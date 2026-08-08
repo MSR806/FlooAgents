@@ -28,5 +28,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/connectors/:path*", "/api/composio/:path*", "/api/connectors/:path*"],
+  matcher: ["/connectors/:path*", "/api/tools", "/api/composio/:path*", "/api/connectors/:path*"],
 };

@@ -22,6 +22,7 @@ import type { SkillBundle } from "@gilly/harness-protocol";
 import type { RuntimeProvider, StreamEvent } from "@gilly/runtime";
 
 const RUN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const GATEWAY_DISCOVERY_TIMEOUT_MS = 10_000;
 
 type GatewayToolIdentity = {
   name: string;
@@ -74,6 +75,9 @@ export function createEngine(deps: {
   getSkill?: (name: string) => SkillBundle | undefined;
   /** Tooling gateway base URL; attached only when an agent has exact gateway tools. */
   gatewayUrl?: string;
+  /** Internal token used only for gateway management discovery. */
+  gatewayAdminToken?: string;
+  gatewayDiscoveryTimeoutMs?: number;
   listGatewayTools?: (gatewayUrl: string) => Promise<GatewayToolIdentity[]>;
   /** Max silence between runtime stream events before the run is failed. */
   runIdleTimeoutMs?: number;
@@ -81,10 +85,28 @@ export function createEngine(deps: {
   const { db, runtime, getAgent, gatewayUrl } = deps;
   const getSkill = deps.getSkill ?? (() => undefined);
   const runIdleTimeoutMs = deps.runIdleTimeoutMs ?? RUN_IDLE_TIMEOUT_MS;
-  const listGatewayTools = deps.listGatewayTools ?? fetchGatewayTools;
+  const gatewayDiscoveryTimeoutMs = deps.gatewayDiscoveryTimeoutMs ?? GATEWAY_DISCOVERY_TIMEOUT_MS;
+  const listGatewayTools =
+    deps.listGatewayTools ??
+    ((url: string) => fetchGatewayTools(url, deps.gatewayAdminToken, gatewayDiscoveryTimeoutMs));
 
-  async function fetchGatewayTools(url: string): Promise<GatewayToolIdentity[]> {
-    const response = await fetch(`${url}/tools`);
+  async function fetchGatewayTools(
+    url: string,
+    adminToken: string | undefined,
+    timeoutMs: number,
+  ): Promise<GatewayToolIdentity[]> {
+    if (!adminToken) throw new Error("Gateway admin token is required for tool discovery");
+    const signal = AbortSignal.timeout(timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${url}/tools`, {
+        headers: { "x-admin-token": adminToken },
+        signal,
+      });
+    } catch (error) {
+      if (signal.aborted) throw new Error("Gateway tool discovery timed out");
+      throw error;
+    }
     if (!response.ok)
       throw new Error(`Gateway tool discovery failed with status ${response.status}`);
     const body: unknown = await response.json();
@@ -181,7 +203,7 @@ export function createEngine(deps: {
         gateway = { url: gatewayUrl, token };
       }
       console.log(
-        `[engine] run start run=${runId} agent=${agent.id} session=${sessionId} gatewayTools=${gatewayTools.join(",") || "-"} grants=${grants.join(",") || "-"} input=${JSON.stringify(message.slice(0, 80))}`,
+        `[engine] run start run=${runId} agent=${agent.id} session=${sessionId} gatewayToolCount=${gatewayTools.length} grantCount=${grants.length} inputChars=${message.length}`,
       );
 
       iterator = runtime

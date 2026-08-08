@@ -28,6 +28,7 @@ export function isAdminPath(pathname: string): boolean {
   return (
     pathname === "/connectors" ||
     pathname.startsWith("/connectors/") ||
+    pathname === "/api/tools" ||
     pathname === "/api/composio/toolkits" ||
     pathname.startsWith("/api/composio/toolkits/") ||
     (pathname.startsWith("/api/connectors/") &&

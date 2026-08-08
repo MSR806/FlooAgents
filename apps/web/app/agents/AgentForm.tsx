@@ -76,6 +76,7 @@ export default function AgentForm({
   const [modelStatus, setModelStatus] = useState<"loading" | "ready" | "error">("loading");
   const [allSkills, setAllSkills] = useState<{ name: string; description: string }[]>([]);
   const [allGatewayTools, setAllGatewayTools] = useState<GatewayTool[]>([]);
+  const [gatewayToolError, setGatewayToolError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -98,10 +99,13 @@ export default function AgentForm({
       .then(setAllSkills)
       .catch(() => setAllSkills([]));
     fetch(`${API_BASE}/tools`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        return r.json();
+      })
       .then(parseGatewayTools)
       .then(setAllGatewayTools)
-      .catch(() => setAllGatewayTools([]));
+      .catch(() => setGatewayToolError(true));
   }, []);
 
   const set = <K extends keyof AgentValues>(key: K, value: AgentValues[K]) =>
@@ -248,7 +252,9 @@ export default function AgentForm({
 
       <div className="grid gap-2">
         <Label>Gateway tools</Label>
-        {concreteToolGroups.length === 0 ? (
+        {gatewayToolError ? (
+          <p className="text-xs text-destructive">Failed to load gateway tools.</p>
+        ) : concreteToolGroups.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             No tools available — configure one on the{" "}
             <a href="/connectors" className="underline">

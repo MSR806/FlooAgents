@@ -29,6 +29,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[] | null>(null);
   const [tools, setTools] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [toolError, setToolError] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/users`)
@@ -36,10 +37,13 @@ export default function UsersPage() {
       .then(setUsers)
       .catch(() => setError("Failed to load users"));
     fetch(`${API_BASE}/tools`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        return r.json();
+      })
       .then(parseGatewayTools)
       .then((catalog) => setTools(catalog.map((tool) => tool.name)))
-      .catch(() => setTools([]));
+      .catch(() => setToolError(true));
   }, []);
 
   return (
@@ -47,6 +51,7 @@ export default function UsersPage() {
       <h1 className="mb-4 text-xl font-semibold tracking-tight">Users &amp; Grants</h1>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {toolError ? <p className="text-sm text-destructive">Failed to load gateway tools.</p> : null}
 
       {users === null ? (
         <p className="py-6 text-sm text-muted-foreground">Loading users…</p>

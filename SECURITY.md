@@ -27,8 +27,12 @@ reporting or reviewing:
   tokens, agent context, or the sandbox.
 - **Run-scoped gateway tokens** — opaque, checked per call, expiring with their run.
   Anything that lets a token outlive its run or widen its scope is a vulnerability.
-- **Access resolution** (`apps/gateway/src/access.ts`) — the agent's exact tool allowlist ∩
-  user-grants intersection. A path that reaches a tool without both is a vulnerability.
+- **Access resolution** (`apps/gateway/src/access.ts`) — invocation requires the agent's exact tool
+  allowlist ∩ user-grants intersection. A path that invokes a tool or returns provider data without
+  both is a vulnerability.
+- **Run-scoped catalog metadata** — `/catalog` intentionally exposes names, descriptions, and input
+  schemas for tools in the agent's exact allowlist before user-grant checks. This lets the agent
+  explain and request missing access; `/invoke` and all provider data remain grant-gated.
 - **Composio** — only its project API key belongs in Gilly's vault/environment. Downstream provider
   tokens remain in Composio and must never reach the harness, model, run token, or sandbox.
 - **The agent sandbox** — agent-authored scripts run in the runtime workspace. Escapes,

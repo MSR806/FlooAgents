@@ -248,6 +248,20 @@ test("handle surfaces an unknown agent as an error event", async () => {
 
 const echoWithGatewayTools: AgentConfig = { ...agent, gatewayTools: ["echo.ping"] };
 
+function insertLegacyAgent(db: ReturnType<typeof createDb>) {
+  db.insert(schema.agents)
+    .values({
+      id: "legacy",
+      name: "Legacy",
+      model: "m",
+      systemPrompt: "Old",
+      gatewayTools: null,
+      connectors: JSON.stringify(["echo"]),
+      createdAt: 1,
+    })
+    .run();
+}
+
 /** Fake runtime that captures the InvocationRequest (and resolves any gateway token while live). */
 function capturingRuntime(db: ReturnType<typeof createDb>) {
   const seen: { req?: InvocationRequest; tools?: string[]; grants?: string[] } = {};
@@ -294,37 +308,99 @@ test("mints a gateway token with exact agent tools and user grant patterns", asy
 
 test("migrates legacy connector policy into exact custom gateway tools before minting", async () => {
   const db = createDb(":memory:");
-  db.insert(schema.agents)
-    .values({
-      id: "legacy",
-      name: "Legacy",
-      model: "m",
-      systemPrompt: "Old",
-      gatewayTools: null,
-      connectors: JSON.stringify(["echo"]),
-      createdAt: 1,
-    })
-    .run();
+  insertLegacyAgent(db);
   const user = upsertUserBySlackId(db, { slackUserId: "legacy-admin", name: "Admin" });
   setAdmin(db, user.id, true);
+  const { runtime, seen } = capturingRuntime(db);
+  const discovery = { token: null as string | null };
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      discovery.token = req.headers.get("x-admin-token");
+      return Response.json({
+        tools: [
+          { name: "echo.ping", toolkit: "echo", source: "custom" },
+          { name: "echo.send", toolkit: "echo", source: "composio" },
+        ],
+      });
+    },
+  });
+
+  try {
+    const engine = createEngine({
+      db,
+      runtime,
+      getAgent: (id) => getDbAgent(db, id),
+      gatewayUrl: `http://127.0.0.1:${server.port}`,
+      gatewayAdminToken: "internal-admin",
+    });
+    await collect(
+      engine.stream({ ...baseInput, agentId: "legacy", userMessage: "hi", userId: user.id }),
+    );
+  } finally {
+    server.stop(true);
+  }
+  expect(discovery.token).toBe("internal-admin");
+  expect(seen.tools).toEqual(["echo.ping"]);
+  expect(seen.grants).toEqual(["echo.ping"]);
+  expect(getDbAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+});
+
+test("stalled legacy tool discovery fails the run with a terminal error", async () => {
+  const db = createDb(":memory:");
+  insertLegacyAgent(db);
+  const user = upsertUserBySlackId(db, { slackUserId: "legacy-user", name: "User" });
+  const { runtime, seen } = capturingRuntime(db);
+  const server = Bun.serve({
+    port: 0,
+    fetch: () => new Promise<Response>(() => {}),
+  });
+
+  let got: StreamEvent[] = [];
+  try {
+    const engine = createEngine({
+      db,
+      runtime,
+      getAgent: (id) => getDbAgent(db, id),
+      gatewayUrl: `http://127.0.0.1:${server.port}`,
+      gatewayAdminToken: "internal-admin",
+      gatewayDiscoveryTimeoutMs: 50,
+    });
+    got = await collect(
+      engine.stream({ ...baseInput, agentId: "legacy", userMessage: "hi", userId: user.id }),
+    );
+  } finally {
+    server.stop(true);
+  }
+
+  expect(got).toEqual([{ type: "error", error: "Gateway tool discovery timed out" }]);
+  expect(seen.req).toBeUndefined();
+  const [run] = db.select().from(schema.runs).all();
+  expect(run).toMatchObject({ status: "error", error: "Gateway tool discovery timed out" });
+  expect(listRunSteps(db, run?.id ?? "")).toEqual([
+    { type: "error", error: "Gateway tool discovery timed out" },
+  ]);
+});
+
+test("legacy tool discovery fails closed without an internal admin token", async () => {
+  const db = createDb(":memory:");
+  insertLegacyAgent(db);
+  const user = upsertUserBySlackId(db, { slackUserId: "legacy-no-auth", name: "User" });
   const { runtime, seen } = capturingRuntime(db);
   const engine = createEngine({
     db,
     runtime,
     getAgent: (id) => getDbAgent(db, id),
-    gatewayUrl: "http://gw",
-    listGatewayTools: async () => [
-      { name: "echo.ping", toolkit: "echo", source: "custom" },
-      { name: "echo.send", toolkit: "echo", source: "composio" },
-    ],
+    gatewayUrl: "http://gateway.test",
   });
 
-  await collect(
+  const got = await collect(
     engine.stream({ ...baseInput, agentId: "legacy", userMessage: "hi", userId: user.id }),
   );
-  expect(seen.tools).toEqual(["echo.ping"]);
-  expect(seen.grants).toEqual(["echo.ping"]);
-  expect(getDbAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  expect(got).toEqual([
+    { type: "error", error: "Gateway admin token is required for tool discovery" },
+  ]);
+  expect(seen.req).toBeUndefined();
 });
 
 test("mints a catalog-only gateway token when the user's grants don't match", async () => {

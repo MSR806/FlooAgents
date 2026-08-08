@@ -40,5 +40,12 @@ test("parseConnectionFeedback maps callback parameters", () => {
     kind: "error",
     message: "Could not connect github (error).",
   });
+  expect(parseConnectionFeedback("?connected=google_drive&status=connected")).toEqual({
+    kind: "success",
+    message: "Connected google_drive.",
+  });
+  expect(parseConnectionFeedback("?connected=%3Cscript%3E&status=success")).toBeNull();
+  expect(parseConnectionFeedback(`?connected=${"a".repeat(65)}&status=success`)).toBeNull();
+  expect(parseConnectionFeedback("?connected=github&status=provider+failed")).toBeNull();
   expect(parseConnectionFeedback("")).toBeNull();
 });

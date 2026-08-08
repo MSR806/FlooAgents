@@ -103,7 +103,7 @@ export function gatewayToolGroups(
     .map((value) => ({ value, description: "Unavailable in the current catalog" }));
 
   return [
-    ...groups.entries().map(([label, options]) => ({ label, options })),
+    ...[...groups.entries()].map(([label, options]) => ({ label, options })),
     ...(unavailable.length ? [{ label: "Unavailable", options: unavailable }] : []),
   ];
 }

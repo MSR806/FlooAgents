@@ -216,12 +216,16 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/tools") {
+      const denied = requireAdmin(req);
+      if (denied) return denied;
       if (!gatewayUrl) return json({ tools: [] });
       try {
-        const res = await globalThis.fetch(`${gatewayUrl}/tools`);
+        const res = await globalThis.fetch(`${gatewayUrl}/tools`, {
+          headers: { "x-admin-token": adminToken ?? "" },
+        });
         return json(await res.json(), res.status);
       } catch {
-        return json({ tools: [] });
+        return json({ error: "gateway unavailable" }, 502);
       }
     }
 

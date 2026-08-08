@@ -2,7 +2,7 @@
 
 import { Cable, Search } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,7 @@ export default function ConnectorsPage() {
   const [activeQuery, setActiveQuery] = useState("");
   const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [feedback, setFeedback] = useState<ConnectionFeedback | null>(null);
+  const toolkitRequest = useRef(0);
 
   const loadCustom = useCallback(() => {
     setCustomError(null);
@@ -50,19 +51,24 @@ export default function ConnectorsPage() {
   }, []);
 
   const loadToolkits = useCallback(async (search: string, cursor?: string) => {
+    const request = ++toolkitRequest.current;
     setToolkitLoading(true);
     setToolkitError(null);
     try {
       const response = await fetch(toolkitSearchUrl(API_BASE, search, cursor));
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const page = parseToolkitPage(await response.json());
+      if (request !== toolkitRequest.current) return;
       setConfigured(page.configured);
       setToolkits((current) => (cursor ? [...current, ...page.items] : page.items));
       setNextCursor(page.nextCursor);
+      if (!cursor) setActiveQuery(search);
     } catch {
+      if (request !== toolkitRequest.current) return;
+      setConfigured((current) => current ?? false);
       setToolkitError("Failed to load Composio toolkits");
     } finally {
-      setToolkitLoading(false);
+      if (request === toolkitRequest.current) setToolkitLoading(false);
     }
   }, []);
 
@@ -75,7 +81,6 @@ export default function ConnectorsPage() {
   function search(event: React.FormEvent) {
     event.preventDefault();
     const nextQuery = query.trim();
-    setActiveQuery(nextQuery);
     void loadToolkits(nextQuery);
   }
 

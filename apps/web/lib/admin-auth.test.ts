@@ -11,10 +11,12 @@ test("admin authorization requires the configured password and admin username", 
   expect(isAdminAuthorization(null, "secret")).toBe(false);
 });
 
-test("admin paths cover tool setup without protecting read-only catalogs", () => {
+test("admin paths cover gateway tool setup and its management catalog", () => {
   expect(isAdminPath("/connectors")).toBe(true);
   expect(isAdminPath("/api/composio/toolkits/gmail/connect")).toBe(true);
   expect(isAdminPath("/api/connectors/composio/credentials")).toBe(true);
+  expect(isAdminPath("/api/tools")).toBe(true);
   expect(isAdminPath("/api/connectors")).toBe(false);
-  expect(isAdminPath("/api/tools")).toBe(false);
+  expect(isAdminPath("/api/agents")).toBe(false);
+  expect(isAdminPath("/api/grants")).toBe(false);
 });

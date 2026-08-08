@@ -28,6 +28,9 @@ const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8080";
 const WEB_PORT = Number(process.env.WEB_PORT ?? 4000);
 const GILLY_GATEWAY_URL = process.env.GILLY_GATEWAY_URL;
 const GILLY_ADMIN_TOKEN = process.env.GILLY_ADMIN_TOKEN;
+const GATEWAY_DISCOVERY_TIMEOUT_MS = Number(
+  process.env.GILLY_GATEWAY_DISCOVERY_TIMEOUT_MS ?? 10_000,
+);
 
 const vaultKey = process.env.GILLY_VAULT_KEY;
 if (!vaultKey) throw new Error("GILLY_VAULT_KEY is required (encrypts Slack connection tokens)");
@@ -56,6 +59,8 @@ const engine = createEngine({
   getAgent: (id) => getAgent(db, id),
   getSkill: (name) => skillStore.get(name),
   gatewayUrl: GILLY_GATEWAY_URL,
+  gatewayAdminToken: GILLY_ADMIN_TOKEN,
+  gatewayDiscoveryTimeoutMs: GATEWAY_DISCOVERY_TIMEOUT_MS,
 });
 
 // The Slack manager owns all web-configured connections (started from the DB); it's also handed to

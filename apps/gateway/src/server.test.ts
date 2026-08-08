@@ -144,6 +144,9 @@ const post = (
   body: unknown,
 ) => fetch(new Request(`http://x${path}`, { method: "POST", headers, body: JSON.stringify(body) }));
 
+const getTools = (fetch: ReturnType<typeof createGatewayServer>) =>
+  fetch(new Request("http://x/tools", { headers: { "x-admin-token": ADMIN } }));
+
 type Agent = {
   id: string;
   name: string;
@@ -535,7 +538,8 @@ test("GET /tools unifies custom, connected MCP, and Composio metadata", async ()
   const { db, fetch, vault } = setup([], { mcp: fakeMcp(), composio: fakeComposio() });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
 
-  const res = await fetch(new Request("http://x/tools"));
+  expect((await fetch(new Request("http://x/tools"))).status).toBe(401);
+  const res = await getTools(fetch);
   const body = (await res.json()) as { tools: { name: string; source: string; toolkit: string }[] };
   expect(body.tools).toEqual(
     expect.arrayContaining([
@@ -561,7 +565,7 @@ test("a failing Composio configuration check does not hide custom tools", async 
   };
   const { fetch } = setup([], { composio });
 
-  const response = await fetch(new Request("http://x/tools"));
+  const response = await getTools(fetch);
   expect(response.status).toBe(200);
   const body = (await response.json()) as { tools: { name: string }[] };
   expect(body.tools.some((tool) => tool.name === "echo.ping")).toBe(true);
@@ -583,12 +587,12 @@ test("management discovery shares in-flight work, caches briefly, and invalidate
   });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
 
-  await Promise.all([fetch(new Request("http://x/tools")), fetch(new Request("http://x/tools"))]);
-  await fetch(new Request("http://x/tools"));
+  await Promise.all([getTools(fetch), getTools(fetch)]);
+  await getTools(fetch);
   expect(githubLists).toBe(1);
 
   await Bun.sleep(110);
-  await fetch(new Request("http://x/tools"));
+  await getTools(fetch);
   expect(githubLists).toBe(2);
 
   await fetch(
@@ -598,8 +602,130 @@ test("management discovery shares in-flight work, caches briefly, and invalidate
       body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
     }),
   );
-  await fetch(new Request("http://x/tools"));
+  await getTools(fetch);
   expect(githubLists).toBe(3);
+});
+
+test("dynamic invocation uses its exact discovery across cache invalidation", async () => {
+  let discoveries = 0;
+  let calls = 0;
+  let release = () => {};
+  let markStarted = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const mcp: McpGateway = {
+    async listTools(connector) {
+      if (connector.name !== "github") return [];
+      discoveries += 1;
+      if (discoveries === 1) {
+        markStarted();
+        await gate;
+        return [{ name: "github.create_issue", description: "Create issue" }];
+      }
+      return [];
+    },
+    async callTool() {
+      calls += 1;
+      return { ok: true };
+    },
+  };
+  const { db, fetch, token, vault } = setup(["github.*"], {
+    tools: ["github.create_issue"],
+    mcp,
+    composio: fakeComposio({ configured: false }),
+  });
+  setCredential(db, "github", "github_pat", vault.encrypt("pat"));
+
+  const invocation = post(fetch, "/invoke", auth(token), {
+    tool: "github.create_issue",
+    input: {},
+  });
+  await started;
+  await fetch(
+    new Request("http://x/admin/credentials/github", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
+    }),
+  );
+  release();
+
+  expect(await (await invocation).json()).toEqual({ ok: true });
+  expect(calls).toBe(1);
+  const refreshed = (await (await getTools(fetch)).json()) as { tools: { name: string }[] };
+  expect(refreshed.tools.some((tool) => tool.name === "github.create_issue")).toBe(false);
+});
+
+test("Composio invocation preserves its discovered upstream slug across invalidation", async () => {
+  let discoveries = 0;
+  let release = () => {};
+  let markStarted = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const executed: string[] = [];
+  const composio: ComposioService = {
+    configured: () => true,
+    async listTools() {
+      discoveries += 1;
+      if (discoveries === 1) {
+        markStarted();
+        await gate;
+      }
+      return [
+        {
+          name: "gmail.send_email",
+          description: "Send email",
+          source: "composio",
+          toolkit: "gmail",
+          connected: true,
+          upstreamSlug: discoveries === 1 ? "GMAIL_SEND_EMAIL_OLD" : "GMAIL_SEND_EMAIL_NEW",
+        },
+      ];
+    },
+    async listToolkits() {
+      return { configured: true, items: [] };
+    },
+    async authorize() {
+      return "https://connect.composio.dev/link/1";
+    },
+    async execute(upstreamSlug) {
+      executed.push(upstreamSlug);
+      return { ok: true };
+    },
+  };
+  const { fetch, token } = setup(["gmail.send_email"], { composio });
+
+  const invocation = post(fetch, "/invoke", auth(token), {
+    tool: "gmail.send_email",
+    input: {},
+  });
+  await started;
+  await fetch(
+    new Request("http://x/admin/credentials/composio", {
+      method: "PUT",
+      headers: { "content-type": "application/json", "x-admin-token": ADMIN },
+      body: JSON.stringify({ key: "api_key", value: "new-key" }),
+    }),
+  );
+  release();
+
+  expect(await (await invocation).json()).toEqual({ ok: true });
+  expect(
+    await (
+      await post(fetch, "/invoke", auth(token), { tool: "gmail.send_email", input: {} })
+    ).json(),
+  ).toEqual({
+    ok: true,
+  });
+  expect(executed).toEqual(["GMAIL_SEND_EMAIL_OLD", "GMAIL_SEND_EMAIL_NEW"]);
 });
 
 test("MCP providers discover concurrently with independent deadlines", async () => {
@@ -626,7 +752,7 @@ test("MCP providers discover concurrently with independent deadlines", async () 
   });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
 
-  const res = await fetch(new Request("http://x/tools"));
+  const res = await getTools(fetch);
   const body = (await res.json()) as { tools: { name: string }[] };
   expect(body.tools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining(["github.tool", "jira.tool"]),
@@ -659,7 +785,7 @@ test("removed and unknown dynamic tools never dispatch", async () => {
     composio,
   });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
-  await fetch(new Request("http://x/tools"));
+  await getTools(fetch);
   available = false;
   await fetch(
     new Request("http://x/admin/credentials/github", {
@@ -693,7 +819,7 @@ test("Composio discovery and toolkit routes time out boundedly", async () => {
     input: {},
   });
   expect(await invoke.json()).toEqual({ error: "forbidden" });
-  const tools = await fetch(new Request("http://x/tools"));
+  const tools = await getTools(fetch);
   expect(tools.status).toBe(200);
   const toolkits = await fetch(
     new Request("http://x/admin/composio/toolkits", {
@@ -757,7 +883,7 @@ test("custom tools win canonical-name collisions with Composio", async () => {
     },
   ];
   const { fetch } = setup([], { composio });
-  const res = await fetch(new Request("http://x/tools"));
+  const res = await getTools(fetch);
   const body = (await res.json()) as { tools: { name: string; source: string }[] };
   expect(body.tools.filter((tool) => tool.name === "echo.ping")).toEqual([
     expect.objectContaining({ name: "echo.ping", source: "custom" }),
