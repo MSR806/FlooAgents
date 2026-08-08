@@ -64,9 +64,6 @@ services:
       dockerfile: docker/Dockerfile.web
     depends_on:
       - control-plane
-    env_file:
-      - path: ../apps/web/.env        # admin password and matching GILLY_ADMIN_TOKEN
-        required: false
     environment:
       # Next.js rewrites /api/* to the control-plane over the Docker network.
       API_URL: http://control-plane:4000

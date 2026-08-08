@@ -110,12 +110,11 @@ Create local env files:
 cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
 cp apps/gateway/.env.example apps/gateway/.env
-cp apps/web/.env.example apps/web/.env
 ```
 
 Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY_ADMIN_TOKEN` in
-the control-plane, gateway, and web env files, and set `GILLY_WEB_ADMIN_PASSWORD` for the Tools
-page login (username `admin`). `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
+the control-plane and gateway env files. `HARNESS_URL` is the single endpoint for Claude and OpenAI
+models.
 
 Then run the services you need:
 

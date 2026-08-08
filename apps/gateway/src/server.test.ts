@@ -511,7 +511,7 @@ test("missing token → 401", async () => {
   expect(res.status).toBe(401);
 });
 
-test("admin credentials: no header → 401; with header → stores encrypted", async () => {
+test("admin credentials: no header → 401; with header → atomically stores encrypted values", async () => {
   const { db, fetch } = setup([]);
   const url = "http://x/admin/credentials/github";
   const unauth = await fetch(
@@ -526,12 +526,15 @@ test("admin credentials: no header → 401; with header → stores encrypted", a
     new Request(url, {
       method: "PUT",
       headers: { "x-admin-token": ADMIN, "content-type": "application/json" },
-      body: JSON.stringify({ key: "github_pat", value: "SECRET" }),
+      body: JSON.stringify({
+        credentials: { github_pat: "SECRET", github_secret: "SECOND" },
+      }),
     }),
   );
   expect(await ok.json()).toEqual({ ok: true });
   const stored = getCredential(db, "github");
-  expect(stored[0]?.value).not.toBe("SECRET");
+  expect(stored).toHaveLength(2);
+  expect(stored.every((credential) => !["SECRET", "SECOND"].includes(credential.value))).toBe(true);
 });
 
 test("GET /tools unifies custom, connected MCP, and Composio metadata", async () => {
@@ -891,7 +894,13 @@ test("custom tools win canonical-name collisions with Composio", async () => {
 });
 
 test("Composio admin routes are gated and relay toolkit metadata and auth redirect", async () => {
-  const { fetch } = setup([], { composio: fakeComposio() });
+  const composio = fakeComposio();
+  let callbackUrl = "";
+  composio.authorize = async (_slug, callback) => {
+    callbackUrl = callback;
+    return "https://connect.composio.dev/link/1";
+  };
+  const { fetch } = setup([], { composio });
   const unauthorized = await fetch(new Request("http://x/admin/composio/toolkits"));
   expect(unauthorized.status).toBe(401);
 
@@ -923,6 +932,7 @@ test("Composio admin routes are gated and relay toolkit metadata and auth redire
   );
   expect(connect.status).toBe(302);
   expect(connect.headers.get("location")).toBe("https://connect.composio.dev/link/1");
+  expect(callbackUrl).toBe("http://localhost:3000/connectors?tab=composio&connected=gmail");
 });
 
 test("Composio toolkit route returns structured not configured response", async () => {

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AgentForm, { type AgentValues } from "../AgentForm";
-import { parseAgentValues } from "../agent-form-helpers";
+import { gatewayToolkitNames, parseAgentValues } from "../agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -94,8 +94,8 @@ export default function AgentDetailPage() {
                     href={(skill) => `/skills/${skill}`}
                   />
                   <CapabilityRow
-                    label="Gateway tools"
-                    items={agent.gatewayTools}
+                    label="Gateway toolkits"
+                    items={gatewayToolkitNames(agent.gatewayTools)}
                     empty="None"
                     href={() => "/connectors"}
                   />
