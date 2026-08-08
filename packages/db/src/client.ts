@@ -63,10 +63,12 @@ function migrate(sqlite: Database) {
       status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
     );
   `);
-  addColumn(sqlite, "follow_ups", "ref", "ref TEXT");
-  addColumn(sqlite, "agents", "connectors", "connectors TEXT");
-  addColumn(sqlite, "gateway_tokens", "connectors", "connectors TEXT NOT NULL DEFAULT '[]'");
-  const addedHarnessImage = addColumn(sqlite, "harnesses", "image", "image TEXT");
+  addColumn(sqlite, "follow_ups", "ref", "TEXT");
+  addColumn(sqlite, "agents", "gateway_tools", "TEXT");
+  addColumn(sqlite, "agents", "connectors", "TEXT");
+  addColumn(sqlite, "gateway_tokens", "tools", "TEXT NOT NULL DEFAULT '[]'");
+  addColumn(sqlite, "gateway_tokens", "connectors", "TEXT NOT NULL DEFAULT '[]'");
+  const addedHarnessImage = addColumn(sqlite, "harnesses", "image", "TEXT");
 
   const insertHarness = sqlite.prepare(
     "INSERT OR IGNORE INTO harnesses (id, name, image, enabled, models) VALUES (?, ?, ?, ?, ?)",
@@ -88,19 +90,19 @@ function migrate(sqlite: Database) {
     sqlite,
     "agents",
     "harness_id",
-    "harness_id TEXT NOT NULL DEFAULT 'claude'",
+    "TEXT NOT NULL DEFAULT 'claude'",
   );
-  addColumn(sqlite, "agents", "service_tier", "service_tier TEXT");
+  addColumn(sqlite, "agents", "service_tier", "TEXT");
   if (addedAgentHarness) migrateLegacyAgents(sqlite);
 
-  const addedSessionHarness = addColumn(sqlite, "sessions", "harness_id", "harness_id TEXT");
+  const addedSessionHarness = addColumn(sqlite, "sessions", "harness_id", "TEXT");
   if (addedSessionHarness) migrateLegacySessions(sqlite);
 }
 
 function addColumn(sqlite: Database, table: string, column: string, definition: string): boolean {
   const columns = sqlite.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (columns.some((candidate) => candidate.name === column)) return false;
-  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${definition};`);
+  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition};`);
   return true;
 }
 
@@ -155,7 +157,13 @@ function migrateLegacySessions(sqlite: Database): void {
 /** Open the SQLite store, apply DDL, and return a Drizzle client. */
 export function createDb(path: string) {
   const sqlite = new Database(path, { create: true });
-  sqlite.exec("PRAGMA journal_mode = WAL;");
-  sqlite.transaction(() => migrate(sqlite))();
+  sqlite.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; BEGIN IMMEDIATE;");
+  try {
+    migrate(sqlite);
+    sqlite.exec("COMMIT;");
+  } catch (error) {
+    sqlite.exec("ROLLBACK;");
+    throw error;
+  }
   return drizzle(sqlite, { schema });
 }

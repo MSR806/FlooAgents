@@ -35,19 +35,18 @@ domain available, no trademark or notable OSS collision. Rename lands as one PR
 This is the substance. Without it, launching is launching a diagram.
 
 ### 1. Composio in the tooling gateway  ·  [#8](https://github.com/MSR806/project-gilly/issues/8)
-The gateway already wraps upstream MCP servers ([`gateway.md`](gateway/gateway.md),
-`apps/gateway/src/connectors/`). Composio becomes one more connector — but a
-meta-connector: one integration, ~1000 apps, managed auth. Replaces hand-writing
-`amplitude.ts` / `meta.ts` / `jira.ts` per provider.
+The gateway already wraps custom API and MCP implementations ([`gateway.md`](gateway/gateway.md),
+`apps/gateway/src/connectors/`). Composio becomes another upstream provider behind the same catalog:
+one integration, ~1000 apps, managed auth. It reduces the need to hand-write
+`amplitude.ts` / `meta.ts` / `jira.ts` per provider without becoming agent-visible.
 
-Key questions to settle while building: how Composio toolkits map onto Gilly
-`connectors: [...]` in agent config; whether Composio's auth replaces or sits beside
-the local vault (`apps/gateway/src/vault.ts`); how catalog stays small when 1000 apps
-are reachable (the two-verb surface should absorb this, but verify).
+The provider-neutral catalog contract is owned by [`gateway.md`](gateway/gateway.md); shared
+identity and credential ownership are defined in
+[`connectors-and-auth.md`](gateway/connectors-and-auth.md).
 
-**Done when:** an agent with `"connectors": ["composio"]` can discover and call a
-Gmail or Linear tool it was never explicitly configured for, and the call is traced in
-`tool_calls`.
+**Done when:** an admin authenticates Gmail or Linear from Gilly's Tools UI, its concrete tools join
+the unified catalog, an agent selects one exact tool without knowing its provider, and the call is
+authorized and traced under its canonical Gilly name in `tool_calls`.
 
 ### 2. Git + gh CLI access for agents  ·  [#9](https://github.com/MSR806/project-gilly/issues/9)
 `config/skills/our-repos/SKILL.md` already tells agents to `git clone` — but nothing
@@ -68,7 +67,7 @@ that works". Two clusters:
 - **Tooling skills** — teach the direct-vs-script lane discipline for Composio-era
   tooling (extend `config/skills/tooling/`), plus git/gh workflow conventions.
 - **Agent-builder skills** — the `agent-builder` agent should be able to write a good
-  agent JSON, pick connectors, and scaffold a skill folder unaided.
+  agent JSON, pick exact gateway tools, and scaffold a skill folder unaided.
 
 **Done when:** a fresh install can build a working agent by talking to `agent-builder`,
 with no hand-editing of JSON.

@@ -13,6 +13,8 @@ export const agents = sqliteTable("agents", {
   systemPrompt: text("system_prompt").notNull(),
   tools: text("tools"),
   skills: text("skills"),
+  gatewayTools: text("gateway_tools"),
+  /** Legacy policy read only by the lazy connector-to-tool migration. */
   connectors: text("connectors"),
   createdAt: integer("created_at").notNull(),
 });
@@ -130,6 +132,8 @@ export const gatewayTokens = sqliteTable("gateway_tokens", {
   runId: text("run_id").notNull(),
   userId: text("user_id").notNull(),
   agentId: text("agent_id").notNull(),
+  tools: text("tools").notNull(),
+  /** Legacy column retained for additive migration only. New code ignores it. */
   connectors: text("connectors").notNull(),
   grants: text("grants").notNull(),
   expiresAt: integer("expires_at").notNull(),

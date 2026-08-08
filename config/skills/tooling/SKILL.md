@@ -13,8 +13,9 @@ and you never see a provider's full API. You have exactly two tools:
   filter (e.g. `"ad spend"`). Access is checked when you invoke a tool.
 - **`gateway_invoke({ tool, input })`** — run one tool by name and get its result.
 
-Tools are named `connector.tool` (e.g. `branch.query`, `echo.ping`). If a tool you expect isn't in
-the catalog, its connector is not available to this agent.
+Tools use canonical gateway names (e.g. `branch.query`, `gmail.send_email`, `echo.ping`). Their
+upstream implementation is irrelevant. If a tool you expect isn't in the catalog, that exact tool
+is not attached to this agent.
 
 ## Pick the lane
 

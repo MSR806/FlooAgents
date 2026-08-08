@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { harnessSelection, parseAgentValues, parseHarnessRegistry } from "./agent-form-helpers";
+import {
+  gatewayToolGroups,
+  harnessSelection,
+  parseAgentValues,
+  parseGatewayTools,
+  parseHarnessRegistry,
+} from "./agent-form-helpers";
 
 const registry = [
   {
@@ -42,9 +48,65 @@ test("parseAgentValues accepts nested harness config and rejects flat model resp
     name: "Server name",
     harness: { id: "claude", config: { model: "sonnet" } },
     systemPrompt: "Help.",
+    skills: ["research"],
+    gatewayTools: ["GITHUB_CREATE_ISSUE"],
   };
   expect(parseAgentValues(agent)).toEqual(agent);
   expect(() => parseAgentValues({ ...agent, harness: undefined, model: "sonnet" })).toThrow(
     "Server returned an invalid agent",
   );
+});
+
+test("parseGatewayTools validates and unwraps the tool catalog", () => {
+  const tools = [
+    {
+      name: "GITHUB_CREATE_ISSUE",
+      description: "Create an issue",
+      source: "composio" as const,
+      toolkit: "github",
+      connected: true,
+    },
+  ];
+
+  expect(parseGatewayTools({ tools })).toEqual(tools);
+  expect(() => parseGatewayTools({ tools: [{ ...tools[0], connected: "yes" }] })).toThrow(
+    "Invalid tool catalog",
+  );
+});
+
+test("gatewayToolGroups groups by toolkit and preserves selected unavailable tools", () => {
+  expect(
+    gatewayToolGroups(
+      [
+        {
+          name: "GITHUB_CREATE_ISSUE",
+          description: "Create an issue",
+          source: "composio",
+          toolkit: "github",
+          connected: true,
+        },
+        {
+          name: "custom_search",
+          description: "Search records",
+          source: "custom",
+          toolkit: "internal",
+          connected: false,
+        },
+      ],
+      ["GITHUB_CREATE_ISSUE", "retired_tool"],
+    ),
+  ).toEqual([
+    {
+      label: "github",
+      options: [{ value: "GITHUB_CREATE_ISSUE", description: "Create an issue" }],
+    },
+    {
+      label: "internal",
+      options: [{ value: "custom_search", description: "Search records (not connected)" }],
+    },
+    {
+      label: "Unavailable",
+      options: [{ value: "retired_tool", description: "Unavailable in the current catalog" }],
+    },
+  ]);
 });

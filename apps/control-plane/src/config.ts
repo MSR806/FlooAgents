@@ -4,29 +4,34 @@ import { AgentConfig, isDeferredOpenModel, normalizeLegacyHarness } from "@gilly
 import { type Db, getAgent, getHarness, syncAgent, updateHarness } from "@gilly/db";
 import type { SkillBundle } from "@gilly/harness-protocol";
 import { Glob } from "bun";
+import { z } from "zod";
+
+const AgentFileConfig = AgentConfig.extend({ connectors: z.array(z.string()).optional() });
+type AgentFileConfig = z.infer<typeof AgentFileConfig>;
+const LegacyAgentFileConfig = AgentFileConfig.omit({ harness: true }).extend({
+  model: AgentConfig.shape.harness.shape.config.shape.model,
+});
 
 /** Load every `*.json` agent config in `dir`, keyed by id. Throws on invalid or empty. */
 export function loadAgents(
   dir: string,
   onLegacy: (agent: AgentConfig) => void = () => {},
-): Map<string, AgentConfig> {
+): Map<string, AgentFileConfig> {
   const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
-  const agents = new Map<string, AgentConfig>();
+  const agents = new Map<string, AgentFileConfig>();
   for (const file of files) {
     const path = join(dir, file);
-    let agent: AgentConfig;
+    let agent: AgentFileConfig;
     try {
       const value = JSON.parse(readFileSync(path, "utf8"));
-      const current = AgentConfig.safeParse(value);
+      const current = AgentFileConfig.safeParse(value);
       if (current.success) {
         agent = current.data;
       } else {
-        const legacy = AgentConfig.omit({ harness: true })
-          .extend({ model: AgentConfig.shape.harness.shape.config.shape.model })
-          .safeParse(value);
+        const legacy = LegacyAgentFileConfig.safeParse(value);
         if (!legacy.success) throw current.error;
         const { model, ...fields } = legacy.data;
-        agent = AgentConfig.parse({ ...fields, harness: normalizeLegacyHarness(model) });
+        agent = AgentFileConfig.parse({ ...fields, harness: normalizeLegacyHarness(model) });
         console.warn(`[config] legacy agent model normalized in memory: ${path}`);
         onLegacy(agent);
       }
@@ -73,9 +78,12 @@ export function loadSkills(dir: string): Map<string, SkillBundle> {
  */
 export function syncAgents(db: Db, agentsDir: string): void {
   const legacy = new Set<string>();
-  for (const agent of loadAgents(agentsDir, (item) => legacy.add(item.id)).values()) {
+  for (const loaded of loadAgents(agentsDir, (item) => legacy.add(item.id)).values()) {
+    const { connectors, ...agent } = loaded;
     if (legacy.has(agent.id) && !getAgent(db, agent.id)) preserveLegacyFileModel(db, agent);
-    syncAgent(db, agent);
+    syncAgent(db, agent, {
+      legacyConnectors: agent.gatewayTools === undefined ? connectors : undefined,
+    });
   }
 }
 

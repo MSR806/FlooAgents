@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentConfig, SlackConnection } from "@gilly/core";
+import { eq } from "drizzle-orm";
 import { createDb } from "./client.ts";
 import {
   addGrant,
@@ -20,6 +21,7 @@ import {
   getCredential,
   getGatewayToken,
   getHarness,
+  getLegacyAgentConnectors,
   getOrCreateSession,
   getRun,
   getSessionBySourceKey,
@@ -32,14 +34,17 @@ import {
   listRuns,
   listSessions,
   listSlackConnections,
+  migrateLegacyAgentTools,
   setCredential,
   setHarnessSession,
   setSlackConnectionStatus,
+  syncAgent,
   updateAgent,
   updateHarness,
   updateSlackConnection,
   upsertUserBySlackId,
 } from "./repo.ts";
+import { agents, gatewayTokens } from "./schema.ts";
 
 const freshDb = () => createDb(":memory:");
 const seed = { agentId: "a", source: "slack", sourceKey: "C1:1.0" };
@@ -132,6 +137,15 @@ test("agent update preserves explicitly supplied harness settings", () => {
     id: "codex",
     config: { model: "gpt-5.2", serviceTier: "fast" },
   });
+});
+
+test("syncAgent bypasses live registry validation while preserving gateway policy", () => {
+  const db = freshDb();
+  const claude = getHarness(db, "claude");
+  updateHarness(db, "claude", { ...(claude as NonNullable<typeof claude>), enabled: false });
+  syncAgent(db, agentCfg, { legacyConnectors: ["echo"] });
+  expect(getAgent(db, agentCfg.id)).toEqual(agentCfg);
+  expect(getLegacyAgentConnectors(db, agentCfg.id)).toEqual(["echo"]);
 });
 
 test("getOrCreateSession is idempotent on sourceKey", () => {
@@ -275,24 +289,79 @@ test("createGatewayToken → getGatewayToken → deleteGatewayTokensForRun", () 
     runId: "run1",
     userId: "u1",
     agentId: "a1",
-    connectors: ["gmail", "branch"],
+    tools: ["gmail.send_email", "branch.query"],
     grants: ["gmail.*", "branch.query"],
     ttlMs: 60_000,
   });
   const row = getGatewayToken(db, token);
   expect(row?.runId).toBe("run1");
-  expect(row?.connectors).toEqual(["gmail", "branch"]);
+  expect(row?.tools).toEqual(["gmail.send_email", "branch.query"]);
   expect(row?.grants).toEqual(["gmail.*", "branch.query"]);
   deleteGatewayTokensForRun(db, "run1");
   expect(getGatewayToken(db, token)).toBeUndefined();
 });
 
-test("agent with connectors round-trips through get/update", () => {
+test("agent gateway tools round-trip through get/update", () => {
   const db = freshDb();
-  createAgent(db, { ...agentCfg, connectors: ["branch"] });
-  expect(getAgent(db, "coder")?.connectors).toEqual(["branch"]);
-  updateAgent(db, "coder", { ...agentCfg, connectors: ["branch", "gmail"] });
-  expect(getAgent(db, "coder")?.connectors).toEqual(["branch", "gmail"]);
+  createAgent(db, { ...agentCfg, gatewayTools: ["branch.query"] });
+  expect(getAgent(db, "coder")?.gatewayTools).toEqual(["branch.query"]);
+  updateAgent(db, "coder", {
+    ...agentCfg,
+    gatewayTools: ["branch.query", "gmail.send_email"],
+  });
+  expect(getAgent(db, "coder")?.gatewayTools).toEqual(["branch.query", "gmail.send_email"]);
+});
+
+test("legacy connectors migrate only from the custom catalog and edits retire the fallback", () => {
+  const db = freshDb();
+  db.insert(agents)
+    .values({
+      id: "legacy",
+      name: "Legacy",
+      model: claudeHarness.config.model,
+      harnessId: claudeHarness.id,
+      systemPrompt: "Old config",
+      gatewayTools: null,
+      connectors: JSON.stringify(["echo"]),
+      createdAt: 1,
+    })
+    .run();
+  expect(
+    migrateLegacyAgentTools(db, "legacy", [
+      { name: "echo.ping", toolkit: "echo", source: "custom" },
+      { name: "echo.send", toolkit: "echo", source: "composio" },
+    ]),
+  ).toEqual(["echo.ping"]);
+  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
+
+  db.update(agents)
+    .set({ connectors: JSON.stringify(["echo"]) })
+    .where(eq(agents.id, "legacy"))
+    .run();
+  updateAgent(db, "legacy", {
+    id: "legacy",
+    name: "Legacy",
+    harness: claudeHarness,
+    systemPrompt: "Edited config",
+    gatewayTools: ["echo.ping"],
+  });
+  expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
+
+  db.insert(gatewayTokens)
+    .values({
+      token: "legacy-token",
+      runId: "run",
+      userId: "user",
+      agentId: "legacy",
+      tools: "[]",
+      connectors: JSON.stringify(["echo"]),
+      grants: JSON.stringify(["echo.*"]),
+      expiresAt: Date.now() + 60_000,
+      createdAt: Date.now(),
+    })
+    .run();
+  expect(getGatewayToken(db, "legacy-token")?.tools).toEqual([]);
 });
 
 // --- Slack connections -------------------------------------------------------

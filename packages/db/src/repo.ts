@@ -31,6 +31,7 @@ const now = () => Date.now();
 // --- Agents: config, mutable at runtime via the management API ---------------
 
 type AgentRow = typeof agents.$inferSelect;
+type AgentWriteOptions = { legacyConnectors?: readonly string[] };
 
 /** Parse a stored row back into a validated `AgentConfig` (JSON arrays + Zod check). */
 function rowToAgent(row: AgentRow): AgentConfig {
@@ -47,12 +48,12 @@ function rowToAgent(row: AgentRow): AgentConfig {
     systemPrompt: row.systemPrompt,
     tools: row.tools ? JSON.parse(row.tools) : undefined,
     skills: row.skills ? JSON.parse(row.skills) : undefined,
-    connectors: row.connectors ? JSON.parse(row.connectors) : undefined,
+    gatewayTools: row.gatewayTools ? JSON.parse(row.gatewayTools) : undefined,
   });
 }
 
 /** Validate config and shape it for storage (arrays → JSON text, empty → null). */
-function agentToRow(cfg: AgentConfig): AgentRow {
+function agentToRow(cfg: AgentConfig, options: AgentWriteOptions = {}): AgentRow {
   const a = AgentConfig.parse(cfg);
   return {
     id: a.id,
@@ -63,7 +64,8 @@ function agentToRow(cfg: AgentConfig): AgentRow {
     systemPrompt: a.systemPrompt,
     tools: a.tools?.length ? JSON.stringify(a.tools) : null,
     skills: a.skills?.length ? JSON.stringify(a.skills) : null,
-    connectors: a.connectors?.length ? JSON.stringify(a.connectors) : null,
+    gatewayTools: a.gatewayTools?.length ? JSON.stringify(a.gatewayTools) : null,
+    connectors: options.legacyConnectors?.length ? JSON.stringify(options.legacyConnectors) : null,
     createdAt: now(),
   };
 }
@@ -84,33 +86,42 @@ export function getAgent(db: Db, id: string): AgentConfig | undefined {
 }
 
 /** Insert a new agent. Throws if the id already exists. */
-export function createAgent(db: Db, cfg: AgentConfig): AgentConfig {
+export function createAgent(
+  db: Db,
+  cfg: AgentConfig,
+  options: AgentWriteOptions = {},
+): AgentConfig {
   if (getAgent(db, cfg.id)) throw new Error(`Agent "${cfg.id}" already exists`);
   const agent = AgentConfig.parse(cfg);
   validateAgentHarness(db, agent);
-  db.insert(agents).values(agentToRow(agent)).run();
+  db.insert(agents).values(agentToRow(agent, options)).run();
   return agent;
 }
 
 /** Replace an existing agent's config (id is immutable). Throws if it doesn't exist. */
-export function updateAgent(db: Db, id: string, cfg: AgentConfig): AgentConfig {
+export function updateAgent(
+  db: Db,
+  id: string,
+  cfg: AgentConfig,
+  options: AgentWriteOptions = {},
+): AgentConfig {
   if (!getAgent(db, id)) throw new Error(`Agent "${id}" not found`);
   const agent = AgentConfig.parse({ ...cfg, id });
   validateAgentHarness(db, agent);
-  replaceAgent(db, id, agent);
+  replaceAgent(db, id, agent, options);
   return agent;
 }
 
 /** Boot-only file sync: persist schema-valid config even if its live harness is unavailable. */
-export function syncAgent(db: Db, cfg: AgentConfig): AgentConfig {
+export function syncAgent(db: Db, cfg: AgentConfig, options: AgentWriteOptions = {}): AgentConfig {
   const agent = AgentConfig.parse(cfg);
-  if (getAgent(db, agent.id)) replaceAgent(db, agent.id, agent);
-  else db.insert(agents).values(agentToRow(agent)).run();
+  if (getAgent(db, agent.id)) replaceAgent(db, agent.id, agent, options);
+  else db.insert(agents).values(agentToRow(agent, options)).run();
   return agent;
 }
 
-function replaceAgent(db: Db, id: string, agent: AgentConfig): void {
-  const row = agentToRow(agent);
+function replaceAgent(db: Db, id: string, agent: AgentConfig, options: AgentWriteOptions): void {
+  const row = agentToRow(agent, options);
   db.update(agents)
     .set({
       name: row.name,
@@ -120,10 +131,73 @@ function replaceAgent(db: Db, id: string, agent: AgentConfig): void {
       systemPrompt: row.systemPrompt,
       tools: row.tools,
       skills: row.skills,
+      gatewayTools: row.gatewayTools,
       connectors: row.connectors,
     })
     .where(eq(agents.id, id))
     .run();
+}
+
+type GatewayToolIdentity = {
+  name: string;
+  toolkit: string;
+  source: "custom" | "composio";
+};
+
+function storedStrings(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getLegacyAgentConnectors(db: Db, agentId: string): string[] {
+  const row = db
+    .select({ connectors: agents.connectors })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  return storedStrings(row?.connectors ?? null);
+}
+
+export function migrateLegacyAgentTools(
+  db: Db,
+  agentId: string,
+  catalog: readonly GatewayToolIdentity[],
+): string[] {
+  const row = db
+    .select({ connectors: agents.connectors, gatewayTools: agents.gatewayTools })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  if (!row) return [];
+
+  const legacy = storedStrings(row.connectors);
+  const existing = storedStrings(row.gatewayTools);
+  const customTools = catalog.filter((tool) => tool.source === "custom");
+  const resolved = new Set(
+    legacy.filter((connector) => customTools.some((tool) => tool.toolkit === connector)),
+  );
+  if (resolved.size === 0) return existing;
+
+  const tools = [
+    ...new Set([
+      ...existing,
+      ...customTools.filter((tool) => resolved.has(tool.toolkit)).map((tool) => tool.name),
+    ]),
+  ];
+  const remaining = legacy.filter((connector) => !resolved.has(connector));
+  db.update(agents)
+    .set({
+      gatewayTools: tools.length ? JSON.stringify(tools) : null,
+      connectors: remaining.length ? JSON.stringify(remaining) : null,
+    })
+    .where(eq(agents.id, agentId))
+    .run();
+  return tools;
 }
 
 export function deleteAgent(db: Db, id: string): void {
@@ -494,14 +568,14 @@ export function insertToolCall(
 
 type GatewayTokenRow = typeof gatewayTokens.$inferSelect;
 
-/** Mint an opaque token carrying catalog connectors and invocation grants. */
+/** Mint an opaque token carrying exact agent tools and user invocation grants. */
 export function createGatewayToken(
   db: Db,
   input: {
     runId: string;
     userId: string;
     agentId: string;
-    connectors: string[];
+    tools: string[];
     grants: string[];
     ttlMs: number;
   },
@@ -513,7 +587,8 @@ export function createGatewayToken(
       runId: input.runId,
       userId: input.userId,
       agentId: input.agentId,
-      connectors: JSON.stringify(input.connectors),
+      tools: JSON.stringify(input.tools),
+      connectors: "[]",
       grants: JSON.stringify(input.grants),
       expiresAt: now() + input.ttlMs,
       createdAt: now(),
@@ -527,8 +602,8 @@ export function getGatewayToken(
   db: Db,
   token: string,
 ):
-  | (Omit<GatewayTokenRow, "connectors" | "grants"> & {
-      connectors: string[];
+  | (Omit<GatewayTokenRow, "tools" | "connectors" | "grants"> & {
+      tools: string[];
       grants: string[];
     })
   | undefined {
@@ -536,7 +611,7 @@ export function getGatewayToken(
   return row
     ? {
         ...row,
-        connectors: JSON.parse(row.connectors),
+        tools: JSON.parse(row.tools),
         grants: JSON.parse(row.grants),
       }
     : undefined;
