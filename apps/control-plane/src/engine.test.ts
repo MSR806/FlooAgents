@@ -450,3 +450,54 @@ test("follow-ups queued mid-run are answered as one combined batch", async () =>
     { refs: ["ts2", "ts3"], message: "msg2\n\nmsg3" },
   ]);
 });
+
+test("queued follow-ups use the agent's latest harness", async () => {
+  const db = createDb(":memory:");
+  const session = getOrCreateSession(db, baseInput);
+  const requests: InvocationRequest[] = [];
+  let currentAgent = agent;
+  const runtime: RuntimeProvider = {
+    name: "fake",
+    async invoke() {
+      return { status: "completed", finalText: "", harnessSessionId: null, error: null };
+    },
+    async *invokeStream(req) {
+      requests.push(req);
+      if (requests.length === 1) {
+        enqueueFollowUp(db, session.id, "follow-up", "ts2");
+        currentAgent = {
+          ...agent,
+          harness: { id: "codex", config: { model: "gpt-5.2" } },
+        };
+      }
+      yield {
+        type: "done",
+        finalText: "done",
+        harnessSessionId: requests.length === 1 ? "claude-session" : "codex-session",
+      };
+    },
+    async healthy() {
+      return true;
+    },
+  };
+  const engine = createEngine({
+    db,
+    runtime,
+    getAgent: (id) => (id === "echo" ? currentAgent : undefined),
+  });
+
+  await engine.handle({
+    ...baseInput,
+    userMessage: "first",
+    ref: "ts1",
+    run: async ({ events }) => {
+      await collect(events);
+    },
+  });
+
+  expect(requests.map(({ agent: requestAgent }) => requestAgent.harness.id)).toEqual([
+    "claude",
+    "codex",
+  ]);
+  expect(requests[1]?.resumeSessionId).toBeUndefined();
+});

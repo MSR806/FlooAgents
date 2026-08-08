@@ -288,7 +288,7 @@ export function createEngine(deps: {
    * stream the channel renders; the Run is created eagerly so the active-run guard is reliable.
    */
   async function handle(input: HandleInput): Promise<{ queued: boolean }> {
-    const agent = getAgent(input.agentId);
+    let agent = getAgent(input.agentId);
     if (!agent) {
       await input.run({
         refs: input.ref ? [input.ref] : [],
@@ -342,6 +342,26 @@ export function createEngine(deps: {
       raw = batch.map((b) => b.input).join("\n\n");
       composed = raw;
       refs = batch.map((b) => b.ref).filter((r): r is string => r !== null);
+
+      agent = getAgent(input.agentId);
+      if (!agent) {
+        await input.run({
+          refs,
+          message: raw,
+          events: oneError(`Unknown agent: ${input.agentId}`),
+        });
+        break;
+      }
+      try {
+        validateAgentHarness(db, agent);
+      } catch (error) {
+        await input.run({
+          refs,
+          message: raw,
+          events: oneError(error instanceof Error ? error.message : String(error)),
+        });
+        break;
+      }
     }
     return { queued: false };
   }
