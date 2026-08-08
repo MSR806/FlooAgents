@@ -440,7 +440,9 @@ function CredentialModal({
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            credentials: Object.fromEntries(credentials.map((key) => [key, values[key]])),
+            credentials: Object.fromEntries(
+              credentials.map((key) => [key, values[key]?.trim() ?? ""]),
+            ),
           }),
         },
       );

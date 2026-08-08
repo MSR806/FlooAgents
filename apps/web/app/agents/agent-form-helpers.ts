@@ -122,9 +122,13 @@ export function toggleGatewayToolkit(
   return [...next];
 }
 
-/** Collapse exact gateway tool names to their canonical toolkit prefixes for display. */
-export function gatewayToolkitNames(tools: readonly string[] = []): string[] {
-  return [...new Set(tools.map((tool) => tool.split(".")[0] || tool))];
+/** Collapse exact gateway tool names to catalog toolkits, with a prefix fallback for unavailable tools. */
+export function gatewayToolkitNames(
+  tools: readonly string[] = [],
+  catalog: readonly GatewayTool[] = [],
+): string[] {
+  const toolkitByTool = new Map(catalog.map((tool) => [tool.name, tool.toolkit]));
+  return [...new Set(tools.map((tool) => toolkitByTool.get(tool) ?? (tool.split(".")[0] || tool)))];
 }
 
 /** Validate the successful create/update response before reflecting server-owned values in the UI. */

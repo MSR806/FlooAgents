@@ -512,12 +512,12 @@ test("missing token → 401", async () => {
 });
 
 test("admin credentials: no header → 401; with header → atomically stores encrypted values", async () => {
-  const { db, fetch } = setup([]);
-  const url = "http://x/admin/credentials/github";
+  const { db, fetch, vault } = setup([]);
+  const url = "http://x/admin/credentials/branch";
   const unauth = await fetch(
     new Request(url, {
       method: "PUT",
-      body: JSON.stringify({ key: "github_pat", value: "SECRET" }),
+      body: JSON.stringify({ key: "branch_key", value: "SECRET" }),
     }),
   );
   expect(unauth.status).toBe(401);
@@ -527,14 +527,65 @@ test("admin credentials: no header → 401; with header → atomically stores en
       method: "PUT",
       headers: { "x-admin-token": ADMIN, "content-type": "application/json" },
       body: JSON.stringify({
-        credentials: { github_pat: "SECRET", github_secret: "SECOND" },
+        credentials: { branch_key: "SECRET", branch_secret: "SECOND" },
       }),
     }),
   );
   expect(await ok.json()).toEqual({ ok: true });
-  const stored = getCredential(db, "github");
+  const stored = getCredential(db, "branch");
   expect(stored).toHaveLength(2);
-  expect(stored.every((credential) => !["SECRET", "SECOND"].includes(credential.value))).toBe(true);
+  expect(
+    Object.fromEntries(
+      stored.map((credential) => [credential.key, vault.decrypt(credential.value)]),
+    ),
+  ).toEqual({
+    branch_key: "SECRET",
+    branch_secret: "SECOND",
+  });
+});
+
+const invalidCredentialPayloads: [string, unknown][] = [
+  ["a string", "SECRET"],
+  ["null", null],
+  ["an array", ["SECRET"]],
+  ["an empty object", {}],
+  ["a non-string value", { github_pat: 42 }],
+  ["an unknown key", { unknown: "SECRET" }],
+  [
+    "too many entries",
+    Object.fromEntries(Array.from({ length: 17 }, (_, index) => [`key_${index}`, "SECRET"])),
+  ],
+  ["an oversized value", { github_pat: "x".repeat(64 * 1024 + 1) }],
+];
+
+for (const [label, credentials] of invalidCredentialPayloads) {
+  test(`admin credentials reject ${label}`, async () => {
+    const { db, fetch } = setup([]);
+    const response = await fetch(
+      new Request("http://x/admin/credentials/github", {
+        method: "PUT",
+        headers: { "x-admin-token": ADMIN, "content-type": "application/json" },
+        body: JSON.stringify({ credentials }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(getCredential(db, "github")).toEqual([]);
+  });
+}
+
+test("admin credentials reject unknown providers", async () => {
+  const { db, fetch } = setup([]);
+  const response = await fetch(
+    new Request("http://x/admin/credentials/unknown", {
+      method: "PUT",
+      headers: { "x-admin-token": ADMIN, "content-type": "application/json" },
+      body: JSON.stringify({ credentials: { github_pat: "SECRET" } }),
+    }),
+  );
+
+  expect(response.status).toBe(404);
+  expect(getCredential(db, "unknown")).toEqual([]);
 });
 
 test("GET /tools unifies custom, connected MCP, and Composio metadata", async () => {
@@ -712,10 +763,10 @@ test("Composio invocation preserves its discovered upstream slug across invalida
   });
   await started;
   await fetch(
-    new Request("http://x/admin/credentials/composio", {
+    new Request("http://x/admin/credentials/github", {
       method: "PUT",
       headers: { "content-type": "application/json", "x-admin-token": ADMIN },
-      body: JSON.stringify({ key: "api_key", value: "new-key" }),
+      body: JSON.stringify({ key: "github_pat", value: "new-pat" }),
     }),
   );
   release();

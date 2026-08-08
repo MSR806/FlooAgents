@@ -116,6 +116,11 @@ Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY
 the control-plane and gateway env files. `HARNESS_URL` is the single endpoint for Claude and OpenAI
 models.
 
+The web management surface and control-plane API do not currently enforce browser authentication.
+Keep them on localhost or a trusted private network; never expose them directly to the public
+internet. Docker binds published ports to loopback by default. Set `GILLY_BIND_ADDRESS` to a trusted
+private interface address only when LAN access is required.
+
 Then run the services you need:
 
 ```bash

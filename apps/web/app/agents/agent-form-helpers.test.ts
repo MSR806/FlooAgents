@@ -168,3 +168,26 @@ test("gatewayToolkitNames shows one entry per exact-tool prefix", () => {
     gatewayToolkitNames(["echo.ping", "gmail.send_email", "gmail.create_draft", "legacy_tool"]),
   ).toEqual(["echo", "gmail", "legacy_tool"]);
 });
+
+test("gatewayToolkitNames uses catalog metadata for underscore-formatted tools", () => {
+  const catalog = [
+    {
+      name: "GITHUB_CREATE_ISSUE",
+      description: "Create an issue",
+      source: "composio" as const,
+      toolkit: "github",
+      connected: true,
+    },
+    {
+      name: "GITHUB_GET_ISSUE",
+      description: "Get an issue",
+      source: "composio" as const,
+      toolkit: "github",
+      connected: true,
+    },
+  ];
+
+  expect(gatewayToolkitNames(["GITHUB_CREATE_ISSUE", "GITHUB_GET_ISSUE"], catalog)).toEqual([
+    "github",
+  ]);
+});

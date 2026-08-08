@@ -29,6 +29,8 @@ const TIMEOUT_MS = 30_000;
 // (and the agent turn waiting on it) forever. A timeout is treated like a down provider — skipped.
 const CATALOG_TIMEOUT_MS = 10_000;
 const MANAGEMENT_TOOLS_TTL_MS = 5_000;
+const MAX_CREDENTIAL_ENTRIES = 16;
+const MAX_CREDENTIAL_VALUE_LENGTH = 64 * 1024;
 
 /** Race a promise against a timeout; rejects with `reason` if it doesn't settle in time. */
 function withDeadline<T>(promise: Promise<T>, ms: number, reason: string): Promise<T> {
@@ -384,6 +386,8 @@ export function createGatewayServer(deps: {
   function credentialsRoute(req: Request, provider: string): Promise<Response> | Response {
     if (req.headers.get("x-admin-token") !== adminToken)
       return json({ error: "unauthorized" }, 401);
+    const connector = connectorMeta().find((item) => item.name === provider);
+    if (connector?.auth !== "api_key") return json({ error: "not found" }, 404);
     return (async () => {
       const body = ((await readJson(req)) ?? {}) as {
         key?: string;
@@ -413,12 +417,22 @@ export function createGatewayServer(deps: {
         }
         values = { [body.key]: body.value };
       }
+      const entries = Object.entries(values);
+      if (
+        entries.length > MAX_CREDENTIAL_ENTRIES ||
+        entries.some(
+          ([key, value]) =>
+            !connector.requiredCreds.includes(key) ||
+            value.length === 0 ||
+            value.length > MAX_CREDENTIAL_VALUE_LENGTH,
+        )
+      ) {
+        return json({ error: "invalid credentials" }, 400);
+      }
       setCredentials(
         db,
         provider,
-        Object.fromEntries(
-          Object.entries(values).map(([key, value]) => [key, vault.encrypt(value)]),
-        ),
+        Object.fromEntries(entries.map(([key, value]) => [key, vault.encrypt(value)])),
       );
       invalidateManagementTools();
       return json({ ok: true });
