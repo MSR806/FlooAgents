@@ -1,8 +1,8 @@
 # Project Gilly — Tooling Gateway
 
-**The gateway is the one door for every external and internal tool call. Credentials live here, access is resolved here, every call is traced here — and agents call tools programmatically, so large data never flows through model context.**
+**The gateway is the one door for every external and internal tool call. Credential and access boundaries are enforced here, every call is traced here — and agents call tools programmatically, so large data never flows through model context.**
 
-Agents today have only workspace tools (Read/Write/Bash). Connecting services the obvious way — one MCP server per provider, wired straight into the agent — breaks down fast: too many tools with huge schemas bloat every prompt, and chaining tool A's output into tool B forces the model to copy large payloads through its own context. The gateway fixes both: the model sees exactly two tools, and multi-step work runs as code inside the workspace sandbox.
+Without the gateway, agents have only workspace tools (Read/Write/Bash). Connecting services the obvious way — one MCP server per provider, wired straight into the agent — breaks down fast: too many tools with huge schemas bloat every prompt, and chaining tool A's output into tool B forces the model to copy large payloads through its own context. The gateway fixes both: the model sees exactly two tools, and multi-step work runs as code inside the workspace sandbox.
 
 ---
 
@@ -12,7 +12,7 @@ Agents today have only workspace tools (Read/Write/Bash). Connecting services th
 Control Plane   →  mints a run-scoped gateway token, passes it in the InvocationRequest
    Harness      →  exposes the gateway to the agent (two MCP tools + env vars)
    Runtime      →  the sandbox where agent-written scripts execute
-   Gateway      →  registry + access resolution + credential vault + tracing   [new service: apps/gateway]
+   Gateway      →  registry + access resolution + credential vault + tracing   [apps/gateway]
 ```
 
 The gateway is a peer service, not part of the harness. The harness never holds provider credentials; the sandbox never sees them.
@@ -45,7 +45,8 @@ A skill teaches the agent which lane to pick. Composite capabilities (e.g. "comp
 
 ## Tool Contract
 
-Every tool — external REST, external MCP, or internal service — is defined the same way:
+Every custom or discovered tool is normalized to the same catalog shape: canonical name,
+description, input schema, and invocation route. Custom API tools use `defineTool`:
 
 ```typescript
 defineTool({
@@ -57,7 +58,7 @@ defineTool({
 });
 ```
 
-A **connector** is a file in `apps/gateway/src/connectors/` grouping one provider's tools (`amplitude.ts`, `branch.ts`, `meta.ts`, or an internal service). How connectors declare transport, auth, and credential scope is locked in [`connectors-and-auth.md`](connectors-and-auth.md). Upstream MCP servers are wrapped: the gateway is the MCP client and re-exposes their tools through the same registry, so the agent-facing surface is uniform. Connectors are compiled into the gateway — no plugin loading, no per-connector packages; git is the version history.
+A custom **connector** is a file in `apps/gateway/src/connectors/` grouping one provider's tools (`amplitude.ts`, `branch.ts`, `meta.ts`, or an internal service). Dynamic MCP and Composio tools are discovered and mapped into the same catalog contract instead of being authored with `defineTool`. How custom connectors declare transport, auth, and credential scope is locked in [`connectors-and-auth.md`](connectors-and-auth.md). Upstream MCP servers are wrapped: the gateway is the MCP client and re-exposes their tools through the same registry, so the agent-facing surface is uniform. Custom connectors are compiled into the gateway — no plugin loading, no per-connector packages; git is the version history.
 
 Two small packages carry the contract:
 
@@ -79,9 +80,11 @@ Invoke errors form a closed set: `user_missing_grant` (stop and inform the user)
 
 ## Credentials
 
-A `credentials` table in the existing SQLite: `(provider, key, value)` — single tenant, so one credential per provider, configured once by an admin and shared by everyone the grants allow. Values are encrypted at rest with a master key from env (`GILLY_VAULT_KEY`, AES-GCM); losing the key means re-entering credentials, which is acceptable at this scale. The gateway resolves a tool's declared `creds` from the vault at invocation time and injects them into `ctx`. Credentials never appear in tool output, tokens, or the sandbox.
+A `credentials` table in the existing SQLite: `(provider, key, value)` — single tenant, so one credential per provider, configured once by an admin and shared by everyone the grants allow. Values are encrypted at rest with a master key from env (`GILLY_VAULT_KEY`, AES-GCM); losing the key means re-entering credentials, which is acceptable at this scale. For custom API tools, the gateway resolves declared `creds` from the vault at invocation time and injects them into `ctx`; MCP transport credentials are resolved at the same boundary. Credentials never appear in tool output, tokens, or the sandbox.
 
-Composio is an upstream provider, not an agent connector. The gateway stores only the Composio project API key (vault first, environment fallback) and uses one shared Composio identity. Admins authenticate Gmail, Linear, and other toolkits through hosted Connect Links in the Tools UI; Composio stores and refreshes those provider credentials. Concrete tools then join the same Gilly catalog as custom tools and are selected, granted, invoked, and traced by canonical Gilly name.
+Composio is an upstream provider, not an agent connector. Its discovered concrete tools join the
+same catalog by canonical Gilly name. Shared authentication and credential ownership are defined in
+[`connectors-and-auth.md`](connectors-and-auth.md).
 
 ## Tracing
 

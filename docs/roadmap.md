@@ -40,9 +40,9 @@ The gateway already wraps custom API and MCP implementations ([`gateway.md`](gat
 one integration, ~1000 apps, managed auth. It reduces the need to hand-write
 `amplitude.ts` / `meta.ts` / `jira.ts` per provider without becoming agent-visible.
 
-Decisions: agents select exact provider-neutral `gatewayTools`; Gilly stores the Composio project
-key while Composio stores downstream credentials; one shared Composio identity matches Gilly's
-single-tenant model; only connected/no-auth concrete tools enter Gilly's catalog.
+The provider-neutral catalog contract is owned by [`gateway.md`](gateway/gateway.md); shared
+identity and credential ownership are defined in
+[`connectors-and-auth.md`](gateway/connectors-and-auth.md).
 
 **Done when:** an admin authenticates Gmail or Linear from Gilly's Tools UI, its concrete tools join
 the unified catalog, an agent selects one exact tool without knowing its provider, and the call is
@@ -67,7 +67,7 @@ that works". Two clusters:
 - **Tooling skills** — teach the direct-vs-script lane discipline for Composio-era
   tooling (extend `config/skills/tooling/`), plus git/gh workflow conventions.
 - **Agent-builder skills** — the `agent-builder` agent should be able to write a good
-  agent JSON, pick connectors, and scaffold a skill folder unaided.
+  agent JSON, pick exact gateway tools, and scaffold a skill folder unaided.
 
 **Done when:** a fresh install can build a working agent by talking to `agent-builder`,
 with no hand-editing of JSON.

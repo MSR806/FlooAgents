@@ -12,7 +12,7 @@ export const agents = sqliteTable("agents", {
   tools: text("tools"),
   skills: text("skills"),
   gatewayTools: text("gateway_tools"),
-  /** Legacy column retained for additive migration only. New code ignores it. */
+  /** Legacy policy read only by the lazy connector-to-tool migration. */
   connectors: text("connectors"),
   createdAt: integer("created_at").notNull(),
 });

@@ -26,7 +26,10 @@ grants(userId, toolPattern, createdAt)
 
 **The flow is deliberately admin-mediated.** New user messages an agent → they exist in the DB with a name, but no grants → the agent can discover its connected tools, but invocation returns `user_missing_grant` with instructions to stop and inform the user. The admin finds them in the users list (already there, with their Slack name) and adds grants. No self-service, no approval queue — the org is small enough that a human in the loop *is* the feature.
 
-Admins are marked by `isAdmin` on the user row; the first admin is set manually in the DB. Admin today means: manage users, grants, connectors, and credentials in the web UI, and run the OAuth connect flows.
+Admins are marked by `isAdmin` on the user row; the first admin is set manually in the DB. Runs
+started as an admin receive grants for every exact tool attached to the agent. This is separate from
+operator access to the Tools page, which uses the server-configured HTTP Basic credential described
+in [`SECURITY.md`](../../SECURITY.md).
 
 ## Single Tenant
 

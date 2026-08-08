@@ -85,7 +85,8 @@ export function createEngine(deps: {
 
   async function fetchGatewayTools(url: string): Promise<GatewayToolIdentity[]> {
     const response = await fetch(`${url}/tools`);
-    if (!response.ok) throw new Error(`Gateway tool discovery failed with status ${response.status}`);
+    if (!response.ok)
+      throw new Error(`Gateway tool discovery failed with status ${response.status}`);
     const body: unknown = await response.json();
     if (!body || typeof body !== "object" || !("tools" in body) || !Array.isArray(body.tools)) {
       throw new Error("Gateway returned an invalid tool catalog");
@@ -101,7 +102,8 @@ export function createEngine(deps: {
         "source" in tool &&
         (tool.source === "custom" || tool.source === "composio"),
     );
-    if (tools.length !== body.tools.length) throw new Error("Gateway returned an invalid tool catalog");
+    if (tools.length !== body.tools.length)
+      throw new Error("Gateway returned an invalid tool catalog");
     return tools;
   }
 
@@ -158,11 +160,7 @@ export function createEngine(deps: {
       // so an ungranted user can discover a relevant tool and receive a useful access error.
       let gatewayTools = [...new Set(agent.gatewayTools ?? [])];
       if (gatewayUrl && userId && getLegacyAgentConnectors(db, agent.id).length > 0) {
-        gatewayTools = migrateLegacyAgentTools(
-          db,
-          agent.id,
-          await listGatewayTools(gatewayUrl),
-        );
+        gatewayTools = migrateLegacyAgentTools(db, agent.id, await listGatewayTools(gatewayUrl));
       }
       const user = userId ? getUser(db, userId) : undefined;
       const grants = !user

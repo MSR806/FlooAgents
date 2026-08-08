@@ -54,9 +54,7 @@ function agentToRow(cfg: AgentConfig, options: AgentWriteOptions = {}): AgentRow
     tools: a.tools?.length ? JSON.stringify(a.tools) : null,
     skills: a.skills?.length ? JSON.stringify(a.skills) : null,
     gatewayTools: a.gatewayTools?.length ? JSON.stringify(a.gatewayTools) : null,
-    connectors: options.legacyConnectors?.length
-      ? JSON.stringify(options.legacyConnectors)
-      : null,
+    connectors: options.legacyConnectors?.length ? JSON.stringify(options.legacyConnectors) : null,
     createdAt: now(),
   };
 }

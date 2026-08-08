@@ -47,12 +47,13 @@ persisted in SQLite so follow-ups resume the correct provider session.
 
 | Area | Today |
 | --- | --- |
-| Agent config | JSON agent definitions loaded from `config/agents/` |
+| Agent config | SQLite records managed through the UI/API, with JSON seeds in `config/agents/` |
 | Channels | Slack Socket Mode plus a web channel surface in progress |
 | Control plane | Session/run engine, follow-up queue, channel translation |
 | Harness | Claude Agent SDK and OpenAI Codex SDK behind one stable HTTP contract |
 | Runtime | Local HTTP runtime provider with an AgentCore-compatible contract |
-| Storage | SQLite operational state via Drizzle |
+| Storage | SQLite operational state and agent config via Drizzle |
+| Tooling | Provider-neutral gateway for custom tools and Composio toolkits |
 | Web | Next.js UI for managing agents, skills, tools, users, and chats |
 
 ## Architecture
@@ -114,15 +115,19 @@ cp apps/web/.env.example apps/web/.env
 
 Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY_ADMIN_TOKEN` in
 the control-plane, gateway, and web env files, and set `GILLY_WEB_ADMIN_PASSWORD` for the Tools
-page login. `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
+page login (username `admin`). `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
 Then run the services you need:
 
 ```bash
 bun run dev:harness         # Claude/OpenAI harness on :8080
+bun run dev:gateway         # provider-neutral tooling gateway on :4100
 bun run dev:control-plane   # API + Slack listener on :4000
 bun run dev:web             # web UI on :3000
 ```
+
+Open http://localhost:3000/connectors to configure custom integrations or connect shared Composio
+toolkits, then attach exact tools to agents from the agent editor.
 
 ## Docker
 
@@ -148,10 +153,10 @@ service hostnames and container paths. Keep `WEB_PORT=4000` in
 ```text
 apps/control-plane       Slack/Web channel handling, sessions, runs
 apps/harness             Shared server with Claude and OpenAI harness loops
-apps/gateway             Connector gateway
+apps/gateway             Provider-neutral tooling gateway
 apps/web                 Next.js management UI
 packages/core            Domain model + Zod schemas
-packages/db              SQLite + Drizzle operational store
+packages/db              SQLite + Drizzle state and agent config
 packages/runtime         Runtime provider interface + local provider
 packages/harness-protocol  Control-plane <-> harness contract
 packages/gateway-client  Gateway client
