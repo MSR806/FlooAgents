@@ -28,6 +28,7 @@ const now = () => Date.now();
 // --- Agents: config, mutable at runtime via the management API ---------------
 
 type AgentRow = typeof agents.$inferSelect;
+type AgentWriteOptions = { legacyConnectors?: readonly string[] };
 
 /** Parse a stored row back into a validated `AgentConfig` (JSON arrays + Zod check). */
 function rowToAgent(row: AgentRow): AgentConfig {
@@ -43,7 +44,7 @@ function rowToAgent(row: AgentRow): AgentConfig {
 }
 
 /** Validate config and shape it for storage (arrays → JSON text, empty → null). */
-function agentToRow(cfg: AgentConfig): AgentRow {
+function agentToRow(cfg: AgentConfig, options: AgentWriteOptions = {}): AgentRow {
   const a = AgentConfig.parse(cfg);
   return {
     id: a.id,
@@ -53,7 +54,9 @@ function agentToRow(cfg: AgentConfig): AgentRow {
     tools: a.tools?.length ? JSON.stringify(a.tools) : null,
     skills: a.skills?.length ? JSON.stringify(a.skills) : null,
     gatewayTools: a.gatewayTools?.length ? JSON.stringify(a.gatewayTools) : null,
-    connectors: null,
+    connectors: options.legacyConnectors?.length
+      ? JSON.stringify(options.legacyConnectors)
+      : null,
     createdAt: now(),
   };
 }
@@ -74,16 +77,25 @@ export function getAgent(db: Db, id: string): AgentConfig | undefined {
 }
 
 /** Insert a new agent. Throws if the id already exists. */
-export function createAgent(db: Db, cfg: AgentConfig): AgentConfig {
+export function createAgent(
+  db: Db,
+  cfg: AgentConfig,
+  options: AgentWriteOptions = {},
+): AgentConfig {
   if (getAgent(db, cfg.id)) throw new Error(`Agent "${cfg.id}" already exists`);
-  db.insert(agents).values(agentToRow(cfg)).run();
+  db.insert(agents).values(agentToRow(cfg, options)).run();
   return cfg;
 }
 
 /** Replace an existing agent's config (id is immutable). Throws if it doesn't exist. */
-export function updateAgent(db: Db, id: string, cfg: AgentConfig): AgentConfig {
+export function updateAgent(
+  db: Db,
+  id: string,
+  cfg: AgentConfig,
+  options: AgentWriteOptions = {},
+): AgentConfig {
   if (!getAgent(db, id)) throw new Error(`Agent "${id}" not found`);
-  const row = agentToRow({ ...cfg, id });
+  const row = agentToRow({ ...cfg, id }, options);
   db.update(agents)
     .set({
       name: row.name,
@@ -92,7 +104,7 @@ export function updateAgent(db: Db, id: string, cfg: AgentConfig): AgentConfig {
       tools: row.tools,
       skills: row.skills,
       gatewayTools: row.gatewayTools,
-      connectors: null,
+      connectors: row.connectors,
     })
     .where(eq(agents.id, id))
     .run();
