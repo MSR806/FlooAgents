@@ -10,6 +10,13 @@ export const HarnessDefinition = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
+    image: z
+      .string()
+      .regex(
+        /^\/[a-zA-Z0-9][a-zA-Z0-9/_-]*\.(svg|png|webp)$/,
+        "Harness image must be a local asset path",
+      )
+      .optional(),
     enabled: z.boolean(),
     models: z.array(HarnessModel),
   })
@@ -26,6 +33,7 @@ export const BUILT_IN_HARNESSES = [
   {
     id: "claude",
     name: "Claude",
+    image: "/harnesses/claude.svg",
     enabled: true,
     models: [
       { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" },
@@ -35,6 +43,7 @@ export const BUILT_IN_HARNESSES = [
   {
     id: "codex",
     name: "Codex",
+    image: "/harnesses/codex.svg",
     enabled: true,
     models: [
       { id: "gpt-5.5", name: "GPT-5.5" },

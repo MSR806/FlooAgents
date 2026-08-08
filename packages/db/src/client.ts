@@ -19,7 +19,8 @@ function migrate(sqlite: Database) {
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS harnesses (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL, models TEXT NOT NULL
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, image TEXT,
+      enabled INTEGER NOT NULL, models TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, source TEXT NOT NULL,
@@ -65,17 +66,22 @@ function migrate(sqlite: Database) {
   addColumn(sqlite, "follow_ups", "ref", "ref TEXT");
   addColumn(sqlite, "agents", "connectors", "connectors TEXT");
   addColumn(sqlite, "gateway_tokens", "connectors", "connectors TEXT NOT NULL DEFAULT '[]'");
+  const addedHarnessImage = addColumn(sqlite, "harnesses", "image", "image TEXT");
 
   const insertHarness = sqlite.prepare(
-    "INSERT OR IGNORE INTO harnesses (id, name, enabled, models) VALUES (?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO harnesses (id, name, image, enabled, models) VALUES (?, ?, ?, ?, ?)",
   );
   for (const harness of BUILT_IN_HARNESSES) {
     insertHarness.run(
       harness.id,
       harness.name,
+      harness.image,
       harness.enabled ? 1 : 0,
       JSON.stringify(harness.models),
     );
+    if (addedHarnessImage) {
+      sqlite.prepare("UPDATE harnesses SET image = ? WHERE id = ?").run(harness.image, harness.id);
+    }
   }
 
   const addedAgentHarness = addColumn(

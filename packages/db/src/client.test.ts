@@ -4,7 +4,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDb } from "./client.ts";
-import { getAgent, getHarness, getSessionBySourceKey, updateHarness } from "./repo.ts";
+import {
+  getAgent,
+  getHarness,
+  getSessionBySourceKey,
+  listHarnesses,
+  updateHarness,
+} from "./repo.ts";
 
 test("legacy agent/session migration is idempotent and preserves custom models", () => {
   const path = join(mkdtempSync(join(tmpdir(), "gilly-migration-")), "gilly.db");
@@ -44,6 +50,7 @@ test("legacy agent/session migration is idempotent and preserves custom models",
     name: "private-claude",
   });
   expect(getHarness(db, "codex")?.models.some(({ id }) => id === "gpt-oss-120b")).toBe(false);
+  expect(getHarness(db, "codex")?.image).toBe("/harnesses/codex.svg");
   expect(getSessionBySourceKey(db, "web:openai")).toMatchObject({
     harnessId: "codex",
     harnessSessionId: "thread-1",
@@ -66,4 +73,40 @@ test("legacy agent/session migration is idempotent and preserves custom models",
   const reopened = createDb(path);
   expect(getHarness(reopened, "codex")?.name).toBe("Custom Codex");
   expect(getAgent(reopened, "fast")?.harness.config.serviceTier).toBe("fast");
+});
+
+test("adds images to the predecessor harness registry without breaking custom rows", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "gilly-harness-image-")), "gilly.db");
+  const legacy = new Database(path);
+  legacy.exec(`
+    CREATE TABLE harnesses (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER NOT NULL, models TEXT NOT NULL
+    );
+    INSERT INTO harnesses VALUES
+      ('claude', 'Operator Claude', 0, '[{"id":"custom","name":"Custom"}]'),
+      ('custom', 'Custom Harness', 1, '[]');
+  `);
+  legacy.close();
+
+  const db = createDb(path);
+  expect(getHarness(db, "claude")).toMatchObject({
+    name: "Operator Claude",
+    image: "/harnesses/claude.svg",
+    enabled: false,
+    models: [{ id: "custom", name: "Custom" }],
+  });
+  expect(getHarness(db, "custom")).toEqual({
+    id: "custom",
+    name: "Custom Harness",
+    enabled: true,
+    models: [],
+  });
+  expect(listHarnesses(db).map(({ id }) => id)).toEqual(["claude", "codex", "custom"]);
+
+  const claude = getHarness(db, "claude");
+  updateHarness(db, "claude", {
+    ...(claude as NonNullable<typeof claude>),
+    image: "/harnesses/operator.svg",
+  });
+  expect(getHarness(createDb(path), "claude")?.image).toBe("/harnesses/operator.svg");
 });

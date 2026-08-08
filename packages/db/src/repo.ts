@@ -138,6 +138,7 @@ function rowToHarness(row: HarnessRow): HarnessDefinition {
   return HarnessDefinition.parse({
     id: row.id,
     name: row.name,
+    ...(row.image ? { image: row.image } : {}),
     enabled: row.enabled === 1,
     models: HarnessModel.array().parse(JSON.parse(row.models)),
   });
@@ -162,6 +163,7 @@ export function updateHarness(
   db.update(harnesses)
     .set({
       name: harness.name,
+      image: harness.image ?? "",
       enabled: harness.enabled ? 1 : 0,
       models: JSON.stringify(harness.models),
     })

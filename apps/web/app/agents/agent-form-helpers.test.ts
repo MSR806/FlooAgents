@@ -5,12 +5,14 @@ const registry = [
   {
     id: "claude",
     name: "Claude",
+    image: "/harnesses/claude.svg",
     enabled: true,
     models: [{ id: "sonnet", name: "Sonnet" }],
   },
   {
     id: "codex",
     name: "Codex",
+    image: "/harnesses/codex.svg",
     enabled: false,
     models: [{ id: "gpt", name: "GPT" }],
   },

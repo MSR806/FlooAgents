@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   parseAgentValues,
   parseHarnessRegistry,
 } from "./agent-form-helpers";
+import HarnessImage from "./HarnessImage";
 
 export type { AgentValues } from "./agent-form-helpers";
 
@@ -146,7 +148,6 @@ export default function AgentForm({
   }
 
   const selection = harnessSelection(harnesses, values.harness);
-  const selectedHarnessName = selection.selected?.name ?? values.harness.id;
   const selectedModelName = selection.selected?.models.find(
     (model) => model.id === values.harness.config.model,
   )?.name;
@@ -173,25 +174,48 @@ export default function AgentForm({
         )}
       </div>
 
-      <div className="grid gap-2">
-        <Label htmlFor="agent-harness">Harness</Label>
-        <Select
-          value={values.harness.id}
-          onValueChange={(id) => id && set("harness", { id, config: { model: "" } })}
-        >
-          <SelectTrigger id="agent-harness" className="w-full">
-            <SelectValue placeholder="Select a harness">
-              {selectedHarnessName || undefined}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {selection.enabled.map((harness) => (
-              <SelectItem key={harness.id} value={harness.id}>
-                {harness.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-medium">Harness</legend>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {selection.enabled.map((harness) => {
+            const selected = values.harness.id === harness.id;
+            return (
+              <label
+                key={harness.id}
+                className={`relative min-w-0 cursor-pointer rounded-xl border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 ${
+                  selected
+                    ? "border-foreground bg-accent"
+                    : "border-border hover:border-foreground/30 hover:bg-accent/50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="agent-harness"
+                  value={harness.id}
+                  checked={selected}
+                  className="sr-only"
+                  onChange={() => set("harness", { id: harness.id, config: { model: "" } })}
+                />
+                <span className="flex min-w-0 items-center gap-3 pr-5">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-white p-2.5 ring-1 ring-black/10">
+                    <HarnessImage src={harness.image} size={48} />
+                  </span>
+                  <span className="min-w-0 text-left">
+                    <span className="block truncate text-sm font-medium">{harness.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {harness.models.length} {harness.models.length === 1 ? "model" : "models"}
+                    </span>
+                  </span>
+                </span>
+                {selected ? (
+                  <span className="absolute top-2 right-2 flex size-5 items-center justify-center rounded-full bg-foreground text-background">
+                    <CheckIcon className="size-3" aria-hidden="true" />
+                  </span>
+                ) : null}
+              </label>
+            );
+          })}
+        </div>
         {harnessStatus === "loading" ? (
           <p className="text-xs text-muted-foreground">Loading available harnesses…</p>
         ) : harnessStatus === "error" ? (
@@ -201,7 +225,7 @@ export default function AgentForm({
             This harness is unavailable or disabled. Select a replacement before saving.
           </p>
         ) : null}
-      </div>
+      </fieldset>
 
       <div className="grid gap-2">
         <Label htmlFor="agent-model">Model</Label>

@@ -21,6 +21,7 @@ export const agents = sqliteTable("agents", {
 export const harnesses = sqliteTable("harnesses", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  image: text("image"),
   enabled: integer("enabled").notNull(),
   models: text("models").notNull(),
 });

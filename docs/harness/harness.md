@@ -5,9 +5,9 @@ universal server and image contain both compiled implementations: `claude` and `
 
 ## Registry and routing
 
-The SQLite-backed harness registry owns each harness's `id`, `name`, `enabled` state, and offered
-models. Built-in Claude and Codex definitions are inserted only when absent, so operator edits
-survive restart. Provider credentials remain environment variables.
+The SQLite-backed harness registry owns each harness's `id`, `name`, optional root-relative display
+`image`, `enabled` state, and offered models. Built-in Claude and Codex definitions are inserted only
+when absent, so operator edits survive restart. Provider credentials remain environment variables.
 
 Agent configuration is harness-first:
 

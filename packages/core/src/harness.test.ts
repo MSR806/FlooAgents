@@ -12,6 +12,19 @@ test("built-in harness definitions and nested agent config validate", () => {
     "claude",
     "codex",
   ]);
+  expect(BUILT_IN_HARNESSES.map(({ image }) => image)).toEqual([
+    "/harnesses/claude.svg",
+    "/harnesses/codex.svg",
+  ]);
+  for (const image of [
+    "https://example.com/logo.svg",
+    "/\\evil.example/logo.svg",
+    "/\t/evil.example/logo.svg",
+  ]) {
+    expect(() =>
+      HarnessDefinition.parse({ id: "remote", name: "Remote", image, enabled: true, models: [] }),
+    ).toThrow("Harness image must be a local asset path");
+  }
   expect(
     AgentConfig.parse({
       id: "helper",

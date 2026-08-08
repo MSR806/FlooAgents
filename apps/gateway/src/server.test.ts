@@ -153,6 +153,7 @@ async function withControlPlane<T>(
         {
           id: "claude",
           name: "Claude",
+          image: "/harnesses/claude.svg",
           enabled: true,
           models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
         },
@@ -241,6 +242,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
       {
         id: "claude",
         name: "Claude",
+        image: "/harnesses/claude.svg",
         enabled: true,
         models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
       },
