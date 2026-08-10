@@ -68,9 +68,8 @@ function fakeClient(
           },
           async execute(slug: string) {
             log.push(`execute:${slug}`);
-            return slug === "GMAIL_FAIL"
-              ? { error: "No connected account" }
-              : { data: { ok: true } };
+            if (slug === "GMAIL_FAIL") return { error: "No connected account" };
+            return slug === "GMAIL_EMPTY" ? {} : { data: { ok: true } };
           },
         };
       },
@@ -99,7 +98,7 @@ test("canonical names remove the toolkit prefix", () => {
   expect(canonicalComposioToolName("gmail", "GMAIL_SEND_EMAIL")).toBe("gmail.send_email");
 });
 
-test("service returns connected tools immediately, warms no-auth tools, and recreates keyed sessions", async () => {
+test("initial discovery includes connected and no-auth tools and recreates keyed sessions", async () => {
   const log: string[] = [];
   let key = "key-1";
   const service = createComposioService({
@@ -108,16 +107,13 @@ test("service returns connected tools immediately, warms no-auth tools, and recr
     createClient: () => fakeClient(log),
   });
 
-  expect((await service.listTools()).map((tool) => tool.name)).toEqual([
-    "gmail.send_email",
-    "gmail.fail",
-  ]);
-  await Bun.sleep(0);
-  expect((await service.listTools()).map((tool) => tool.name)).toEqual([
+  const initial = await service.listTools();
+  expect(initial.tools.map((tool) => tool.name)).toEqual([
     "gmail.send_email",
     "gmail.fail",
     "hackernews.get_user",
   ]);
+  expect(initial.complete).toBe(true);
   expect(log.filter((entry) => entry === "raw:hackernews:1000")).toHaveLength(1);
   const page = await service.listToolkits({ query: "mail" });
   expect(page.configured).toBe(true);
@@ -135,6 +131,7 @@ test("service returns connected tools immediately, warms no-auth tools, and recr
     "https://connect.composio.dev/link/1",
   );
   expect(await service.execute("GMAIL_SEND_EMAIL", {})).toEqual({ ok: true });
+  expect(await service.execute("GMAIL_EMPTY", {})).toBeNull();
   key = "key-2";
   await service.listTools();
   expect(log.filter((entry) => entry === "create:gilly-shared")).toHaveLength(2);
@@ -162,13 +159,65 @@ test("connected discovery is not blocked by the full no-auth toolkit scan", asyn
           };
         },
       }),
+    noAuthDiscoveryTimeoutMs: 5,
   });
 
-  expect((await service.listTools()).map((tool) => tool.name)).toEqual([
-    "gmail.send_email",
-    "gmail.fail",
-  ]);
+  const catalog = await service.listTools();
+  expect(catalog.tools.map((tool) => tool.name)).toEqual(["gmail.send_email", "gmail.fail"]);
   expect(inputs[0]?.isConnected).toBe(true);
+  expect(catalog.complete).toBe(false);
+});
+
+test("no-auth discovery retries after timeout and ignores the stale attempt", async () => {
+  const releases: ((page: ToolkitPage) => void)[] = [];
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: (input) => {
+          if (input?.isConnected) return { items: [] };
+          return new Promise<ToolkitPage>((resolve) => releases.push(resolve));
+        },
+      }),
+    noAuthDiscoveryTimeoutMs: 50,
+  });
+
+  expect(await service.listTools()).toEqual({ tools: [], complete: false });
+
+  const retry = service.listTools();
+  while (releases.length < 2) await Bun.sleep(0);
+  releases[1]?.({
+    items: [{ slug: "hackernews", name: "Hacker News", isNoAuth: true }],
+  });
+  expect((await retry).tools.map((tool) => tool.name)).toEqual(["hackernews.get_user"]);
+
+  releases[0]?.({ items: [{ slug: "stale", name: "Stale", isNoAuth: true }] });
+  await Bun.sleep(0);
+  expect((await service.listTools()).tools.map((tool) => tool.name)).toEqual([
+    "hackernews.get_user",
+  ]);
+  expect(releases).toHaveLength(2);
+});
+
+test("initial discovery waits briefly for a warming no-auth scan", async () => {
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: async (input) => {
+          if (input?.isConnected) return { items: [] };
+          await Bun.sleep(5);
+          return { items: [{ slug: "hackernews", name: "Hacker News", isNoAuth: true }] };
+        },
+      }),
+    noAuthDiscoveryTimeoutMs: 50,
+  });
+
+  const catalog = await service.listTools();
+  expect(catalog.tools.map((tool) => tool.name)).toEqual(["hackernews.get_user"]);
+  expect(catalog.complete).toBe(true);
 });
 
 test("a rejected cached session is cleared so the next call retries", async () => {
@@ -266,6 +315,7 @@ test("a stale no-auth scan does not block warming after an API key change", asyn
     getApiKey: () => key,
     userId: "gilly-shared",
     createClient: (apiKey) => (apiKey === "old" ? oldClient : newClient),
+    noAuthDiscoveryTimeoutMs: 5,
   });
 
   const oldRequest = service.listTools();
@@ -276,7 +326,9 @@ test("a stale no-auth scan does not block warming after an API key change", asyn
   releaseNew();
   await newRequest;
   await Bun.sleep(0);
-  expect((await service.listTools()).map((tool) => tool.name)).toContain("hackernews.get_user");
+  expect((await service.listTools()).tools.map((tool) => tool.name)).toContain(
+    "hackernews.get_user",
+  );
 });
 
 test("connected toolkit discovery stops on a non-advancing cursor", async () => {
@@ -294,7 +346,7 @@ test("connected toolkit discovery stops on a non-advancing cursor", async () => 
       }),
   });
 
-  expect(await service.listTools()).toEqual([]);
+  expect(await service.listTools()).toEqual({ tools: [], complete: true });
   expect(pages).toBe(2);
 });
 
@@ -313,7 +365,7 @@ test("connected toolkit discovery has a maximum page count", async () => {
       }),
   });
 
-  expect(await service.listTools()).toEqual([]);
+  expect(await service.listTools()).toEqual({ tools: [], complete: true });
   expect(pages).toBe(100);
 });
 

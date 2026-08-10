@@ -47,10 +47,10 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.gateway
     env_file:
-      - ../apps/control-plane/.env    # GILLY_VAULT_KEY and GILLY_ADMIN_TOKEN
+      - ../apps/gateway/.env          # GILLY_VAULT_KEY and GILLY_ADMIN_TOKEN
     environment:
       DATABASE_PATH: /data/gilly.db
-      GILLY_GATEWAY_URL: http://gateway:4100
+      GILLY_GATEWAY_URL: http://localhost:4100
       GILLY_WEB_URL: http://localhost:3000
       GILLY_CONTROL_PLANE_URL: http://control-plane:4000
     volumes:
@@ -64,11 +64,14 @@ services:
       dockerfile: docker/Dockerfile.web
     depends_on:
       - control-plane
+    env_file:
+      - path: ../apps/web/.env        # admin password and matching GILLY_ADMIN_TOKEN
+        required: false
     environment:
       # Next.js rewrites /api/* to the control-plane over the Docker network.
       API_URL: http://control-plane:4000
     ports:
-      - "${GILLY_BIND_ADDRESS:-127.0.0.1}:3000:3000" # unauthenticated management UI
+      - "${GILLY_BIND_ADDRESS:-127.0.0.1}:3000:3000"
 
 volumes:
   gilly-data:

@@ -3,7 +3,7 @@ import { createDb, createGatewayToken, getCredential, schema, setCredential } fr
 import { ComposioNotConnectedError, type ComposioService } from "./composio.ts";
 import { type McpGateway, McpToolError, NotConnectedError } from "./mcp.ts";
 import { allTools } from "./registry.ts";
-import { createGatewayServer } from "./server.ts";
+import { createGatewayServer, resolveComposioApiKey } from "./server.ts";
 import { makeVault } from "./vault.ts";
 
 const ADMIN = "admin-secret";
@@ -88,19 +88,23 @@ function fakeComposio(
   return {
     configured: () => configured,
     async listTools() {
-      return configured && (opts.connected ?? true)
-        ? [
-            {
-              name: "gmail.send_email",
-              description: "Send an email",
-              inputSchema: { type: "object" },
-              source: "composio",
-              toolkit: "gmail",
-              connected: true,
-              upstreamSlug: "GMAIL_SEND_EMAIL",
-            },
-          ]
-        : [];
+      return {
+        tools:
+          configured && (opts.connected ?? true)
+            ? [
+                {
+                  name: "gmail.send_email",
+                  description: "Send an email",
+                  inputSchema: { type: "object" },
+                  source: "composio",
+                  toolkit: "gmail",
+                  connected: true,
+                  upstreamSlug: "GMAIL_SEND_EMAIL",
+                },
+              ]
+            : [],
+        complete: true,
+      };
     },
     async listToolkits() {
       return configured
@@ -150,7 +154,7 @@ const getTools = (fetch: ReturnType<typeof createGatewayServer>) =>
 type Agent = {
   id: string;
   name: string;
-  model: string;
+  harness: { id: string; config: { model: string; serviceTier?: string } };
   systemPrompt: string;
   tools?: string[];
   skills?: string[];
@@ -178,23 +182,33 @@ async function withControlPlane<T>(
   fn: (state: {
     agents: Map<string, Agent>;
     skills: Map<string, Skill>;
-    starts: { id: string; message: string }[];
+    starts: { id: string; message: string; userId: string; adminToken: string | null }[];
     runs: Map<string, RunState>;
   }) => Promise<T>,
 ): Promise<T> {
   const oldFetch = globalThis.fetch;
   const oldUrl = process.env.GILLY_CONTROL_PLANE_URL;
+  const oldAdminToken = process.env.GILLY_ADMIN_TOKEN;
   const state = {
     agents: new Map<string, Agent>([
-      ["coder", { id: "coder", name: "Coder", model: "sonnet", systemPrompt: "code" }],
+      [
+        "coder",
+        {
+          id: "coder",
+          name: "Coder",
+          harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+          systemPrompt: "code",
+        },
+      ],
     ]),
     skills: new Map<string, Skill>([
       ["tooling", { name: "tooling", description: "Use gateway tools.", content: "# Tools" }],
     ]),
-    starts: [] as { id: string; message: string }[],
+    starts: [] as { id: string; message: string; userId: string; adminToken: string | null }[],
     runs: new Map<string, RunState>(),
   };
   process.env.GILLY_CONTROL_PLANE_URL = "http://control-plane.test";
+  process.env.GILLY_ADMIN_TOKEN = ADMIN;
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.origin !== "http://control-plane.test") return oldFetch(input, init);
@@ -208,7 +222,12 @@ async function withControlPlane<T>(
 
     const startAgentId = url.pathname.match(/^\/api\/agents\/([^/]+)\/runs$/)?.[1];
     if (startAgentId && method === "POST") {
-      state.starts.push({ id: startAgentId, message: body.message });
+      state.starts.push({
+        id: startAgentId,
+        message: body.message,
+        userId: body.userId,
+        adminToken: new Headers(init?.headers).get("x-admin-token"),
+      });
       state.runs.set("run-1", { id: "run-1", status: "running", steps: [] });
       return json({ runId: "run-1" }, 202);
     }
@@ -220,8 +239,21 @@ async function withControlPlane<T>(
     }
 
     const agentId = url.pathname.match(/^\/api\/agents\/([^/]+)$/)?.[1];
+    if (url.pathname === "/api/harnesses" && method === "GET") {
+      return json([
+        {
+          id: "claude",
+          name: "Claude",
+          image: "/harnesses/claude.svg",
+          enabled: true,
+          models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
+        },
+      ]);
+    }
     if (url.pathname === "/api/agents" && method === "GET") {
-      return json([...state.agents.values()].map(({ id, name, model }) => ({ id, name, model })));
+      return json(
+        [...state.agents.values()].map(({ id, name, harness }) => ({ id, name, harness })),
+      );
     }
     if (url.pathname === "/api/agents" && method === "POST") {
       state.agents.set(body.id, body);
@@ -265,6 +297,8 @@ async function withControlPlane<T>(
     globalThis.fetch = oldFetch;
     if (oldUrl === undefined) delete process.env.GILLY_CONTROL_PLANE_URL;
     else process.env.GILLY_CONTROL_PLANE_URL = oldUrl;
+    if (oldAdminToken === undefined) delete process.env.GILLY_ADMIN_TOKEN;
+    else process.env.GILLY_ADMIN_TOKEN = oldAdminToken;
   }
 }
 
@@ -283,6 +317,7 @@ test("catalog includes connected gilly tools", async () => {
   const res = await post(fetch, "/catalog", auth(token), {});
   const { tools } = (await res.json()) as { tools: { name: string }[] };
   expect(tools.map((t) => t.name)).toContain("gilly.create_agent");
+  expect(tools.map((t) => t.name)).toContain("gilly.list_harnesses");
   expect(tools.map((t) => t.name)).toContain("gilly.start_agent");
   expect(tools.map((t) => t.name)).toContain("gilly.get_run");
   expect(tools.map((t) => t.name)).not.toContain("gilly.invoke_agent");
@@ -292,12 +327,25 @@ test("catalog includes connected gilly tools", async () => {
 test("gilly.update_agent patches through the control-plane API", async () => {
   await withControlPlane(async ({ agents }) => {
     const { fetch, token } = setup(["gilly.*"]);
+    const harnesses = await post(fetch, "/invoke", auth(token), {
+      tool: "gilly.list_harnesses",
+      input: {},
+    });
+    expect(await harnesses.json()).toEqual([
+      {
+        id: "claude",
+        name: "Claude",
+        image: "/harnesses/claude.svg",
+        enabled: true,
+        models: [{ id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5" }],
+      },
+    ]);
     const create = await post(fetch, "/invoke", auth(token), {
       tool: "gilly.create_agent",
       input: {
         id: "helper",
         name: "Helper",
-        model: "sonnet",
+        harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
         systemPrompt: "Help.",
         gatewayTools: ["gilly.list_agents"],
       },
@@ -305,7 +353,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
     expect(await create.json()).toEqual({
       id: "helper",
       name: "Helper",
-      model: "sonnet",
+      harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "Help.",
       gatewayTools: ["gilly.list_agents"],
     });
@@ -321,7 +369,7 @@ test("gilly.update_agent patches through the control-plane API", async () => {
     expect(await res.json()).toEqual({
       id: "coder",
       name: "Coder 2",
-      model: "sonnet",
+      harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "code",
       gatewayTools: ["gilly.list_agents"],
     });
@@ -337,7 +385,9 @@ test("gilly.start_agent and get_run use the control-plane background-run API", a
       input: { id: "coder", message: "inspect this" },
     });
     expect(await start.json()).toEqual({ runId: "run-1" });
-    expect(starts).toEqual([{ id: "coder", message: "inspect this" }]);
+    expect(starts).toEqual([
+      { id: "coder", message: "inspect this", userId: "user-1", adminToken: ADMIN },
+    ]);
 
     runs.set("run-1", {
       id: "run-1",
@@ -588,6 +638,15 @@ test("admin credentials reject unknown providers", async () => {
   expect(getCredential(db, "unknown")).toEqual([]);
 });
 
+test("stored Composio API key takes precedence over the environment fallback", () => {
+  const db = createDb(":memory:");
+  const vault = makeVault("k");
+  expect(resolveComposioApiKey(db, vault, "env-key")).toBe("env-key");
+
+  setCredential(db, "composio", "api_key", vault.encrypt("stored-key"));
+  expect(resolveComposioApiKey(db, vault, "env-key")).toBe("stored-key");
+});
+
 test("GET /tools unifies custom, connected MCP, and Composio metadata", async () => {
   const { db, fetch, vault } = setup([], { mcp: fakeMcp(), composio: fakeComposio() });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
@@ -658,6 +717,34 @@ test("management discovery shares in-flight work, caches briefly, and invalidate
   );
   await getTools(fetch);
   expect(githubLists).toBe(3);
+});
+
+test("management discovery does not cache an incomplete Composio catalog", async () => {
+  let discoveries = 0;
+  const composio = fakeComposio();
+  composio.listTools = async () => {
+    discoveries += 1;
+    if (discoveries === 1) return { tools: [], complete: false };
+    return {
+      tools: [
+        {
+          name: "hackernews.get_user",
+          description: "Get a user",
+          source: "composio",
+          toolkit: "hackernews",
+          connected: true,
+          upstreamSlug: "HACKERNEWS_GET_USER",
+        },
+      ],
+      complete: true,
+    };
+  };
+  const { fetch } = setup([], { composio, managementToolsTtlMs: 60_000 });
+
+  await getTools(fetch);
+  const second = (await (await getTools(fetch)).json()) as { tools: { name: string }[] };
+  expect(discoveries).toBe(2);
+  expect(second.tools.map((tool) => tool.name)).toContain("hackernews.get_user");
 });
 
 test("dynamic invocation uses its exact discovery across cache invalidation", async () => {
@@ -733,16 +820,19 @@ test("Composio invocation preserves its discovered upstream slug across invalida
         markStarted();
         await gate;
       }
-      return [
-        {
-          name: "gmail.send_email",
-          description: "Send email",
-          source: "composio",
-          toolkit: "gmail",
-          connected: true,
-          upstreamSlug: discoveries === 1 ? "GMAIL_SEND_EMAIL_OLD" : "GMAIL_SEND_EMAIL_NEW",
-        },
-      ];
+      return {
+        tools: [
+          {
+            name: "gmail.send_email",
+            description: "Send email",
+            source: "composio",
+            toolkit: "gmail",
+            connected: true,
+            upstreamSlug: discoveries === 1 ? "GMAIL_SEND_EMAIL_OLD" : "GMAIL_SEND_EMAIL_NEW",
+          },
+        ],
+        complete: true,
+      };
     },
     async listToolkits() {
       return { configured: true, items: [] };
@@ -926,16 +1016,19 @@ test("unknown Composio provider failures map to provider_error", async () => {
 
 test("custom tools win canonical-name collisions with Composio", async () => {
   const composio = fakeComposio();
-  composio.listTools = async () => [
-    {
-      name: "echo.ping",
-      description: "Remote echo",
-      source: "composio",
-      toolkit: "echo",
-      connected: true,
-      upstreamSlug: "ECHO_PING",
-    },
-  ];
+  composio.listTools = async () => ({
+    tools: [
+      {
+        name: "echo.ping",
+        description: "Remote echo",
+        source: "composio",
+        toolkit: "echo",
+        connected: true,
+        upstreamSlug: "ECHO_PING",
+      },
+    ],
+    complete: true,
+  });
   const { fetch } = setup([], { composio });
   const res = await getTools(fetch);
   const body = (await res.json()) as { tools: { name: string; source: string }[] };

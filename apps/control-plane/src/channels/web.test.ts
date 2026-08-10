@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MODEL_CATALOG } from "@gilly/core";
+import { BUILT_IN_HARNESSES } from "@gilly/core";
 import {
   appendRunStep,
   completeRun,
@@ -27,16 +27,90 @@ const handler = () =>
     adminToken: "admin-secret",
   });
 
+const adminRequest = (url: string, init: RequestInit = {}) => {
+  const headers = new Headers(init.headers);
+  headers.set("x-admin-token", "admin-secret");
+  return new Request(url, { ...init, headers });
+};
+
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-test("GET /api/models returns the model catalog", async () => {
-  const res = await handler()(new Request("http://x/api/models"));
+test("harness registry API lists and updates definitions", async () => {
+  const fetch = handler();
+  const res = await fetch(new Request("http://x/api/harnesses"));
 
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual(MODEL_CATALOG);
+  expect(await res.json()).toEqual(
+    [...BUILT_IN_HARNESSES].sort((a, b) => a.id.localeCompare(b.id)),
+  );
+
+  const claude = BUILT_IN_HARNESSES.find((harness) => harness.id === "claude");
+  const update = await fetch(
+    new Request("http://x/api/harnesses/claude", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...claude, enabled: false }),
+    }),
+  );
+  expect(update.status).toBe(200);
+  expect(await update.json()).toMatchObject({ id: "claude", enabled: false });
+  expect(
+    (
+      await fetch(
+        new Request("http://x/api/harnesses/missing", {
+          method: "PUT",
+          body: JSON.stringify({ name: "Missing", enabled: true, models: [] }),
+        }),
+      )
+    ).status,
+  ).toBe(404);
+});
+
+test("agent API returns nested harness summaries and rejects unavailable selections", async () => {
+  const db = createDb(":memory:");
+  const fetch = createWebHandler({
+    engine: {} as ReturnType<typeof createEngine>,
+    db,
+    skillStore: {} as SkillStore,
+    port: 0,
+  });
+  const agent = {
+    id: "helper",
+    name: "Helper",
+    harness: { id: "codex", config: { model: "gpt-5.2" } },
+    systemPrompt: "Help.",
+  };
+  expect(
+    (
+      await fetch(
+        new Request("http://x/api/agents", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(agent),
+        }),
+      )
+    ).status,
+  ).toBe(201);
+  expect(await (await fetch(new Request("http://x/api/agents"))).json()).toEqual([
+    { id: "helper", name: "Helper", harness: agent.harness },
+  ]);
+
+  const bad = await fetch(
+    new Request("http://x/api/agents", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...agent,
+        id: "bad",
+        harness: { id: "codex", config: { model: "not-offered" } },
+      }),
+    }),
+  );
+  expect(bad.status).toBe(400);
+  expect(await bad.json()).toEqual({ error: 'Harness "codex" does not offer model "not-offered"' });
 });
 
 test("PUT credentials proxy injects x-admin-token and forwards the body", async () => {
@@ -50,7 +124,7 @@ test("PUT credentials proxy injects x-admin-token and forwards the body", async 
   }) as unknown as typeof fetch;
 
   const res = await handler()(
-    new Request("http://x/api/connectors/github/credentials", {
+    adminRequest("http://x/api/connectors/github/credentials", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ key: "github_pat", value: "SECRET" }),
@@ -71,7 +145,7 @@ test("connect proxy relays the gateway's 302 Location to the browser", async () 
       headers: { location: "https://auth.atlassian.com/authorize" },
     })) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
+  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("https://auth.atlassian.com/authorize");
 });
@@ -83,7 +157,7 @@ test("connect proxy bounces back to the connectors page when already connected (
       headers: { "content-type": "application/json" },
     })) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
+  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("/connectors?connected=jira");
 });
@@ -105,7 +179,7 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
     });
   }) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/tools"));
+  const res = await handler()(adminRequest("http://x/api/tools"));
   expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
   expect(await res.json()).toEqual({
     tools: [
@@ -125,9 +199,14 @@ test("GET /api/tools reports an unavailable gateway", async () => {
     throw new Error("offline");
   }) as unknown as typeof fetch;
 
-  const res = await handler()(new Request("http://x/api/tools"));
+  const res = await handler()(adminRequest("http://x/api/tools"));
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({ error: "gateway unavailable" });
+});
+
+test("GET /api/tools requires admin authentication", async () => {
+  const res = await handler()(new Request("http://x/api/tools"));
+  expect(res.status).toBe(401);
 });
 
 test("GET /api/tools fails closed when internal admin auth is not configured", async () => {
@@ -163,15 +242,36 @@ test("Composio toolkit proxies preserve query, inject admin auth, and relay redi
     return Response.json({ configured: true, items: [], nextCursor: "next" });
   }) as unknown as typeof fetch;
 
-  const list = await handler()(new Request("http://x/api/composio/toolkits?query=mail&cursor=one"));
+  const list = await handler()(
+    adminRequest("http://x/api/composio/toolkits?query=mail&cursor=one"),
+  );
   expect(await list.json()).toEqual({ configured: true, items: [], nextCursor: "next" });
   expect(seen[0]?.url).toBe("http://gw/admin/composio/toolkits?query=mail&cursor=one");
   expect(seen[0]?.headers.get("x-admin-token")).toBe("admin-secret");
 
-  const connect = await handler()(new Request("http://x/api/composio/toolkits/gmail/connect"));
+  const connect = await handler()(adminRequest("http://x/api/composio/toolkits/gmail/connect"));
   expect(connect.status).toBe(302);
   expect(connect.headers.get("location")).toBe("https://connect.composio.dev");
   expect(seen[1]?.headers.get("x-admin-token")).toBe("admin-secret");
+});
+
+test("connector and Composio administration rejects unauthenticated callers", async () => {
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return Response.json({ ok: true });
+  }) as unknown as typeof fetch;
+
+  const requests = [
+    new Request("http://x/api/composio/toolkits"),
+    new Request("http://x/api/composio/toolkits/gmail/connect"),
+    new Request("http://x/api/connectors/jira/connect"),
+    new Request("http://x/api/connectors/composio/credentials", { method: "PUT" }),
+  ];
+  for (const request of requests) {
+    expect((await handler()(request)).status).toBe(401);
+  }
+  expect(calls).toBe(0);
 });
 
 test("POST /api/skills persists a skill with supporting files; GET returns them", async () => {
@@ -268,14 +368,14 @@ test("POST /api/agents/:id/runs starts a background run; GET /api/runs/:id reads
     db,
     skillStore: {} as SkillStore,
     port: 0,
-    webUserId: "user-1",
+    adminToken: "admin-secret",
   });
 
   const res = await fetch(
-    new Request("http://x/api/agents/helper/runs", {
+    adminRequest("http://x/api/agents/helper/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "do it" }),
+      body: JSON.stringify({ message: "do it", userId: "user-1" }),
     }),
   );
 
@@ -290,18 +390,26 @@ test("POST /api/agents/:id/runs starts a background run; GET /api/runs/:id reads
   expect(String(seen?.sourceKey).startsWith("gateway:")).toBe(true);
 
   const bad = await fetch(
-    new Request("http://x/api/agents/helper/runs", {
+    adminRequest("http://x/api/agents/helper/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     }),
   );
   expect(bad.status).toBe(400);
-  const missing = await fetch(
-    new Request("http://x/api/agents/missing/runs", {
+  const unauthorized = await fetch(
+    new Request("http://x/api/agents/helper/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "do it" }),
+      body: JSON.stringify({ message: "do it", userId: "user-1" }),
+    }),
+  );
+  expect(unauthorized.status).toBe(401);
+  const missing = await fetch(
+    adminRequest("http://x/api/agents/missing/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "do it", userId: "user-1" }),
     }),
   );
   expect(missing.status).toBe(404);
@@ -431,7 +539,12 @@ function slackHandler() {
   const db = createDb(":memory:");
   const vault = makeVault("test-key");
   const { mgr, calls } = fakeManager();
-  createAgent(db, { id: "coder", name: "Coder", model: "m", systemPrompt: "x" });
+  createAgent(db, {
+    id: "coder",
+    name: "Coder",
+    harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+    systemPrompt: "x",
+  });
   createSlackConnection(db, {
     id: "conn-1",
     name: "Acme",

@@ -1,6 +1,6 @@
 import {
   AgentConfig,
-  MODEL_CATALOG,
+  HarnessDefinition,
   type SkillFile,
   type SlackConnection,
   SlackConnectionInput,
@@ -15,17 +15,20 @@ import {
   deleteGrant,
   deleteSlackConnection,
   getAgent,
+  getHarness,
   getRun,
   getSessionBySourceKey,
   getSlackConnection,
   listAgents,
   listGrants,
+  listHarnesses,
   listRunSteps,
   listRuns,
   listSessions,
   listSlackConnections,
   listUsers,
   updateAgent,
+  updateHarness,
   updateSlackConnection,
 } from "@gilly/db";
 import type { StreamEvent } from "@gilly/runtime";
@@ -115,17 +118,29 @@ async function slackAuthTest(
 export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Response> {
   const { db, skillStore, gatewayUrl, adminToken, vault, slackManager } = deps;
 
+  function requireAdmin(req: Request): Response | undefined {
+    if (!adminToken) return json({ error: "admin authentication not configured" }, 503);
+    if (req.headers.get("x-admin-token") !== adminToken) {
+      return json({ error: "unauthorized" }, 401);
+    }
+    return undefined;
+  }
+
   async function fetch(req: Request): Promise<Response> {
     const { pathname, searchParams } = new URL(req.url);
     const { method } = req;
     if (method === "OPTIONS") return new Response(null, { headers: cors });
 
+    // --- Harnesses ---
+    if (method === "GET" && pathname === "/api/harnesses") return json(listHarnesses(db));
+    const harnessId = pathParam(pathname, "/api/harnesses/");
+    if (harnessId && method === "PUT") return updateHarnessRoute(req, harnessId);
+
     // --- Agents ---
-    if (method === "GET" && pathname === "/api/models") return json(MODEL_CATALOG);
 
     if (pathname === "/api/agents") {
       if (method === "GET") {
-        return json(listAgents(db).map(({ id, name, model }) => ({ id, name, model })));
+        return json(listAgents(db).map(({ id, name, harness }) => ({ id, name, harness })));
       }
       if (method === "POST") return createAgentRoute(req);
     }
@@ -208,11 +223,12 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/tools") {
+      const denied = requireAdmin(req);
+      if (denied) return denied;
       if (!gatewayUrl) return json({ tools: [] });
-      if (!adminToken) return json({ error: "gateway not configured" }, 503);
       try {
         const res = await globalThis.fetch(`${gatewayUrl}/tools`, {
-          headers: { "x-admin-token": adminToken },
+          headers: { "x-admin-token": adminToken ?? "" },
         });
         return json(await res.json(), res.status);
       } catch {
@@ -221,6 +237,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/composio/toolkits") {
+      const denied = requireAdmin(req);
+      if (denied) return denied;
       if (!gatewayUrl || !adminToken) return json({ configured: false, items: [] });
       try {
         const query = new URL(req.url).search;
@@ -234,14 +252,14 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     const composioToolkit = pathParam(pathname, "/api/composio/toolkits/", "/connect");
-    if (method === "GET" && composioToolkit) return startComposioConnect(composioToolkit);
+    if (method === "GET" && composioToolkit) return startComposioConnect(req, composioToolkit);
 
     // Admin connector auth. The browser calls these WITHOUT any secret; we inject x-admin-token
     // when calling the gateway so the token never reaches the client.
     const credProvider = pathParam(pathname, "/api/connectors/", "/credentials");
     if (method === "PUT" && credProvider) return saveCredential(req, credProvider);
     const connectProvider = pathParam(pathname, "/api/connectors/", "/connect");
-    if (method === "GET" && connectProvider) return startConnect(connectProvider);
+    if (method === "GET" && connectProvider) return startConnect(req, connectProvider);
 
     // --- Slack connections ---
     if (pathname === "/api/slack/connections/test" && method === "POST") return testConnection(req);
@@ -285,9 +303,13 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
 
   /** POST /api/agents/:id/runs → start a background run and return its id. */
   async function startAgent(req: Request, agentId: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     const parsed = await readJson(req);
     if ("error" in parsed) return parsed.error;
-    const body = z.object({ message: z.string().min(1) }).safeParse(parsed.body);
+    const body = z
+      .object({ message: z.string().min(1), userId: z.string().min(1) })
+      .safeParse(parsed.body);
     if (!body.success) return json({ error: body.error.message }, 400);
     try {
       return json(
@@ -296,7 +318,7 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
           source: "gateway",
           sourceKey: `gateway:${crypto.randomUUID()}`,
           userMessage: body.data.message,
-          userId: deps.webUserId,
+          userId: body.data.userId,
         }),
         202,
       );
@@ -348,6 +370,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
 
   /** PUT /api/connectors/:provider/credentials — inject x-admin-token, forward the {key,value} body. */
   async function saveCredential(req: Request, provider: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/admin/credentials/${provider}`, {
@@ -366,7 +390,9 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
    * token; a 302 carries the Atlassian consent URL, which we relay to the browser so it navigates
    * there. A 200 means already-connected → bounce back to the connectors page.
    */
-  async function startConnect(provider: string): Promise<Response> {
+  async function startConnect(req: Request, provider: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/oauth/${provider}/start`, {
@@ -384,7 +410,9 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
   }
 
-  async function startComposioConnect(slug: string): Promise<Response> {
+  async function startComposioConnect(req: Request, slug: string): Promise<Response> {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(
@@ -426,6 +454,19 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       return json(createAgent(db, cfg.data), 201);
     } catch (e) {
       return errorResponse(e);
+    }
+  }
+
+  async function updateHarnessRoute(req: Request, id: string): Promise<Response> {
+    if (!getHarness(db, id)) return json({ error: `Harness "${id}" not found` }, 404);
+    const parsed = await readJson(req);
+    if ("error" in parsed) return parsed.error;
+    const harness = HarnessDefinition.safeParse({ ...(parsed.body as object), id });
+    if (!harness.success) return json({ error: harness.error.message }, 400);
+    try {
+      return json(updateHarness(db, id, harness.data));
+    } catch (error) {
+      return errorResponse(error);
     }
   }
 

@@ -77,6 +77,11 @@ type ManagementTool = CatalogTool & {
   connected: boolean;
 };
 
+export function resolveComposioApiKey(db: Db, vault: Vault, fallback?: string): string | undefined {
+  const stored = getCredential(db, "composio").find((row) => row.key === "api_key");
+  return (stored ? vault.decrypt(stored.value) : undefined) || fallback;
+}
+
 const USER_MISSING_GRANT_MESSAGE =
   "Stop whatever you are doing and first inform the user that they do not have access to this tool. Wait for the user to respond before continuing, and do not retry this tool unless access is granted.";
 
@@ -107,13 +112,17 @@ export function createGatewayServer(deps: {
   const composio =
     deps.composio ??
     createComposioService({
-      getApiKey: () => process.env.COMPOSIO_API_KEY,
+      getApiKey: () => resolveComposioApiKey(db, vault, process.env.COMPOSIO_API_KEY),
       userId: process.env.GILLY_COMPOSIO_USER_ID ?? "gilly-shared",
     });
   type DynamicRoute =
     | { kind: "mcp"; connector: string }
     | { kind: "composio"; upstreamSlug: string };
-  type ToolDiscovery = { tools: ManagementTool[]; routes: Map<string, DynamicRoute> };
+  type ToolDiscovery = {
+    tools: ManagementTool[];
+    routes: Map<string, DynamicRoute>;
+    cacheable: boolean;
+  };
   let managementToolsCache: { value: ToolDiscovery; expiresAt: number } | undefined;
   let managementToolsInFlight: Promise<ToolDiscovery> | undefined;
 
@@ -129,7 +138,7 @@ export function createGatewayServer(deps: {
     if (managementToolsInFlight) return managementToolsInFlight;
 
     const pending = discoverManagementTools().then((value) => {
-      if (managementToolsInFlight === pending) {
+      if (managementToolsInFlight === pending && value.cacheable) {
         managementToolsCache = { value, expiresAt: Date.now() + managementToolsTtlMs };
       }
       return value;
@@ -240,19 +249,22 @@ export function createGatewayServer(deps: {
               catalogTimeoutMs,
               "Composio tool discovery timed out",
             )
-          : [],
+          : { tools: [], complete: true },
       )
       .catch((err) => {
         console.warn("[gateway] Composio tool discovery failed:", err);
-        return [];
+        return { tools: [], complete: false };
       });
-    const [mcpGroups, composioTools] = await Promise.all([mcpDiscovery, composioDiscovery]);
+    const [mcpGroups, composioDiscoveryResult] = await Promise.all([
+      mcpDiscovery,
+      composioDiscovery,
+    ]);
     const mcpEntries = mcpGroups.flat();
 
     const claimed = new Set([...apiEntries, ...mcpEntries].map((tool) => tool.name));
     const composioEntries: ManagementTool[] = [];
     const composioRoutes = new Map<string, string>();
-    for (const { upstreamSlug, ...tool } of composioTools) {
+    for (const { upstreamSlug, ...tool } of composioDiscoveryResult.tools) {
       if (claimed.has(tool.name)) continue;
       composioEntries.push(tool);
       composioRoutes.set(tool.name, upstreamSlug);
@@ -263,7 +275,11 @@ export function createGatewayServer(deps: {
     for (const [name, upstreamSlug] of composioRoutes) {
       routes.set(name, { kind: "composio", upstreamSlug });
     }
-    return { tools: [...apiEntries, ...mcpEntries, ...composioEntries], routes };
+    return {
+      tools: [...apiEntries, ...mcpEntries, ...composioEntries],
+      routes,
+      cacheable: composioDiscoveryResult.complete,
+    };
   }
 
   async function catalog(req: Request): Promise<Response> {
