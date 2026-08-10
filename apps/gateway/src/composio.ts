@@ -3,6 +3,7 @@ import { Composio } from "@composio/core";
 const TOOLKIT_PAGE_SIZE = 50;
 const TOOLKIT_MAX_PAGES = 100;
 const TOOL_PAGE_SIZE = 1_000;
+const NO_AUTH_DISCOVERY_TIMEOUT_MS = 5_000;
 
 export type ComposioTool = {
   name: string;
@@ -58,6 +59,7 @@ type ComposioSession = {
     cursor?: string;
     limit?: number;
     search?: string;
+    isConnected?: boolean;
   }): Promise<{ items: ToolkitState[]; cursor?: string }>;
   authorize(
     slug: string,
@@ -85,7 +87,7 @@ type ComposioClient = {
 
 export interface ComposioService {
   configured(): boolean;
-  listTools(): Promise<ComposioTool[]>;
+  listTools(): Promise<{ tools: ComposioTool[]; complete: boolean }>;
   listToolkits(input: { query?: string; cursor?: string }): Promise<ComposioToolkitPage>;
   authorize(slug: string, callbackUrl: string): Promise<string>;
   execute(upstreamSlug: string, input: unknown): Promise<unknown>;
@@ -116,14 +118,21 @@ export function createComposioService(deps: {
   getApiKey: () => string | undefined;
   userId: string;
   createClient?: (apiKey: string) => ComposioClient;
+  noAuthDiscoveryTimeoutMs?: number;
 }): ComposioService {
   const createClient =
     deps.createClient ??
     ((apiKey: string) =>
       new Composio({ apiKey, allowTracking: false, disableVersionCheck: true }) as ComposioClient);
-  let current:
-    | { apiKey: string; client: ComposioClient; session: Promise<ComposioSession> }
-    | undefined;
+  type ServiceState = {
+    apiKey: string;
+    client: ComposioClient;
+    session: Promise<ComposioSession>;
+    noAuthToolkits?: string[];
+    noAuthDiscovery?: Promise<string[]>;
+  };
+  let current: ServiceState | undefined;
+  const noAuthDiscoveryTimeoutMs = deps.noAuthDiscoveryTimeoutMs ?? NO_AUTH_DISCOVERY_TIMEOUT_MS;
 
   function configured(): boolean {
     try {
@@ -156,14 +165,14 @@ export function createComposioService(deps: {
     return current;
   }
 
-  async function connectedToolkits(): Promise<string[]> {
-    const session = await state().session;
+  async function connectedToolkits(entry: ServiceState): Promise<string[]> {
+    const session = await entry.session;
     const slugs: string[] = [];
     let cursor: string | undefined;
     for (let pageNumber = 0; pageNumber < TOOLKIT_MAX_PAGES; pageNumber += 1) {
-      const page = await session.toolkits({ cursor, limit: TOOLKIT_PAGE_SIZE });
+      const page = await session.toolkits({ cursor, limit: TOOLKIT_PAGE_SIZE, isConnected: true });
       for (const item of page.items) {
-        if (!item.slug.startsWith("composio") && (item.isNoAuth || item.connection?.isActive)) {
+        if (!item.slug.startsWith("composio") && item.connection?.isActive) {
           slugs.push(item.slug);
         }
       }
@@ -173,14 +182,67 @@ export function createComposioService(deps: {
     return slugs;
   }
 
-  async function listTools(): Promise<ComposioTool[]> {
-    const { client } = state();
-    const toolkits = await connectedToolkits();
-    if (toolkits.length === 0) return [];
+  async function discoverNoAuthToolkits(entry: ServiceState): Promise<string[]> {
+    const session = await entry.session;
+    const slugs: string[] = [];
+    let cursor: string | undefined;
+    for (let pageNumber = 0; pageNumber < TOOLKIT_MAX_PAGES; pageNumber += 1) {
+      const page = await session.toolkits({ cursor, limit: TOOLKIT_PAGE_SIZE });
+      for (const item of page.items) {
+        if (!item.slug.startsWith("composio") && item.isNoAuth) slugs.push(item.slug);
+      }
+      if (!page.cursor || page.cursor === cursor) break;
+      cursor = page.cursor;
+    }
+    return slugs;
+  }
+
+  function warmNoAuthToolkits(entry: ServiceState) {
+    if (entry.noAuthToolkits !== undefined || entry.noAuthDiscovery) return;
+    const pending = discoverNoAuthToolkits(entry);
+    entry.noAuthDiscovery = pending;
+    void pending.then(
+      (slugs) => {
+        if (entry.noAuthDiscovery !== pending) return;
+        entry.noAuthToolkits = slugs;
+        entry.noAuthDiscovery = undefined;
+      },
+      () => {
+        if (entry.noAuthDiscovery === pending) entry.noAuthDiscovery = undefined;
+      },
+    );
+  }
+
+  async function waitForNoAuthToolkits(entry: ServiceState): Promise<void> {
+    const pending = entry.noAuthDiscovery;
+    if (!pending) return;
+    let timeout: ReturnType<typeof setTimeout>;
+    const completed = await Promise.race([
+      pending.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(() => resolve(false), noAuthDiscoveryTimeoutMs);
+      }),
+    ]).finally(() => clearTimeout(timeout));
+    if (!completed && entry.noAuthDiscovery === pending) entry.noAuthDiscovery = undefined;
+  }
+
+  async function listTools(): Promise<{ tools: ComposioTool[]; complete: boolean }> {
+    const entry = state();
+    const connectedDiscovery = connectedToolkits(entry);
+    warmNoAuthToolkits(entry);
+    const connected = await connectedDiscovery;
+    await waitForNoAuthToolkits(entry);
+    const noAuth = entry.noAuthToolkits;
+    const complete = noAuth !== undefined;
+    const toolkits = [...new Set([...connected, ...(noAuth ?? [])])];
+    if (toolkits.length === 0) return { tools: [], complete };
     const raw = (
       await Promise.all(
         toolkits.map((toolkit) =>
-          client.tools.getRawComposioTools({
+          entry.client.tools.getRawComposioTools({
             toolkits: [toolkit],
             limit: TOOL_PAGE_SIZE,
             important: false,
@@ -204,7 +266,7 @@ export function createComposioService(deps: {
         upstreamSlug: tool.slug,
       });
     }
-    return [...byName.values()];
+    return { tools: [...byName.values()], complete };
   }
 
   return {

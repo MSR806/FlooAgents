@@ -1,4 +1,4 @@
-import { type Db, getCredential, getGatewayToken, insertToolCall, setCredential } from "@gilly/db";
+import { type Db, getCredential, getGatewayToken, insertToolCall, setCredentials } from "@gilly/db";
 import type { ToolContext } from "@gilly/gateway-kit";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -29,6 +29,8 @@ const TIMEOUT_MS = 30_000;
 // (and the agent turn waiting on it) forever. A timeout is treated like a down provider — skipped.
 const CATALOG_TIMEOUT_MS = 10_000;
 const MANAGEMENT_TOOLS_TTL_MS = 5_000;
+const MAX_CREDENTIAL_ENTRIES = 16;
+const MAX_CREDENTIAL_VALUE_LENGTH = 64 * 1024;
 
 /** Race a promise against a timeout; rejects with `reason` if it doesn't settle in time. */
 function withDeadline<T>(promise: Promise<T>, ms: number, reason: string): Promise<T> {
@@ -75,6 +77,11 @@ type ManagementTool = CatalogTool & {
   connected: boolean;
 };
 
+export function resolveComposioApiKey(db: Db, vault: Vault, fallback?: string): string | undefined {
+  const stored = getCredential(db, "composio").find((row) => row.key === "api_key");
+  return (stored ? vault.decrypt(stored.value) : undefined) || fallback;
+}
+
 const USER_MISSING_GRANT_MESSAGE =
   "Stop whatever you are doing and first inform the user that they do not have access to this tool. Wait for the user to respond before continuing, and do not retry this tool unless access is granted.";
 
@@ -105,16 +112,17 @@ export function createGatewayServer(deps: {
   const composio =
     deps.composio ??
     createComposioService({
-      getApiKey: () => {
-        const stored = getCredential(db, "composio").find((row) => row.key === "api_key");
-        return (stored ? vault.decrypt(stored.value) : undefined) || process.env.COMPOSIO_API_KEY;
-      },
+      getApiKey: () => resolveComposioApiKey(db, vault, process.env.COMPOSIO_API_KEY),
       userId: process.env.GILLY_COMPOSIO_USER_ID ?? "gilly-shared",
     });
   type DynamicRoute =
     | { kind: "mcp"; connector: string }
     | { kind: "composio"; upstreamSlug: string };
-  type ToolDiscovery = { tools: ManagementTool[]; routes: Map<string, DynamicRoute> };
+  type ToolDiscovery = {
+    tools: ManagementTool[];
+    routes: Map<string, DynamicRoute>;
+    cacheable: boolean;
+  };
   let managementToolsCache: { value: ToolDiscovery; expiresAt: number } | undefined;
   let managementToolsInFlight: Promise<ToolDiscovery> | undefined;
 
@@ -130,7 +138,7 @@ export function createGatewayServer(deps: {
     if (managementToolsInFlight) return managementToolsInFlight;
 
     const pending = discoverManagementTools().then((value) => {
-      if (managementToolsInFlight === pending) {
+      if (managementToolsInFlight === pending && value.cacheable) {
         managementToolsCache = { value, expiresAt: Date.now() + managementToolsTtlMs };
       }
       return value;
@@ -241,19 +249,22 @@ export function createGatewayServer(deps: {
               catalogTimeoutMs,
               "Composio tool discovery timed out",
             )
-          : [],
+          : { tools: [], complete: true },
       )
       .catch((err) => {
         console.warn("[gateway] Composio tool discovery failed:", err);
-        return [];
+        return { tools: [], complete: false };
       });
-    const [mcpGroups, composioTools] = await Promise.all([mcpDiscovery, composioDiscovery]);
+    const [mcpGroups, composioDiscoveryResult] = await Promise.all([
+      mcpDiscovery,
+      composioDiscovery,
+    ]);
     const mcpEntries = mcpGroups.flat();
 
     const claimed = new Set([...apiEntries, ...mcpEntries].map((tool) => tool.name));
     const composioEntries: ManagementTool[] = [];
     const composioRoutes = new Map<string, string>();
-    for (const { upstreamSlug, ...tool } of composioTools) {
+    for (const { upstreamSlug, ...tool } of composioDiscoveryResult.tools) {
       if (claimed.has(tool.name)) continue;
       composioEntries.push(tool);
       composioRoutes.set(tool.name, upstreamSlug);
@@ -264,7 +275,11 @@ export function createGatewayServer(deps: {
     for (const [name, upstreamSlug] of composioRoutes) {
       routes.set(name, { kind: "composio", upstreamSlug });
     }
-    return { tools: [...apiEntries, ...mcpEntries, ...composioEntries], routes };
+    return {
+      tools: [...apiEntries, ...mcpEntries, ...composioEntries],
+      routes,
+      cacheable: composioDiscoveryResult.complete,
+    };
   }
 
   async function catalog(req: Request): Promise<Response> {
@@ -387,12 +402,54 @@ export function createGatewayServer(deps: {
   function credentialsRoute(req: Request, provider: string): Promise<Response> | Response {
     if (req.headers.get("x-admin-token") !== adminToken)
       return json({ error: "unauthorized" }, 401);
+    const connector = connectorMeta().find((item) => item.name === provider);
+    if (connector?.auth !== "api_key") return json({ error: "not found" }, 404);
     return (async () => {
-      const body = ((await readJson(req)) ?? {}) as { key?: string; value?: string };
-      if (!body.key || typeof body.value !== "string") {
-        return json({ error: "key and value are required" }, 400);
+      const body = ((await readJson(req)) ?? {}) as {
+        key?: string;
+        value?: string;
+        credentials?: unknown;
+      };
+      let values: Record<string, string>;
+      if (body.credentials !== undefined) {
+        if (
+          typeof body.credentials !== "object" ||
+          body.credentials === null ||
+          Array.isArray(body.credentials)
+        ) {
+          return json({ error: "credentials are required" }, 400);
+        }
+        const entries = Object.entries(body.credentials);
+        if (
+          entries.length === 0 ||
+          entries.some(([key, value]) => !key || typeof value !== "string")
+        ) {
+          return json({ error: "credentials are required" }, 400);
+        }
+        values = Object.fromEntries(entries) as Record<string, string>;
+      } else {
+        if (!body.key || typeof body.value !== "string") {
+          return json({ error: "key and value are required" }, 400);
+        }
+        values = { [body.key]: body.value };
       }
-      setCredential(db, provider, body.key, vault.encrypt(body.value));
+      const entries = Object.entries(values);
+      if (
+        entries.length > MAX_CREDENTIAL_ENTRIES ||
+        entries.some(
+          ([key, value]) =>
+            !connector.requiredCreds.includes(key) ||
+            value.length === 0 ||
+            value.length > MAX_CREDENTIAL_VALUE_LENGTH,
+        )
+      ) {
+        return json({ error: "invalid credentials" }, 400);
+      }
+      setCredentials(
+        db,
+        provider,
+        Object.fromEntries(entries.map(([key, value]) => [key, vault.encrypt(value)])),
+      );
       invalidateManagementTools();
       return json({ ok: true });
     })();
@@ -425,7 +482,7 @@ export function createGatewayServer(deps: {
       if (!composio.configured()) {
         return json({ configured: false, error: "not_configured" }, 503);
       }
-      const callbackUrl = `${webUrl}/connectors?connected=${encodeURIComponent(slug)}`;
+      const callbackUrl = `${webUrl}/connectors?tab=composio&connected=${encodeURIComponent(slug)}`;
       const location = await withDeadline(
         composio.authorize(slug, callbackUrl),
         catalogTimeoutMs,

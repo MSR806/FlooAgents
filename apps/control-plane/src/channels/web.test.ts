@@ -194,11 +194,6 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
   });
 });
 
-test("GET /api/tools requires admin authentication", async () => {
-  const res = await handler()(new Request("http://x/api/tools"));
-  expect(res.status).toBe(401);
-});
-
 test("GET /api/tools reports an unavailable gateway", async () => {
   globalThis.fetch = (async () => {
     throw new Error("offline");
@@ -207,6 +202,11 @@ test("GET /api/tools reports an unavailable gateway", async () => {
   const res = await handler()(adminRequest("http://x/api/tools"));
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({ error: "gateway unavailable" });
+});
+
+test("GET /api/tools requires admin authentication", async () => {
+  const res = await handler()(new Request("http://x/api/tools"));
+  expect(res.status).toBe(401);
 });
 
 test("GET /api/tools fails closed when internal admin auth is not configured", async () => {

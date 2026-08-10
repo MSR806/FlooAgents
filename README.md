@@ -119,6 +119,10 @@ Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY
 the control-plane, gateway, and web env files, and set `GILLY_WEB_ADMIN_PASSWORD` for the Tools
 page login (username `admin`). `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
+The Tools administration page uses HTTP Basic authentication. Other management pages and the
+direct control-plane API still assume a trusted internal deployment. Docker binds published ports
+to loopback by default; set `GILLY_BIND_ADDRESS` only when trusted-network access is required.
+
 Then run the services you need:
 
 ```bash

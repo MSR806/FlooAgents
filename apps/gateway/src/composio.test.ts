@@ -6,19 +6,22 @@ import {
   createComposioService,
 } from "./composio.ts";
 
+type ToolkitInput = { cursor?: string; limit?: number; search?: string; isConnected?: boolean };
+type ToolkitPage = {
+  items: {
+    slug: string;
+    name: string;
+    isNoAuth: boolean;
+    connection?: { isActive: boolean };
+  }[];
+  cursor?: string;
+};
+
 function fakeClient(
   log: string[],
   options: {
     redirectUrl?: string | URL;
-    toolkitPage?: (input?: { cursor?: string; limit?: number; search?: string }) => {
-      items: {
-        slug: string;
-        name: string;
-        isNoAuth: boolean;
-        connection?: { isActive: boolean };
-      }[];
-      cursor?: string;
-    };
+    toolkitPage?: (input?: ToolkitInput) => ToolkitPage | Promise<ToolkitPage>;
   } = {},
 ) {
   const redirectUrl =
@@ -45,17 +48,18 @@ function fakeClient(
       async create(userId: string) {
         log.push(`create:${userId}`);
         return {
-          async toolkits(input?: { cursor?: string; limit?: number; search?: string }) {
+          async toolkits(input?: ToolkitInput) {
             log.push(`toolkits:${input?.search ?? ""}`);
             if (options.toolkitPage) return options.toolkitPage(input);
+            const items = [
+              { slug: "gmail", name: "Gmail", isNoAuth: false, connection: { isActive: true } },
+              { slug: "hackernews", name: "Hacker News", isNoAuth: true },
+              { slug: "composio", name: "Composio", isNoAuth: true },
+              { slug: "composio_search", name: "Composio Search", isNoAuth: true },
+              { slug: "slack", name: "Slack", isNoAuth: false },
+            ];
             return {
-              items: [
-                { slug: "gmail", name: "Gmail", isNoAuth: false, connection: { isActive: true } },
-                { slug: "hackernews", name: "Hacker News", isNoAuth: true },
-                { slug: "composio", name: "Composio", isNoAuth: true },
-                { slug: "composio_search", name: "Composio Search", isNoAuth: true },
-                { slug: "slack", name: "Slack", isNoAuth: false },
-              ],
+              items: input?.isConnected ? items.filter((item) => item.connection?.isActive) : items,
             };
           },
           async authorize(slug: string, options: { callbackUrl: string }) {
@@ -94,7 +98,7 @@ test("canonical names remove the toolkit prefix", () => {
   expect(canonicalComposioToolName("gmail", "GMAIL_SEND_EMAIL")).toBe("gmail.send_email");
 });
 
-test("service lists connected/no-auth tools and recreates the session when the key changes", async () => {
+test("initial discovery includes connected and no-auth tools and recreates keyed sessions", async () => {
   const log: string[] = [];
   let key = "key-1";
   const service = createComposioService({
@@ -103,15 +107,14 @@ test("service lists connected/no-auth tools and recreates the session when the k
     createClient: () => fakeClient(log),
   });
 
-  expect((await service.listTools()).map((tool) => tool.name)).toEqual([
+  const initial = await service.listTools();
+  expect(initial.tools.map((tool) => tool.name)).toEqual([
     "gmail.send_email",
     "gmail.fail",
     "hackernews.get_user",
   ]);
-  expect(log.filter((entry) => entry.startsWith("raw:"))).toEqual([
-    "raw:gmail:1000",
-    "raw:hackernews:1000",
-  ]);
+  expect(initial.complete).toBe(true);
+  expect(log.filter((entry) => entry === "raw:hackernews:1000")).toHaveLength(1);
   const page = await service.listToolkits({ query: "mail" });
   expect(page.configured).toBe(true);
   expect(page.items[0]).toEqual({
@@ -132,6 +135,89 @@ test("service lists connected/no-auth tools and recreates the session when the k
   key = "key-2";
   await service.listTools();
   expect(log.filter((entry) => entry === "create:gilly-shared")).toHaveLength(2);
+});
+
+test("connected discovery is not blocked by the full no-auth toolkit scan", async () => {
+  const inputs: ToolkitInput[] = [];
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: (input) => {
+          inputs.push(input ?? {});
+          if (!input?.isConnected) return new Promise<ToolkitPage>(() => {});
+          return {
+            items: [
+              {
+                slug: "gmail",
+                name: "Gmail",
+                isNoAuth: false,
+                connection: { isActive: true },
+              },
+            ],
+          };
+        },
+      }),
+    noAuthDiscoveryTimeoutMs: 5,
+  });
+
+  const catalog = await service.listTools();
+  expect(catalog.tools.map((tool) => tool.name)).toEqual(["gmail.send_email", "gmail.fail"]);
+  expect(inputs[0]?.isConnected).toBe(true);
+  expect(catalog.complete).toBe(false);
+});
+
+test("no-auth discovery retries after timeout and ignores the stale attempt", async () => {
+  const releases: ((page: ToolkitPage) => void)[] = [];
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: (input) => {
+          if (input?.isConnected) return { items: [] };
+          return new Promise<ToolkitPage>((resolve) => releases.push(resolve));
+        },
+      }),
+    noAuthDiscoveryTimeoutMs: 50,
+  });
+
+  expect(await service.listTools()).toEqual({ tools: [], complete: false });
+
+  const retry = service.listTools();
+  while (releases.length < 2) await Bun.sleep(0);
+  releases[1]?.({
+    items: [{ slug: "hackernews", name: "Hacker News", isNoAuth: true }],
+  });
+  expect((await retry).tools.map((tool) => tool.name)).toEqual(["hackernews.get_user"]);
+
+  releases[0]?.({ items: [{ slug: "stale", name: "Stale", isNoAuth: true }] });
+  await Bun.sleep(0);
+  expect((await service.listTools()).tools.map((tool) => tool.name)).toEqual([
+    "hackernews.get_user",
+  ]);
+  expect(releases).toHaveLength(2);
+});
+
+test("initial discovery waits briefly for a warming no-auth scan", async () => {
+  const service = createComposioService({
+    getApiKey: () => "key",
+    userId: "gilly-shared",
+    createClient: () =>
+      fakeClient([], {
+        toolkitPage: async (input) => {
+          if (input?.isConnected) return { items: [] };
+          await Bun.sleep(5);
+          return { items: [{ slug: "hackernews", name: "Hacker News", isNoAuth: true }] };
+        },
+      }),
+    noAuthDiscoveryTimeoutMs: 50,
+  });
+
+  const catalog = await service.listTools();
+  expect(catalog.tools.map((tool) => tool.name)).toEqual(["hackernews.get_user"]);
+  expect(catalog.complete).toBe(true);
 });
 
 test("a rejected cached session is cleared so the next call retries", async () => {
@@ -181,6 +267,70 @@ test("a rejected old session does not clear the replacement for a new key", asyn
   expect(clients).toBe(2);
 });
 
+test("a stale no-auth scan does not block warming after an API key change", async () => {
+  let key = "old";
+  let releaseOld = () => {};
+  let releaseNew = () => {};
+  const oldGate = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  const newGate = new Promise<void>((resolve) => {
+    releaseNew = resolve;
+  });
+  const oldClient = fakeClient([], {
+    toolkitPage: async (input) => {
+      if (!input?.isConnected) return new Promise<ToolkitPage>(() => {});
+      await oldGate;
+      return {
+        items: [
+          {
+            slug: "gmail",
+            name: "Gmail",
+            isNoAuth: false,
+            connection: { isActive: true },
+          },
+        ],
+      };
+    },
+  });
+  const newClient = fakeClient([], {
+    toolkitPage: async (input) => {
+      if (!input?.isConnected) {
+        return { items: [{ slug: "hackernews", name: "Hacker News", isNoAuth: true }] };
+      }
+      await newGate;
+      return {
+        items: [
+          {
+            slug: "gmail",
+            name: "Gmail",
+            isNoAuth: false,
+            connection: { isActive: true },
+          },
+        ],
+      };
+    },
+  });
+  const service = createComposioService({
+    getApiKey: () => key,
+    userId: "gilly-shared",
+    createClient: (apiKey) => (apiKey === "old" ? oldClient : newClient),
+    noAuthDiscoveryTimeoutMs: 5,
+  });
+
+  const oldRequest = service.listTools();
+  key = "new";
+  const newRequest = service.listTools();
+  releaseOld();
+  await oldRequest;
+  releaseNew();
+  await newRequest;
+  await Bun.sleep(0);
+  expect((await service.listTools()).tools.map((tool) => tool.name)).toContain(
+    "hackernews.get_user",
+  );
+});
+
 test("connected toolkit discovery stops on a non-advancing cursor", async () => {
   let pages = 0;
   const service = createComposioService({
@@ -188,14 +338,15 @@ test("connected toolkit discovery stops on a non-advancing cursor", async () => 
     userId: "gilly-shared",
     createClient: () =>
       fakeClient([], {
-        toolkitPage: () => {
+        toolkitPage: (input) => {
+          if (!input?.isConnected) return { items: [] };
           pages += 1;
           return { items: [], cursor: "same" };
         },
       }),
   });
 
-  expect(await service.listTools()).toEqual([]);
+  expect(await service.listTools()).toEqual({ tools: [], complete: true });
   expect(pages).toBe(2);
 });
 
@@ -206,14 +357,15 @@ test("connected toolkit discovery has a maximum page count", async () => {
     userId: "gilly-shared",
     createClient: () =>
       fakeClient([], {
-        toolkitPage: () => {
+        toolkitPage: (input) => {
+          if (!input?.isConnected) return { items: [] };
           pages += 1;
           return { items: [], cursor: `page-${pages}` };
         },
       }),
   });
 
-  expect(await service.listTools()).toEqual([]);
+  expect(await service.listTools()).toEqual({ tools: [], complete: true });
   expect(pages).toBe(100);
 });
 
