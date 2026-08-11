@@ -15,8 +15,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 // docs/slack-app-manifest.yaml). The name lands in both display_information and bot_user.
 const buildManifest = (botName: string) => `display_information:
   name: ${botName}
-  description: Always working cloud agent
-  background_color: "#000d63"
+  description: Any agent. Any harness. Any channel.
+  background_color: "#091c32"
 features:
   bot_user:
     display_name: ${botName}
