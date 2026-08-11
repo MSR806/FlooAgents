@@ -1,6 +1,6 @@
 // Fetch Jira tickets assigned to the current user.
 // Usage: bun .claude/skills/jira/my-tickets.ts [--status all]
-import { invoke } from "@flooagents/gateway-client";
+import { invoke } from "@agent-platform/gateway-client";
 
 const CLOUD_ID = "pratilipi.atlassian.net";
 
