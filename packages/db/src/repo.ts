@@ -8,7 +8,7 @@ import {
   type Session,
   SlackConnection,
   User,
-} from "@flooagents/core";
+} from "@agent-platform/core";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import {

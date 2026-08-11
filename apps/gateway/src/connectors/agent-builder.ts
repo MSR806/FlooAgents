@@ -1,5 +1,5 @@
-import { AgentConfig } from "@flooagents/core";
-import { defineConnector, defineTool } from "@flooagents/gateway-kit";
+import { AgentConfig } from "@agent-platform/core";
+import { defineConnector, defineTool } from "@agent-platform/gateway-kit";
 import { z } from "zod";
 
 const cpUrl = () => process.env.CONTROL_PLANE_URL ?? "http://localhost:4000";

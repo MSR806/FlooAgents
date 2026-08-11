@@ -4,8 +4,8 @@ import {
   getGatewayToken,
   insertToolCall,
   setCredentials,
-} from "@flooagents/db";
-import type { ToolContext } from "@flooagents/gateway-kit";
+} from "@agent-platform/db";
+import type { ToolContext } from "@agent-platform/gateway-kit";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";

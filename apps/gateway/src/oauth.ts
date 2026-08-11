@@ -1,4 +1,4 @@
-import { type Db, deleteCredential, getCredential, setCredential } from "@flooagents/db";
+import { type Db, deleteCredential, getCredential, setCredential } from "@agent-platform/db";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,

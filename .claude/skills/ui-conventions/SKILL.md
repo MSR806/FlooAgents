@@ -20,7 +20,7 @@ The palette is **monochrome by choice**. Character comes from the display face, 
 @import "../../../packages/design-tokens/tokens.css";
 ```
 
-> Relative, not `@flooagents/design-tokens/tokens.css`. Tailwind's CSS resolver doesn't do bare-specifier lookup here, and Node rejects `imports` targets inside `node_modules`. Don't "fix" this to a package specifier without checking `next dev` still compiles.
+> Relative, not `@agent-platform/design-tokens/tokens.css`. Tailwind's CSS resolver doesn't do bare-specifier lookup here, and Node rejects `imports` targets inside `node_modules`. Don't "fix" this to a package specifier without checking `next dev` still compiles.
 
 ## The one rule
 

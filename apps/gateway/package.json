@@ -1,5 +1,5 @@
 {
-  "name": "@flooagents/gateway",
+  "name": "@agent-platform/gateway",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@composio/core": "^0.15.0",
-    "@flooagents/core": "workspace:*",
-    "@flooagents/db": "workspace:*",
-    "@flooagents/gateway-kit": "workspace:*",
+    "@agent-platform/core": "workspace:*",
+    "@agent-platform/db": "workspace:*",
+    "@agent-platform/gateway-kit": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
   }

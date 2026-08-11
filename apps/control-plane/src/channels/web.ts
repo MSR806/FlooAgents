@@ -5,7 +5,7 @@ import {
   type SlackConnection,
   SlackConnectionInput,
   type Vault,
-} from "@flooagents/core";
+} from "@agent-platform/core";
 import {
   addGrant,
   bindSlackConnection,
@@ -32,8 +32,8 @@ import {
   updateAgent,
   updateHarness,
   updateSlackConnection,
-} from "@flooagents/db";
-import type { StreamEvent } from "@flooagents/runtime";
+} from "@agent-platform/db";
+import type { StreamEvent } from "@agent-platform/runtime";
 import { WebClient } from "@slack/web-api";
 import { z } from "zod";
 import type { createEngine, MessageInput } from "../engine.ts";

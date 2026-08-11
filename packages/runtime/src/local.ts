@@ -2,7 +2,7 @@ import {
   type InvocationRequest,
   InvocationResult,
   StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 import type { RuntimeProvider } from "./provider.ts";
 
 /**

@@ -1,5 +1,5 @@
 {
-  "name": "@flooagents/design-tokens",
+  "name": "@agent-platform/design-tokens",
   "version": "0.0.0",
   "private": true,
   "type": "module"

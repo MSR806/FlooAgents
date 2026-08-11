@@ -29,7 +29,7 @@ The direct lane refuses results larger than ~50KB (you'll get an error pointing 
 chained work goes in the script lane so raw payloads never fill your context.
 
 **Script** — chained calls, or heavy data you only need to summarize. Write a TypeScript file in
-your workspace and run it with Bash. It imports `@flooagents/gateway-client`, which is already
+your workspace and run it with Bash. It imports `@agent-platform/gateway-client`, which is already
 authenticated via the `TOOL_GATEWAY_URL` / `TOOL_GATEWAY_TOKEN` env vars in your sandbox. Chain
 as many calls as you need and **print only the summary** — the full results live and die inside
 the script.
@@ -40,7 +40,7 @@ exit code alone is not proof that the script is correct.
 
 ```ts
 // cac.ts — run with: bun cac.ts
-import { invoke } from "@flooagents/gateway-client";
+import { invoke } from "@agent-platform/gateway-client";
 
 const spend = await invoke("meta.insights", { accountId: "…", since, until });
 const installs = await invoke("branch.query", { since, until });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { InvocationRequest, StreamEvent } from "@flooagents/harness-protocol";
+import type { InvocationRequest, StreamEvent } from "@agent-platform/harness-protocol";
 import { LocalRuntimeProvider } from "./local.ts";
 
 const req: InvocationRequest = {

@@ -11,7 +11,7 @@ import {
   listAgents,
   schema,
   updateHarness,
-} from "@flooagents/db";
+} from "@agent-platform/db";
 import {
   loadAgents,
   loadBuiltinAgents,

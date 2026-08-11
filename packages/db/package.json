@@ -1,5 +1,5 @@
 {
-  "name": "@flooagents/db",
+  "name": "@agent-platform/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@flooagents/core": "workspace:*",
+    "@agent-platform/core": "workspace:*",
     "drizzle-orm": "^0.45.2"
   }
 }

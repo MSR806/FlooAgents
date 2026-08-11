@@ -1,4 +1,4 @@
-import type { Connector, McpConnector, ToolDef } from "@flooagents/gateway-kit";
+import type { Connector, McpConnector, ToolDef } from "@agent-platform/gateway-kit";
 import { connectors } from "./connectors/index.ts";
 
 type Entry = { connector: Connector; tool: ToolDef };

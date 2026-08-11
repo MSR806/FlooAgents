@@ -3,7 +3,7 @@ import type {
   InvocationRequest,
   InvocationResult,
   StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 import { createServer, type HarnessRunners } from "./server.ts";
 
 const completed = (finalText: string): InvocationResult => ({

@@ -1,5 +1,5 @@
 {
-  "name": "@flooagents/core",
+  "name": "@agent-platform/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",

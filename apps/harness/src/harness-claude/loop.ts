@@ -13,7 +13,7 @@ import type {
   InvocationResult,
   SkillBundle,
   StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 import { z } from "zod";
 import { gatewayPost } from "../gateway-http.ts";
 

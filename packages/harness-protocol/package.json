@@ -1,5 +1,5 @@
 {
-  "name": "@flooagents/harness-protocol",
+  "name": "@agent-platform/harness-protocol",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@flooagents/core": "workspace:*",
+    "@agent-platform/core": "workspace:*",
     "zod": "^4.4.3"
   }
 }

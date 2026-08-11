@@ -2,7 +2,7 @@ import type {
   InvocationRequest,
   InvocationResult,
   StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 
 /**
  * The control plane → runtime seam. Swappable by design: LocalRuntimeProvider today,

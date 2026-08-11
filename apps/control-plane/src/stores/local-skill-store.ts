@@ -6,8 +6,8 @@ import {
   parseSkillMd,
   type SkillFields,
   type SkillFile,
-} from "@flooagents/core";
-import type { SkillBundle } from "@flooagents/harness-protocol";
+} from "@agent-platform/core";
+import type { SkillBundle } from "@agent-platform/harness-protocol";
 import { loadSkills } from "../config.ts";
 import type { SkillStore } from "./skill-store.ts";
 

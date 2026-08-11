@@ -1,5 +1,5 @@
 {
-  "name": "flooagents",
+  "name": "agent-platform",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -21,13 +21,13 @@
     "test": "bun test",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "dev:harness": "bun run --filter '@flooagents/harness' dev",
-    "dev:control-plane": "bun run --filter '@flooagents/control-plane' dev",
-    "dev:gateway": "bun run --filter '@flooagents/gateway' dev",
-    "dev:web": "bun run --filter '@flooagents/web' dev"
+    "dev:harness": "bun run --filter '@agent-platform/harness' dev",
+    "dev:control-plane": "bun run --filter '@agent-platform/control-plane' dev",
+    "dev:gateway": "bun run --filter '@agent-platform/gateway' dev",
+    "dev:web": "bun run --filter '@agent-platform/web' dev"
   },
   "dependencies": {
-    "@flooagents/gateway-client": "workspace:*"
+    "@agent-platform/gateway-client": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

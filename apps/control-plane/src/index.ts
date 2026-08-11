@@ -1,14 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { makeVault } from "@flooagents/core";
+import { makeVault } from "@agent-platform/core";
 import {
   createDb,
   failRunningRunsBySource,
   getAgent,
   setAdmin,
   upsertUserBySlackId,
-} from "@flooagents/db";
-import { LocalRuntimeProvider } from "@flooagents/runtime";
+} from "@agent-platform/db";
+import { LocalRuntimeProvider } from "@agent-platform/runtime";
 import type { Channel } from "./channels/channel.ts";
 import { createSlackManager } from "./channels/slack-manager.ts";
 import { createWebChannel } from "./channels/web.ts";

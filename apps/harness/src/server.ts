@@ -2,7 +2,7 @@ import {
   InvocationRequest,
   type InvocationResult,
   type StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 import {
   runAgentLoop as runClaudeAgentLoop,
   streamAgentLoop as streamClaudeAgentLoop,

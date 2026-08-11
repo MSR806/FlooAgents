@@ -9,12 +9,12 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { isDeferredOpenModel } from "@flooagents/core";
+import { isDeferredOpenModel } from "@agent-platform/core";
 import type {
   InvocationRequest,
   InvocationResult,
   StreamEvent,
-} from "@flooagents/harness-protocol";
+} from "@agent-platform/harness-protocol";
 import {
   Codex,
   type CodexOptions,

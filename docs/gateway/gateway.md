@@ -33,7 +33,7 @@ Provider schemas (Amplitude's 50 tools, Meta's parameter sprawl) live in the gat
 ## Two Lanes for Calling
 
 1. **Direct** — one small lookup: the agent calls `gateway_invoke` and answers. One round-trip.
-2. **Script** — chained or heavy calls: the agent writes a TypeScript file in its workspace and runs it with Bash. The script imports `@flooagents/gateway-client` (authenticated via `TOOL_GATEWAY_URL` / `TOOL_GATEWAY_TOKEN` env), chains as many tool calls as it needs, and prints only the summary. Raw payloads live and die inside the sandbox.
+2. **Script** — chained or heavy calls: the agent writes a TypeScript file in its workspace and runs it with Bash. The script imports `@agent-platform/gateway-client` (authenticated via `TOOL_GATEWAY_URL` / `TOOL_GATEWAY_TOKEN` env), chains as many tool calls as it needs, and prints only the summary. Raw payloads live and die inside the sandbox.
 
 A skill teaches the agent which lane to pick. Composite capabilities (e.g. "compute CAC" = Meta spend + Branch installs + math) are skills carrying a script — new composite means a new skill file, not a deploy.
 

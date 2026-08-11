@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@flooagents/runtime";
+import type { StreamEvent } from "@agent-platform/runtime";
 
 const MAX_ACTIVITY_LENGTH = 72;
 const COMMAND_TOOLS = new Set([
