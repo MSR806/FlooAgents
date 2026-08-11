@@ -110,13 +110,15 @@ export const toolCalls = sqliteTable("tool_calls", {
 });
 
 /**
- * A Slack workspace connection: bot/app tokens (vault-encrypted) + the agent it routes to.
- * Mirrors the `SlackConnection` schema in `@gilly/core`. Many can coexist; managed via the web API.
+ * A Slack workspace connection with independently-owned bot/app tokens and an optional agent.
+ * Agent ids are unique so both sides of the binding are one-to-one.
  */
 export const slackConnections = sqliteTable("slack_connections", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  agentId: text("agent_id").notNull(),
+  agentId: text("agent_id")
+    .unique()
+    .references(() => agents.id, { onDelete: "set null" }),
   botToken: text("bot_token").notNull(),
   appToken: text("app_token").notNull(),
   teamId: text("team_id"),

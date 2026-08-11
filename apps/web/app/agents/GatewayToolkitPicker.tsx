@@ -73,7 +73,7 @@ export default function GatewayToolkitPicker({
 
   return (
     <>
-      <div className="flex min-w-0 flex-col gap-3 rounded-xl border bg-muted/15 p-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-col gap-3 rounded-lg border bg-muted/15 p-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
             {selected.length
@@ -93,7 +93,7 @@ export default function GatewayToolkitPicker({
       <dialog
         ref={dialog}
         aria-labelledby="gateway-toolkit-picker-title"
-        className="m-auto w-[calc(100%-1.5rem)] max-w-3xl rounded-2xl border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/35"
+        className="m-auto w-[calc(100%-1.5rem)] max-w-3xl rounded-lg border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/35"
         onCancel={(event) => {
           event.preventDefault();
           closePicker();
@@ -144,7 +144,7 @@ export default function GatewayToolkitPicker({
                   type="search"
                   value={query}
                   placeholder="Search integrations"
-                  className="h-9 rounded-xl pl-9"
+                  className="h-9 rounded-lg pl-9"
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
@@ -169,7 +169,7 @@ export default function GatewayToolkitPicker({
                 ))}
               </div>
             ) : (
-              <p className="rounded-xl border border-dashed bg-muted/15 px-4 py-12 text-center text-sm text-muted-foreground">
+              <p className="rounded-lg border border-dashed bg-muted/15 px-4 py-12 text-center text-sm text-muted-foreground">
                 {sourceToolkits.length
                   ? "No integrations match your search."
                   : source === "custom"
@@ -184,13 +184,13 @@ export default function GatewayToolkitPicker({
             )}
 
             {draftUnavailable.length ? (
-              <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center dark:border-amber-900 dark:bg-amber-950/30">
+              <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                  <p className="text-sm font-medium text-warning">
                     {draftUnavailable.length} unavailable legacy{" "}
                     {draftUnavailable.length === 1 ? "tool" : "tools"}
                   </p>
-                  <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-300/80">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Preserved so editing another field does not silently remove access.
                   </p>
                 </div>
@@ -280,7 +280,7 @@ function ToolkitOption({
             ? `Select all ${label}, ${selectedCount} of ${toolkit.tools.length} ${toolNoun} currently selected`
             : `Select ${label}, ${toolkit.tools.length} ${toolNoun}`
       }
-      className={`flex min-h-36 min-w-0 flex-col rounded-2xl border p-4 text-left transition-colors ${
+      className={`flex min-h-36 min-w-0 flex-col rounded-lg border p-4 text-left transition-colors ${
         selectedCount
           ? "border-foreground/30 bg-muted/30"
           : "bg-card hover:border-foreground/20 hover:bg-muted/10"
@@ -289,10 +289,10 @@ function ToolkitOption({
     >
       <span className="flex min-w-0 items-start gap-3">
         <span
-          className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${
+          className={`flex size-11 shrink-0 items-center justify-center rounded-lg ${
             toolkit.source === "composio"
-              ? "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
-              : "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+              ? "bg-secondary text-foreground"
+              : "bg-tile text-muted-foreground ring-1 ring-border"
           }`}
         >
           <Cable className="size-5" />
@@ -321,13 +321,7 @@ function ToolkitOption({
         </span>
       </span>
       <span className="mt-auto flex items-end justify-between gap-3 pt-4 text-xs">
-        <span
-          className={
-            toolkit.connected
-              ? "text-emerald-700 dark:text-emerald-300"
-              : "text-amber-700 dark:text-amber-300"
-          }
-        >
+        <span className={toolkit.connected ? "text-success" : "text-warning"}>
           {toolkit.connected ? "Connected" : "Not connected"}
         </span>
         {partial ? (

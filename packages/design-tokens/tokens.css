@@ -1,0 +1,119 @@
+/**
+ * Paper & Ink — Gilly's design tokens.
+ *
+ * Deliberately published under shadcn's variable names so every vendored component in
+ * apps/web/components/ui reads them without modification. Two palettes: Paper (default)
+ * and Ink (.dark on <html>).
+ *
+ * Rule for callers: never write a literal colour, radius, or font family. If a value is
+ * missing here, add it here.
+ */
+
+:root {
+  /* --- surfaces --- */
+  --background: #f0eee9; /* paper */
+  --foreground: #1a1a18; /* ink */
+  --card: #f5f3ee;
+  --card-foreground: #1a1a18;
+  --popover: #f5f3ee;
+  --popover-foreground: #1a1a18;
+
+  /* Primary is ink. It drives buttons, badges, the sidebar mark, avatars and
+     selected states — the system is monochrome by choice; character comes from
+     the display face, mono controls and warm paper, not from an accent colour. */
+  --primary: #1a1a18;
+  --primary-foreground: #f0eee9;
+  --secondary: #e8e5de;
+  --secondary-foreground: #1a1a18;
+  --muted: #e8e5de;
+  --muted-foreground: #6b6b66;
+
+  /* shadcn's --accent is the subtle hover/active background, not a brand colour. */
+  --accent: #e0ddd4;
+  --accent-foreground: #1a1a18;
+
+  /* --- lines --- */
+  --border: #d8d6d0;
+  --input: #d8d6d0;
+  --ring: #1a1a18;
+
+  /* --- emphasis + status ---
+     --brand is the single seam for an accent colour. It points at ink today; change
+     it here (both palettes) to introduce one, and nothing else needs to move. */
+  --brand: #1a1a18;
+  --brand-foreground: #f0eee9;
+  --success: #2d9f52;
+  --warning: #b8860b;
+  --destructive: #c73e3e;
+  --destructive-foreground: #ffffff;
+
+  /* Light chip behind a vendor logo (harness marks are warm orange and sink into paper). */
+  --tile: #fbfaf7;
+
+  /* --- shape --- */
+  --radius: 4px;
+
+  /* --- sidebar --- */
+  --sidebar: #eae7e0;
+  --sidebar-foreground: #1a1a18;
+  --sidebar-primary: #1a1a18;
+  --sidebar-primary-foreground: #f0eee9;
+  --sidebar-accent: #ddd9d1;
+  --sidebar-accent-foreground: #1a1a18;
+  --sidebar-border: #d8d6d0;
+  --sidebar-ring: #1a1a18;
+
+  /* --- charts: ink ramp --- */
+  --chart-1: #1a1a18;
+  --chart-2: #4a4a45;
+  --chart-3: #6b6b66;
+  --chart-4: #a8a59d;
+  --chart-5: #c4c2bb;
+}
+
+.dark {
+  --background: #0c0c0b;
+  --foreground: #f0ece0;
+  --card: #131312;
+  --card-foreground: #f0ece0;
+  --popover: #131312;
+  --popover-foreground: #f0ece0;
+
+  --primary: #f0ece0;
+  --primary-foreground: #0c0c0b;
+  --secondary: #191918;
+  --secondary-foreground: #f0ece0;
+  --muted: #191918;
+  --muted-foreground: #8a8a80;
+
+  --accent: #232320;
+  --accent-foreground: #f0ece0;
+
+  --border: #252522;
+  --input: #2e2e2b;
+  --ring: #f0ece0;
+
+  --brand: #f0ece0;
+  --brand-foreground: #0c0c0b;
+  --success: #52c97a;
+  --warning: #e6b84a;
+  --destructive: #e05a5a;
+  --destructive-foreground: #0c0c0b;
+
+  --tile: #1f1f1d;
+
+  --sidebar: #131312;
+  --sidebar-foreground: #f0ece0;
+  --sidebar-primary: #f0ece0;
+  --sidebar-primary-foreground: #0c0c0b;
+  --sidebar-accent: #232320;
+  --sidebar-accent-foreground: #f0ece0;
+  --sidebar-border: #252522;
+  --sidebar-ring: #f0ece0;
+
+  --chart-1: #f0ece0;
+  --chart-2: #b5b0a4;
+  --chart-3: #8a8a80;
+  --chart-4: #5c5c55;
+  --chart-5: #2e2e2b;
+}

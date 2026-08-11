@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { AgentConfig, isDeferredOpenModel, normalizeLegacyHarness } from "@gilly/core";
-import { type Db, getAgent, getHarness, syncAgent, updateHarness } from "@gilly/db";
+import { type Db, deleteAgent, getAgent, getHarness, syncAgent, updateHarness } from "@gilly/db";
 import type { SkillBundle } from "@gilly/harness-protocol";
 import { Glob } from "bun";
 import { z } from "zod";
@@ -85,6 +85,36 @@ export function syncAgents(db: Db, agentsDir: string): void {
       legacyConnectors: agent.gatewayTools === undefined ? connectors : undefined,
     });
   }
+}
+
+/**
+ * Built-in agents ship with the product: their config lives in the codebase (`config/builtin-agents`)
+ * and is **never** written to the DB, so they can't be listed, edited, or deleted through the UI or
+ * the agent-builder — changing one is a code change. The agent lookup resolves them ahead of the DB.
+ *
+ * Absent directory → no built-ins, which is a valid deployment (the home page degrades to the
+ * agents list).
+ */
+export function loadBuiltinAgents(dir: string): Map<string, AgentConfig> {
+  if (!existsSync(dir)) return new Map();
+  const agents = new Map<string, AgentConfig>();
+  for (const [id, { connectors: _connectors, ...agent }] of loadAgents(dir)) agents.set(id, agent);
+  return agents;
+}
+
+/**
+ * Drop DB rows that collide with a built-in id. Needed because these agents used to be seeded from
+ * `config/agents`, so existing installs still carry a stale row that would otherwise keep showing up
+ * in the agents list.
+ */
+export function pruneBuiltinAgents(db: Db, builtinIds: Iterable<string>): number {
+  let pruned = 0;
+  for (const id of builtinIds) {
+    if (!getAgent(db, id)) continue;
+    deleteAgent(db, id);
+    pruned += 1;
+  }
+  return pruned;
 }
 
 function preserveLegacyFileModel(db: Db, agent: AgentConfig): void {

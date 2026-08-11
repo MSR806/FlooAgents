@@ -1,52 +1,45 @@
 import { expect, test } from "bun:test";
-import {
-  assistantMessageToInput,
-  formatTranscript,
-  mentionEventToInput,
-} from "./slack-translate.ts";
+import { formatTranscript, mentionEventToInput, slackSourceKey } from "./slack-translate.ts";
 
-test("assistant: sourceKey uses thread_ts, text trimmed, no mention stripping", () => {
-  const out = assistantMessageToInput(
-    { channel: "C1", ts: "2.0", thread_ts: "1.0", text: "  hi  " },
-    "echo",
-  );
-  expect(out.sourceKey).toBe("C1:1.0");
-  expect(out.userMessage).toBe("hi");
-  expect(out.agentId).toBe("echo");
-});
-
-test("assistant: sourceKey falls back to ts for the opening message", () => {
-  const out = assistantMessageToInput({ channel: "C1", ts: "2.0" }, "echo");
-  expect(out.sourceKey).toBe("C1:2.0");
-});
+const identity = { connectionId: "conn-1", workspaceId: "T1", agentId: "echo" };
 
 test("mention: strips the bot mention and trims", () => {
   const out = mentionEventToInput(
     { channel: "C1", ts: "1.0", text: "<@U123> review this  " },
-    "echo",
+    identity,
   );
   expect(out.userMessage).toBe("review this");
 });
 
-test("mention: sourceKey uses thread_ts when in a thread, else ts", () => {
+test("mention: source key namespaces the connection, workspace, agent, and thread", () => {
   expect(
-    mentionEventToInput({ channel: "C1", ts: "2.0", thread_ts: "1.0" }, "echo").sourceKey,
-  ).toBe("C1:1.0");
-  expect(mentionEventToInput({ channel: "C1", ts: "2.0" }, "echo").sourceKey).toBe("C1:2.0");
+    mentionEventToInput({ channel: "C1", ts: "2.0", thread_ts: "1.0" }, identity).sourceKey,
+  ).toBe("slack:conn-1:T1:echo:C1:1.0");
+  expect(mentionEventToInput({ channel: "C1", ts: "2.0" }, identity).sourceKey).toBe(
+    "slack:conn-1:T1:echo:C1:2.0",
+  );
+  expect(mentionEventToInput({ channel: "C1", ts: "2.0" }, identity).source).toBe("slack");
 });
 
-test("userId passes through both translators when resolved", () => {
-  expect(
-    assistantMessageToInput({ channel: "C1", ts: "1.0" }, "echo", "slack", "u-42").userId,
-  ).toBe("u-42");
-  expect(mentionEventToInput({ channel: "C1", ts: "1.0" }, "echo", "slack", "u-42").userId).toBe(
-    "u-42",
+test("legacy source keys continue only for Slack sessions owned by the same agent", () => {
+  const event = { channel: "C1", ts: "2.0", thread_ts: "1.0" };
+  expect(slackSourceKey(event, identity, () => ({ source: "slack", agentId: "echo" }))).toBe(
+    "C1:1.0",
+  );
+  expect(slackSourceKey(event, identity, () => ({ source: "slack", agentId: "other" }))).toBe(
+    "slack:conn-1:T1:echo:C1:1.0",
+  );
+  expect(slackSourceKey(event, identity, () => ({ source: "web", agentId: "echo" }))).toBe(
+    "slack:conn-1:T1:echo:C1:1.0",
   );
 });
 
+test("mention passes through a resolved user id", () => {
+  expect(mentionEventToInput({ channel: "C1", ts: "1.0" }, identity, "u-42").userId).toBe("u-42");
+});
+
 test("missing text yields an empty message", () => {
-  expect(assistantMessageToInput({ channel: "C1", ts: "1.0" }, "echo").userMessage).toBe("");
-  expect(mentionEventToInput({ channel: "C1", ts: "1.0" }, "echo").userMessage).toBe("");
+  expect(mentionEventToInput({ channel: "C1", ts: "1.0" }, identity).userMessage).toBe("");
 });
 
 test("formatTranscript labels authors, skips empties and the excluded ts", () => {

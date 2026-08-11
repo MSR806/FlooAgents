@@ -58,6 +58,7 @@
       "dependencies": {
         "@base-ui/react": "^1.6.0",
         "@gilly/core": "workspace:*",
+        "@gilly/design-tokens": "workspace:*",
         "@tailwindcss/postcss": "^4.3.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -94,6 +95,10 @@
         "@gilly/core": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
+    },
+    "packages/design-tokens": {
+      "name": "@gilly/design-tokens",
+      "version": "0.0.0",
     },
     "packages/gateway-client": {
       "name": "@gilly/gateway-client",
@@ -251,6 +256,8 @@
     "@gilly/core": ["@gilly/core@workspace:packages/core"],
 
     "@gilly/db": ["@gilly/db@workspace:packages/db"],
+
+    "@gilly/design-tokens": ["@gilly/design-tokens@workspace:packages/design-tokens"],
 
     "@gilly/gateway": ["@gilly/gateway@workspace:apps/gateway"],
 

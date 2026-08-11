@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import SkillForm from "../SkillForm";
 
 export default function NewSkillPage() {
@@ -9,7 +10,7 @@ export default function NewSkillPage() {
       <Link href="/skills" className="text-sm text-muted-foreground hover:text-foreground">
         ← Skills
       </Link>
-      <h1 className="text-xl font-semibold tracking-tight">New skill</h1>
+      <PageHeader title="New skill" className="mb-0" />
       <SkillForm mode="create" />
     </div>
   );

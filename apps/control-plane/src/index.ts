@@ -12,7 +12,7 @@ import { LocalRuntimeProvider } from "@gilly/runtime";
 import type { Channel } from "./channels/channel.ts";
 import { createSlackManager } from "./channels/slack-manager.ts";
 import { createWebChannel } from "./channels/web.ts";
-import { syncAgents } from "./config.ts";
+import { loadBuiltinAgents, pruneBuiltinAgents, syncAgents } from "./config.ts";
 import { createEngine } from "./engine.ts";
 import { LocalSkillStore } from "./stores/local-skill-store.ts";
 
@@ -22,6 +22,10 @@ import { LocalSkillStore } from "./stores/local-skill-store.ts";
 // regardless of cwd; absolute values (Docker) pass through unchanged.
 const repoRoot = resolve(import.meta.dir, "../../..");
 const AGENTS_DIR = resolve(repoRoot, process.env.AGENTS_DIR ?? "config/agents");
+const BUILTIN_AGENTS_DIR = resolve(
+  repoRoot,
+  process.env.BUILTIN_AGENTS_DIR ?? "config/builtin-agents",
+);
 const SKILLS_DIR = resolve(repoRoot, process.env.SKILLS_DIR ?? "config/skills");
 const DATABASE_PATH = resolve(repoRoot, process.env.DATABASE_PATH ?? "data/gilly.db");
 const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8080";
@@ -44,6 +48,11 @@ const abandoned = failRunningRunsBySource(
 );
 if (abandoned) console.warn(`[engine] failed ${abandoned} abandoned background run(s)`);
 syncAgents(db, AGENTS_DIR); // every boot: upsert config/agents/*.json into the DB (files win)
+// Built-ins ship with the product and stay out of the DB entirely, so they never appear in the
+// agents directory and can only change through code. Prune rows left by older seeded installs.
+const builtinAgents = loadBuiltinAgents(BUILTIN_AGENTS_DIR);
+const prunedBuiltins = pruneBuiltinAgents(db, builtinAgents.keys());
+if (prunedBuiltins) console.warn(`[config] removed ${prunedBuiltins} stale built-in agent row(s)`);
 const skillStore = new LocalSkillStore(SKILLS_DIR);
 const vault = makeVault(vaultKey);
 
@@ -56,7 +65,7 @@ const runtime = new LocalRuntimeProvider(HARNESS_URL);
 const engine = createEngine({
   db,
   runtime,
-  getAgent: (id) => getAgent(db, id),
+  getAgent: (id) => builtinAgents.get(id) ?? getAgent(db, id),
   getSkill: (name) => skillStore.get(name),
   gatewayUrl: GILLY_GATEWAY_URL,
   gatewayAdminToken: GILLY_ADMIN_TOKEN,
@@ -79,6 +88,7 @@ const channels: Channel[] = [
     vault,
     slackManager: slack,
     webUserId: webUser.id,
+    builtinAgents,
   }),
   slack,
 ];

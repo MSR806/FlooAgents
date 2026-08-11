@@ -587,7 +587,12 @@ export function createGatewayServer(deps: {
       }
       return managementTools().then(({ tools }) => json({ tools }));
     }
-    if (method === "GET" && pathname === "/connectors") return json({ connectors: connectors() });
+    if (method === "GET" && pathname === "/connectors") {
+      if (req.headers.get("x-admin-token") !== adminToken) {
+        return json({ error: "unauthorized" }, 401);
+      }
+      return json({ connectors: connectors() });
+    }
     if (method === "GET" && pathname === "/admin/composio/toolkits") {
       return composioToolkitsRoute(req);
     }

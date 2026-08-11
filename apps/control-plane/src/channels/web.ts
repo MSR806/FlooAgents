@@ -8,6 +8,7 @@ import {
 } from "@gilly/core";
 import {
   addGrant,
+  bindSlackConnection,
   createAgent,
   createSlackConnection,
   type Db,
@@ -19,6 +20,7 @@ import {
   getRun,
   getSessionBySourceKey,
   getSlackConnection,
+  getSlackConnectionByAgentId,
   listAgents,
   listGrants,
   listHarnesses,
@@ -39,16 +41,10 @@ import type { SkillStore } from "../stores/skill-store.ts";
 import type { Channel } from "./channel.ts";
 import type { SlackManager } from "./slack-manager.ts";
 
-// Permissive CORS so the UI can call the API directly in dev (Next also proxies /api).
-const cors = {
-  "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
-  "access-control-allow-headers": "content-type",
-};
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", ...cors },
+    headers: { "content-type": "application/json" },
   });
 
 /** Parse a JSON request body, returning a 400 Response instead of throwing on bad input. */
@@ -63,8 +59,16 @@ async function readJson(req: Request): Promise<{ body: unknown } | { error: Resp
 /** Map a store/repo error to the right status by its message; defaults to 400. */
 function errorResponse(e: unknown): Response {
   const message = e instanceof Error ? e.message : String(e);
-  const status = /already exists/.test(message) ? 409 : /not found/.test(message) ? 404 : 400;
+  const status = /already exists|already bound/.test(message)
+    ? 409
+    : /not found/.test(message)
+      ? 404
+      : 400;
   return json({ error: message }, status);
+}
+
+function lifecycleErrorResponse(e: unknown): Response {
+  return json({ error: e instanceof Error ? e.message : String(e) }, 500);
 }
 
 type WebDeps = {
@@ -80,8 +84,16 @@ type WebDeps = {
   vault?: Vault;
   /** Slack connection manager, so connection CRUD starts/stops sockets live. */
   slackManager?: SlackManager;
+  /** Injectable Slack auth seam for offline route tests. */
+  testSlackAuth?: typeof slackAuthTest;
   /** Shared user id every web-chat run is attributed to (web has no auth yet). */
   webUserId?: string;
+  /**
+   * Agents shipped in the codebase (`config/builtin-agents`). They are never stored in the DB, so
+   * they stay out of the agents directory and are read-only over the API — editing one is a code
+   * change. Readable by id so the home page can chat with them.
+   */
+  builtinAgents?: Map<string, AgentConfig>;
   /** SSE heartbeat interval; shortened by tests. */
   heartbeatMs?: number;
 };
@@ -91,7 +103,7 @@ function redactConnection(c: SlackConnection) {
   return {
     id: c.id,
     name: c.name,
-    agentId: c.agentId,
+    agentId: c.agentId ?? null,
     teamId: c.teamId,
     teamName: c.teamName,
     status: c.status,
@@ -117,6 +129,17 @@ async function slackAuthTest(
 /** The web management API as a port-free `fetch` handler, so tests can drive it directly. */
 export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Response> {
   const { db, skillStore, gatewayUrl, adminToken, vault, slackManager } = deps;
+  const testSlackAuth = deps.testSlackAuth ?? slackAuthTest;
+  const agentBindingOperations = new Map<string, Promise<unknown>>();
+
+  function serializeAgentBinding<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = agentBindingOperations.get(agentId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    agentBindingOperations.set(agentId, current);
+    return current.finally(() => {
+      if (agentBindingOperations.get(agentId) === current) agentBindingOperations.delete(agentId);
+    });
+  }
 
   function requireAdmin(req: Request): Response | undefined {
     if (!adminToken) return json({ error: "admin authentication not configured" }, 503);
@@ -129,7 +152,6 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
   async function fetch(req: Request): Promise<Response> {
     const { pathname, searchParams } = new URL(req.url);
     const { method } = req;
-    if (method === "OPTIONS") return new Response(null, { headers: cors });
 
     // --- Harnesses ---
     if (method === "GET" && pathname === "/api/harnesses") return json(listHarnesses(db));
@@ -146,16 +168,29 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
     const startAgentId = pathParam(pathname, "/api/agents/", "/runs");
     if (startAgentId && method === "POST") return startAgent(req, startAgentId);
+    const slackAgentId = pathParam(pathname, "/api/agents/", "/slack-connection");
+    if (slackAgentId && method === "PUT") return bindAgentConnection(req, slackAgentId);
     const agentId = pathParam(pathname, "/api/agents/");
     if (agentId) {
+      const builtin = deps.builtinAgents?.get(agentId);
       if (method === "GET") {
-        const agent = getAgent(db, agentId);
+        const agent = builtin ?? getAgent(db, agentId);
         return agent ? json(agent) : json({ error: `Agent "${agentId}" not found` }, 404);
+      }
+      // Built-ins ship in the codebase — they can be read and chatted with, never mutated here.
+      if (builtin && (method === "PUT" || method === "DELETE")) {
+        return json({ error: `Agent "${agentId}" is built in and can only change in code` }, 409);
       }
       if (method === "PUT") return updateAgentRoute(req, agentId);
       if (method === "DELETE") {
-        deleteAgent(db, agentId);
-        return json({ ok: true });
+        const connection = getSlackConnectionByAgentId(db, agentId);
+        try {
+          if (connection) await slackManager?.remove(connection.id);
+          deleteAgent(db, agentId);
+          return json({ ok: true });
+        } catch (error) {
+          return lifecycleErrorResponse(error);
+        }
       }
     }
 
@@ -214,8 +249,11 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     // Proxy custom connector setup metadata for the Tools page.
     if (method === "GET" && pathname === "/api/connectors") {
       if (!gatewayUrl) return json({ connectors: [] });
+      if (!adminToken) return json({ error: "gateway admin authentication not configured" }, 503);
       try {
-        const res = await globalThis.fetch(`${gatewayUrl}/connectors`);
+        const res = await globalThis.fetch(`${gatewayUrl}/connectors`, {
+          headers: { "x-admin-token": adminToken },
+        });
         return json(await res.json());
       } catch {
         return json({ connectors: [] });
@@ -223,12 +261,11 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/tools") {
-      const denied = requireAdmin(req);
-      if (denied) return denied;
       if (!gatewayUrl) return json({ tools: [] });
+      if (!adminToken) return json({ error: "gateway admin authentication not configured" }, 503);
       try {
         const res = await globalThis.fetch(`${gatewayUrl}/tools`, {
-          headers: { "x-admin-token": adminToken ?? "" },
+          headers: { "x-admin-token": adminToken },
         });
         return json(await res.json(), res.status);
       } catch {
@@ -237,9 +274,8 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/composio/toolkits") {
-      const denied = requireAdmin(req);
-      if (denied) return denied;
-      if (!gatewayUrl || !adminToken) return json({ configured: false, items: [] });
+      if (!gatewayUrl) return json({ configured: false, items: [] });
+      if (!adminToken) return json({ error: "gateway admin authentication not configured" }, 503);
       try {
         const query = new URL(req.url).search;
         const res = await globalThis.fetch(`${gatewayUrl}/admin/composio/toolkits${query}`, {
@@ -252,14 +288,14 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     const composioToolkit = pathParam(pathname, "/api/composio/toolkits/", "/connect");
-    if (method === "GET" && composioToolkit) return startComposioConnect(req, composioToolkit);
+    if (method === "GET" && composioToolkit) return startComposioConnect(composioToolkit);
 
     // Admin connector auth. The browser calls these WITHOUT any secret; we inject x-admin-token
     // when calling the gateway so the token never reaches the client.
     const credProvider = pathParam(pathname, "/api/connectors/", "/credentials");
     if (method === "PUT" && credProvider) return saveCredential(req, credProvider);
     const connectProvider = pathParam(pathname, "/api/connectors/", "/connect");
-    if (method === "GET" && connectProvider) return startConnect(req, connectProvider);
+    if (method === "GET" && connectProvider) return startConnect(connectProvider);
 
     // --- Slack connections ---
     if (pathname === "/api/slack/connections/test" && method === "POST") return testConnection(req);
@@ -277,9 +313,13 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       }
       if (method === "PUT") return updateConnectionRoute(req, connId);
       if (method === "DELETE") {
-        await slackManager?.remove(connId);
-        deleteSlackConnection(db, connId);
-        return json({ ok: true });
+        try {
+          await slackManager?.remove(connId);
+          deleteSlackConnection(db, connId);
+          return json({ ok: true });
+        } catch (error) {
+          return lifecycleErrorResponse(error);
+        }
       }
     }
 
@@ -370,8 +410,6 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
 
   /** PUT /api/connectors/:provider/credentials — inject x-admin-token, forward the {key,value} body. */
   async function saveCredential(req: Request, provider: string): Promise<Response> {
-    const denied = requireAdmin(req);
-    if (denied) return denied;
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/admin/credentials/${provider}`, {
@@ -390,9 +428,7 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
    * token; a 302 carries the Atlassian consent URL, which we relay to the browser so it navigates
    * there. A 200 means already-connected → bounce back to the connectors page.
    */
-  async function startConnect(req: Request, provider: string): Promise<Response> {
-    const denied = requireAdmin(req);
-    if (denied) return denied;
+  async function startConnect(provider: string): Promise<Response> {
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(`${gatewayUrl}/oauth/${provider}/start`, {
@@ -404,15 +440,13 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
           ? res.headers.get("location")
           : `/connectors?connected=${encodeURIComponent(provider)}`;
       if (!location) return json({ error: "gateway returned no redirect" }, 502);
-      return new Response(null, { status: 302, headers: { location, ...cors } });
+      return new Response(null, { status: 302, headers: { location } });
     } catch (e) {
       return errorResponse(e);
     }
   }
 
-  async function startComposioConnect(req: Request, slug: string): Promise<Response> {
-    const denied = requireAdmin(req);
-    if (denied) return denied;
+  async function startComposioConnect(slug: string): Promise<Response> {
     if (!gatewayUrl || !adminToken) return json({ error: "gateway not configured" }, 503);
     try {
       const res = await globalThis.fetch(
@@ -421,7 +455,7 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       );
       const location = res.headers.get("location");
       if (res.status === 302 && location) {
-        return new Response(null, { status: 302, headers: { location, ...cors } });
+        return new Response(null, { status: 302, headers: { location } });
       }
       return json(await res.json(), res.status);
     } catch (e) {
@@ -448,6 +482,10 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     if ("error" in parsed) return parsed.error;
     const cfg = AgentConfig.safeParse(parsed.body);
     if (!cfg.success) return json({ error: cfg.error.message }, 400);
+    // A DB agent sharing a built-in id would be permanently shadowed by the built-in lookup.
+    if (deps.builtinAgents?.has(cfg.data.id)) {
+      return json({ error: `Agent id "${cfg.data.id}" is reserved by a built-in agent` }, 409);
+    }
     const unknown = unknownSkills(cfg.data);
     if (unknown.length) return json({ error: `Unknown skill(s): ${unknown.join(", ")}` }, 400);
     try {
@@ -490,83 +528,124 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     if ("error" in parsed) return parsed.error;
     const body = z.object({ botToken: z.string().min(1) }).safeParse(parsed.body);
     if (!body.success) return json({ error: body.error.message }, 400);
-    const test = await slackAuthTest(body.data.botToken);
+    const test = await testSlackAuth(body.data.botToken);
     return test.ok
       ? json({ ok: true, team: test.team, teamId: test.teamId })
       : json({ ok: false, error: test.error }, 400);
   }
 
-  /** POST /api/slack/connections — validate, auth.test, encrypt tokens, save, start the socket. */
+  /** POST /api/slack/connections — validate, auth.test, encrypt tokens, and save unbound. */
   async function createConnectionRoute(req: Request): Promise<Response> {
-    if (!vault || !slackManager) return json({ error: "Slack not configured" }, 503);
+    if (!vault) return json({ error: "Slack not configured" }, 503);
     const parsed = await readJson(req);
     if ("error" in parsed) return parsed.error;
     const input = SlackConnectionInput.safeParse(parsed.body);
     if (!input.success) return json({ error: input.error.message }, 400);
-    if (!getAgent(db, input.data.agentId)) {
-      return json({ error: `Agent "${input.data.agentId}" not found` }, 400);
-    }
-    const test = await slackAuthTest(input.data.botToken);
+    const test = await testSlackAuth(input.data.botToken);
     if (!test.ok) return json({ error: `Slack auth failed: ${test.error}` }, 400);
     const conn: SlackConnection = {
       id: crypto.randomUUID(),
       name: input.data.name,
-      agentId: input.data.agentId,
       botToken: vault.encrypt(input.data.botToken),
       appToken: vault.encrypt(input.data.appToken),
       teamId: test.teamId,
       teamName: test.team,
-      status: "active",
+      status: "disabled",
       createdAt: Date.now(),
     };
     try {
       createSlackConnection(db, conn);
-      await slackManager.add(conn);
       return json(redactConnection(getSlackConnection(db, conn.id) ?? conn), 201);
     } catch (e) {
       return errorResponse(e);
     }
   }
 
-  /** PUT /api/slack/connections/:id — rebind agent / rotate tokens (blank token = keep), then restart. */
+  /** PUT /api/slack/connections/:id — edit name/tokens (blank token = keep). */
   async function updateConnectionRoute(req: Request, id: string): Promise<Response> {
     if (!vault || !slackManager) return json({ error: "Slack not configured" }, 503);
-    if (!getSlackConnection(db, id)) return json({ error: `Connection "${id}" not found` }, 404);
+    const existing = getSlackConnection(db, id);
+    if (!existing) return json({ error: `Connection "${id}" not found` }, 404);
     const parsed = await readJson(req);
     if ("error" in parsed) return parsed.error;
     const body = z
       .object({
         name: z.string().min(1),
-        agentId: z.string().min(1),
         botToken: z.string().optional(),
         appToken: z.string().optional(),
       })
       .safeParse(parsed.body);
     if (!body.success) return json({ error: body.error.message }, 400);
-    if (!getAgent(db, body.data.agentId)) {
-      return json({ error: `Agent "${body.data.agentId}" not found` }, 400);
-    }
     const patch: Parameters<typeof updateSlackConnection>[2] = {
       name: body.data.name,
-      agentId: body.data.agentId,
     };
     const newBot = body.data.botToken?.trim();
     const newApp = body.data.appToken?.trim();
     if (newBot) {
-      const test = await slackAuthTest(newBot);
+      const test = await testSlackAuth(newBot);
       if (!test.ok) return json({ error: `Slack auth failed: ${test.error}` }, 400);
       patch.botToken = vault.encrypt(newBot);
       patch.teamId = test.teamId;
       patch.teamName = test.team;
     }
     if (newApp) patch.appToken = vault.encrypt(newApp);
+    if (existing.agentId) {
+      try {
+        await slackManager.remove(id);
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    }
     try {
       const updated = updateSlackConnection(db, id, patch);
-      await slackManager.restart(updated);
+      if (updated.agentId) await slackManager.add(updated);
       return json(redactConnection(getSlackConnection(db, id) ?? updated));
     } catch (e) {
       return errorResponse(e);
     }
+  }
+
+  /** PUT /api/agents/:id/slack-connection — atomically bind, swap, or unbind. */
+  async function bindAgentConnection(req: Request, agentId: string): Promise<Response> {
+    if (!slackManager) return json({ error: "Slack not configured" }, 503);
+    const parsed = await readJson(req);
+    if ("error" in parsed) return parsed.error;
+    const body = z.object({ connectionId: z.string().min(1).nullable() }).safeParse(parsed.body);
+    if (!body.success) return json({ error: body.error.message }, 400);
+
+    return serializeAgentBinding(agentId, async () => {
+      if (!getAgent(db, agentId)) return json({ error: `Agent "${agentId}" not found` }, 404);
+      const previous = getSlackConnectionByAgentId(db, agentId);
+      const target = body.data.connectionId
+        ? getSlackConnection(db, body.data.connectionId)
+        : undefined;
+      if (body.data.connectionId && !target) {
+        return json({ error: `Slack connection "${body.data.connectionId}" not found` }, 404);
+      }
+      if (target?.agentId && target.agentId !== agentId) {
+        return json(
+          {
+            error: `Slack connection "${target.id}" is already bound to agent "${target.agentId}"`,
+          },
+          409,
+        );
+      }
+      const sameTarget = previous?.id === target?.id;
+      if (previous && !sameTarget) {
+        try {
+          await slackManager.remove(previous.id);
+        } catch (error) {
+          return lifecycleErrorResponse(error);
+        }
+      }
+      try {
+        const bound = bindSlackConnection(db, agentId, body.data.connectionId);
+        if (bound && (!sameTarget || bound.status !== "active")) await slackManager.add(bound);
+        return json(bound ? redactConnection(getSlackConnection(db, bound.id) ?? bound) : null);
+      } catch (error) {
+        return lifecycleErrorResponse(error);
+      }
+    });
   }
 
   async function createSkillRoute(req: Request): Promise<Response> {
@@ -621,7 +700,12 @@ export function createWebChannel(deps: WebDeps): Channel {
 function pathParam(pathname: string, prefix: string, suffix = ""): string | undefined {
   if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) return undefined;
   const rest = pathname.slice(prefix.length, pathname.length - suffix.length);
-  return rest && !rest.includes("/") ? decodeURIComponent(rest) : undefined;
+  if (!rest || rest.includes("/")) return undefined;
+  try {
+    return decodeURIComponent(rest);
+  } catch {
+    return undefined;
+  }
 }
 
 type SkillInput = { name: string; description: string; content: string; files?: SkillFile[] };
@@ -702,7 +786,6 @@ async function chat(
       "content-type": "text/event-stream",
       "cache-control": "no-cache, no-transform",
       "x-conversation-id": conversationId,
-      ...cors,
     },
   });
 }

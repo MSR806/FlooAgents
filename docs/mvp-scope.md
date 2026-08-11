@@ -9,8 +9,8 @@
 | Area | MVP behaviour |
 | --- | --- |
 | **Agent** | System prompt + model only. Authored as **JSON config files**, loaded at boot. No MCP, no skills, no subagents, no CRUD API. |
-| **Connection** | One type — a Slack bot. Token supplied via `.env`, not a secrets vault. |
-| **Channel** | Slack via the **AI assistant surface** (Socket Mode, no public URL): the assistant panel maps a thread → run → reply, with a "thinking…" status. See [`engineering/slack-assistant.md`](engineering/slack-assistant.md). |
+| **Connection** | Slack bots created in the web UI, with credentials encrypted by the control-plane vault. Connections remain available until an agent binds them. |
+| **Channel** | Slack `@mention`s via Socket Mode (no public URL): a bound bot maps each thread to a session and streams progress and replies. See [`engineering/slack-mentions.md`](engineering/slack-mentions.md). |
 | **Session / Run** | Gilly owns Session, Run, Workspace, follow-up queue. One active Run per Session; follow-ups FIFO-queued. Stored in **SQLite**. |
 | **Harness** | Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`), packaged as a container that speaks the **AgentCore runtime contract** (`POST /invocations`, `GET /ping` on `:8080`). |
 | **Runtime** | The harness container run **locally over HTTP** — same contract as AgentCore. `LocalRuntimeProvider` in the control plane invokes it directly. |

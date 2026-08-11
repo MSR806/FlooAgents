@@ -1,6 +1,10 @@
 "use client";
 
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { builderChatHref } from "@/lib/builder";
 import AgentForm from "../AgentForm";
 
 export default function NewAgentPage() {
@@ -9,7 +13,16 @@ export default function NewAgentPage() {
       <Link href="/agents" className="text-sm text-muted-foreground hover:text-foreground">
         ← Agents
       </Link>
-      <h1 className="text-xl font-semibold tracking-tight">New agent</h1>
+      <PageHeader title="New agent" className="mb-0">
+        <Button
+          variant="outline"
+          size="sm"
+          render={<Link href={builderChatHref()} />}
+          nativeButton={false}
+        >
+          <Sparkles /> Create via chat
+        </Button>
+      </PageHeader>
       <AgentForm mode="create" />
     </div>
   );

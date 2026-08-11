@@ -101,7 +101,12 @@ function ChatPageContent() {
   const params = useParams<{ id: string }>();
   const agentId = params.id;
   const router = useRouter();
-  const requestedConversationId = useSearchParams().get("conversation") ?? undefined;
+  const searchParams = useSearchParams();
+  const requestedConversationId = searchParams.get("conversation") ?? undefined;
+  // Home is a launcher: it hands the first message over via ?prompt= rather than duplicating the
+  // streaming machinery. Sent once, then stripped from the URL so a refresh can't replay it.
+  const handoffPrompt = searchParams.get("prompt") ?? undefined;
+  const handoffSent = useRef(false);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -119,6 +124,22 @@ function ChatPageContent() {
   const requestRef = useRef<AbortController>(null);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  // Home hands the first message over via ?prompt=, sent once per mount. The param is stripped
+  // only after the response lands, so the effect stays live for the whole exchange.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `send` is an in-render closure; adding it would re-fire on every keystroke.
+  useEffect(() => {
+    if (!handoffPrompt || handoffSent.current || !inputRef.current) return;
+    handoffSent.current = true;
+    inputRef.current.value = handoffPrompt;
+    void send().finally(() => {
+      // Drop only `prompt`. Replacing the whole URL would also discard the `conversation` id the
+      // send just set, and the conversation effect would then wipe the transcript.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("prompt");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    });
+  }, [handoffPrompt, agentId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `messages` is the trigger, not an input — the body only reads the ref. Dropping it would stop the list from following new output.
   useEffect(() => {
@@ -168,7 +189,8 @@ function ChatPageContent() {
       conversationId.current = undefined;
       loadedConversationKey.current = undefined;
       setActiveConversationId(undefined);
-      setMessages([]);
+      // While ?prompt= is present the handoff owns the transcript — clearing would drop it.
+      if (!handoffPrompt) setMessages([]);
       setHistoryLoading(false);
       return;
     }
@@ -206,7 +228,9 @@ function ChatPageContent() {
       cancelled = true;
       request.abort();
     };
-  }, [agentId, requestedConversationId]);
+    // handoffPrompt is stable for the life of the mount — it is stripped with history.replaceState,
+    // which deliberately doesn't notify the router, so listing it adds no extra runs.
+  }, [agentId, requestedConversationId, handoffPrompt]);
 
   function newChat() {
     conversationId.current = undefined;
@@ -329,7 +353,7 @@ function ChatPageContent() {
           Agents
         </Link>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex min-w-0 items-center gap-2 rounded-full bg-muted px-3 py-1.5">
+          <span className="flex min-w-0 items-center gap-2 rounded-sm bg-muted px-3 py-1.5">
             <Bot className="size-3.5 shrink-0 text-foreground" />
             <span className="truncate font-medium text-foreground">{agentName ?? agentId}</span>
           </span>
@@ -464,7 +488,7 @@ function ChatPageContent() {
                     key={i}
                     className={
                       message.role === "user"
-                        ? "max-w-[75%] self-end whitespace-pre-wrap break-words rounded-2xl bg-muted px-5 py-3.5 text-[15px] leading-7 text-foreground"
+                        ? "max-w-[75%] self-end whitespace-pre-wrap break-words rounded-lg bg-muted px-5 py-3.5 text-[15px] leading-7 text-foreground"
                         : "w-full space-y-4 text-[15px] leading-7 text-foreground"
                     }
                   >
@@ -516,7 +540,7 @@ function ChatPageContent() {
             }}
           >
             {error ? <p className="mb-2 text-sm text-destructive">{error}</p> : null}
-            <div className="rounded-[18px] border border-input bg-card p-3 shadow-sm transition-colors focus-within:border-ring">
+            <div className="rounded-lg border border-input bg-card p-3 shadow-sm transition-colors focus-within:border-ring">
               <Textarea
                 ref={inputRef}
                 disabled={streaming || historyLoading}

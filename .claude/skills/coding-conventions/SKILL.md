@@ -5,7 +5,7 @@ description: How to write code in this repo (Gilly). Read BEFORE adding or modif
 
 # Writing code in Gilly
 
-Gilly is an internal platform for building AI agents and connecting them to where work happens (Slack, web). This skill is the durable map of *how the code is organized and the conventions to follow* — read it before implementing, then look at the cited canonical files for the exact shape. Design rationale lives in [`docs/`](../../../docs/) (`mvp-scope.md`, `engineering/repo-architecture.md`, `engineering/slack-assistant.md`).
+Gilly is an internal platform for building AI agents and connecting them to where work happens (Slack, web). This skill is the durable map of *how the code is organized and the conventions to follow* — read it before implementing, then look at the cited canonical files for the exact shape. Design rationale lives in [`docs/`](../../../docs/) (`mvp-scope.md`, `engineering/repo-architecture.md`, `engineering/slack-mentions.md`).
 
 ## The one mental model: three replaceable layers
 
@@ -41,6 +41,7 @@ packages/
   runtime/         RuntimeProvider seam + local implementation
   db/              SQLite (Drizzle): operational state (sessions, runs, queue) + agent config (agents table) + repo CRUD
 config/agents/     *.json agents — upserted into the DB on every boot (syncAgents); files win for whatever they contain, DB-only agents survive
+config/builtin-agents/ *.json agents that ship with the product — loaded into memory, NEVER written to the DB (loadBuiltinAgents)
 config/skills/     <name>/SKILL.md folders — the LocalSkillStore's backing files
 ```
 
@@ -75,6 +76,8 @@ Extension points are interfaces with small implementations (`class … implement
 ## Recipes — where things go
 
 - **New agent** → create via the web UI or management API (`POST /api/agents`); it persists to the `agents` table via `@gilly/db` repo fns. `AgentConfig` (`packages/core/src/agent.ts`) is `{ id, name, model, systemPrompt, tools?, skills?, gatewayTools? }`. `config/agents/*.json` are upserted into the DB on every boot by `syncAgents` (files win for the ids they define; agents created only in the DB survive).
+
+- **New built-in agent** (ships with the product, e.g. `agent-builder`) → drop the JSON in `config/builtin-agents/`. `loadBuiltinAgents` reads it into memory at boot and it is **never** written to the DB, so it can't be listed, edited, or deleted through the UI, the API, or the agent-builder — changing it is a code change. The lookup resolves built-ins ahead of the DB (`builtinAgents.get(id) ?? getAgent(db, id)`), `pruneBuiltinAgents` clears rows left by older seeded installs, and the web channel rejects `PUT`/`DELETE` on a built-in id and refuses to create a DB agent that would collide with one. Read it by id (`GET /api/agents/:id`) — that's how the home page chats with the builder.
 - **New skill** → create via the web UI or management API (`POST /api/skills`) with `{ name, description, content }`; the `SkillStore` composes a `SKILL.md` (YAML frontmatter + body) under `config/skills/<name>/`. The engine ships an agent's attached skills inline to the harness as `SkillBundle`s.
 - **Workspace tools** are high-level Gilly abstractions — `Read` / `Write` / `Bash` — stored in `tools`. Claude maps them through `expandTools` in `apps/harness/src/harness-claude/loop.ts`; OpenAI enables its native sandboxed shell only for `Bash` through `buildCodexOptions` / `buildThreadOptions` in `apps/harness/src/harness-openai/loop.ts` and does not synthesize Read/Write tools. **Never surface SDK tool names above the harness**; the UI/DB/API see only the abstractions. External/internal gateway access is separate: `gatewayTools` stores exact canonical, provider-neutral gateway names, enforced together with per-user grants on every call.
 - **New config-store backend** (e.g. S3 skills) → add a class implementing `SkillStore` in `apps/control-plane/src/stores/` (sibling to `local-skill-store.ts`) and swap it in `index.ts`. Nothing above the seam changes.

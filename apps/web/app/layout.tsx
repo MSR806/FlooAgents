@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Geist } from "next/font/google";
+import { Archivo, Inter, JetBrains_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+// Display is titles-only — Archivo 900 is muddy below ~1.5rem.
+const display = Archivo({ subsets: ["latin"], weight: ["800", "900"], variable: "--font-display" });
+const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
+const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Gilly",
@@ -19,7 +23,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html
+      lang="en"
+      className={cn("font-sans", display.variable, sans.variable, mono.variable)}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Applies the stored theme before first paint, so Ink users never flash Paper. */}
+        {/** biome-ignore lint/security/noDangerouslySetInnerHtml: pre-paint theme, must be inline */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <SidebarProvider>
           <AppSidebar />

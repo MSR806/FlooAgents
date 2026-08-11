@@ -19,6 +19,7 @@ project-gilly/
 │   ├── runtime/            # RuntimeProvider + LocalRuntimeProvider (AgentCore provider planned)
 │   └── db/                 # Drizzle schema + SQLite client for registries and operational state
 ├── config/agents/          # *.json seed agent definitions, upserted at boot
+├── config/builtin-agents/  # *.json agents shipped with the product; loaded in memory, never in the DB
 ├── docker/                 # Dockerfile.control-plane, Dockerfile.harness, compose.yaml
 └── docs/
 ```
@@ -30,7 +31,9 @@ project-gilly/
 
 `core/` is the shared domain model. `db/` holds structured agent and harness registry records plus
 operational Sessions, Runs, and follow-ups. JSON files under `config/agents/` seed selected agents
-at boot and remain authoritative for those ids. The universal harness registry keeps harness
+at boot and remain authoritative for those ids. `config/builtin-agents/` is different: those ship
+with the product, are loaded into memory and **never written to the DB**, so they stay out of the
+agents directory and can only change through code. The universal harness registry keeps harness
 availability and model catalogs runtime-editable while agents select a harness explicitly.
 
 `apps/gateway` is the canonical provider-neutral tool boundary. Exact dotted `gatewayTools` names

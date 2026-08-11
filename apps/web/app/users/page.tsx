@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +49,7 @@ export default function UsersPage() {
 
   return (
     <section>
-      <h1 className="mb-4 text-xl font-semibold tracking-tight">Users &amp; Grants</h1>
+      <PageHeader title="Users & Grants" />
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {toolError ? <p className="text-sm text-destructive">Failed to load gateway tools.</p> : null}
@@ -60,7 +61,7 @@ export default function UsersPage() {
           No users yet — a user appears here the first time they message the bot in Slack.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-card">
+        <div className="overflow-x-auto rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

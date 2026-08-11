@@ -19,3 +19,7 @@ data/
 config/skills/*
 !config/skills/our-repos/
 !config/skills/tooling/
+*.DS_Store
+
+# Lavish review artifacts (scratch)
+.lavish/

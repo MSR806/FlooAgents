@@ -1,12 +1,11 @@
-import { type Db, upsertUserBySlackId } from "@gilly/db";
+import { type Db, getSessionBySourceKey, upsertUserBySlackId } from "@gilly/db";
 import type { StreamEvent } from "@gilly/runtime";
-import { App, Assistant, LogLevel } from "@slack/bolt";
+import { App, LogLevel } from "@slack/bolt";
 import type { WebClient } from "@slack/web-api";
 import type { createEngine } from "../engine.ts";
 import type { SlackBlock } from "./slack-format.ts";
 import { pumpSlackRun, type SlackRunDelivery } from "./slack-pump.ts";
 import {
-  assistantMessageToInput,
   formatTranscript,
   mentionEventToInput,
   type SlackMessageFields,
@@ -78,14 +77,13 @@ async function resolveUserId(
 }
 
 function logSlackReceived(
-  kind: "assistant_message" | "mention",
   input: { sourceKey: string; userMessage: string },
   message: SlackMessageFields,
   extra: Record<string, unknown> = {},
 ) {
   console.log(
     `[slack] received ${JSON.stringify({
-      kind,
+      kind: "mention",
       userId: message.user ?? null,
       teamId: message.team ?? null,
       channel: message.channel,
@@ -100,17 +98,17 @@ function logSlackReceived(
 }
 
 /**
- * Build a Bolt Socket-Mode app for one Slack connection: the AI assistant surface + channel
- * @mentions, both routing to `deps.agentId`. Returns the unstarted `App`; the connection manager
- * owns its start/stop lifecycle.
+ * Build a Bolt Socket-Mode app for one Slack connection's channel mentions. Returns the unstarted
+ * `App`; the connection manager owns its start/stop lifecycle.
  */
 export function buildSlackApp(deps: {
   engine: ReturnType<typeof createEngine>;
   db: Db;
   botToken: string;
   appToken: string;
+  connectionId: string;
+  teamId?: string;
   agentId: string;
-  source?: string;
 }): App {
   const app = new App({
     token: deps.botToken,
@@ -147,37 +145,6 @@ export function buildSlackApp(deps: {
 
   const logDeliveryError = (message: string, error: unknown) =>
     console.warn(`[slack] ${message}:`, String(error));
-
-  const assistant = new Assistant({
-    threadStarted: async ({ say, setSuggestedPrompts }) => {
-      console.log("[slack] assistant thread started");
-      await say("Hi! I'm Gilly. What can I help you with?");
-      await setSuggestedPrompts({
-        prompts: [
-          { title: "Review a PR", message: "Review this pull request: " },
-          { title: "Explain code", message: "Explain how this works: " },
-        ],
-      });
-    },
-    // Assistant panel and channel mentions share the same resilient, single-consumption run pump.
-    userMessage: async ({ message, client, say }) => {
-      const msg = message as SlackMessageFields;
-      const userId = await resolveUserId(client, deps.db, msg.user);
-      const input = assistantMessageToInput(msg, deps.agentId, deps.source, userId);
-      logSlackReceived("assistant_message", input, msg);
-      await react(client, msg.channel, msg.ts, REACTION.working);
-
-      const { errored } = await pumpSlackRun({
-        events: deps.engine.stream(input),
-        delivery: runDelivery(msg.channel, async (payload) => say(payload)),
-        onDeliveryError: logDeliveryError,
-      });
-      await react(client, msg.channel, msg.ts, REACTION.working, false);
-      await react(client, msg.channel, msg.ts, errored ? REACTION.error : REACTION.done);
-    },
-  });
-
-  app.assistant(assistant);
 
   // Per-thread cursor: ts of the last thread message we've fed the agent.
   const lastSeen = new Map<string, string>();
@@ -227,9 +194,18 @@ export function buildSlackApp(deps: {
   app.event("app_mention", async ({ event, client, context }) => {
     const ev = event as SlackMessageFields;
     const userId = await resolveUserId(client, deps.db, ev.user);
-    const base = mentionEventToInput(ev, deps.agentId, deps.source, userId);
+    const base = mentionEventToInput(
+      ev,
+      {
+        connectionId: deps.connectionId,
+        workspaceId: context.teamId ?? ev.team ?? deps.teamId ?? "unknown",
+        agentId: deps.agentId,
+      },
+      userId,
+      (sourceKey) => getSessionBySourceKey(deps.db, sourceKey),
+    );
     const threadTs = ev.thread_ts ?? ev.ts;
-    logSlackReceived("mention", base, ev, { contextTeamId: context.teamId ?? null });
+    logSlackReceived(base, ev, { contextTeamId: context.teamId ?? null });
 
     // Inside a thread: only what's new since our last turn (full thread on the first).
     const transcript = ev.thread_ts

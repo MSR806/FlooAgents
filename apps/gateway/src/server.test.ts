@@ -27,7 +27,7 @@ function setup(
     vault,
     adminToken: ADMIN,
     mcp: opts.mcp,
-    composio: opts.composio,
+    composio: opts.composio ?? fakeComposio({ configured: false }),
     catalogTimeoutMs: opts.catalogTimeoutMs,
     managementToolsTtlMs: opts.managementToolsTtlMs,
   });
@@ -1098,10 +1098,21 @@ type Status = {
   toolCount?: number;
 };
 const getStatus = async (fetch: ReturnType<typeof createGatewayServer>, name: string) => {
-  const res = await fetch(new Request("http://x/connectors"));
+  const res = await fetch(
+    new Request("http://x/connectors", { headers: { "x-admin-token": ADMIN } }),
+  );
   const { connectors } = (await res.json()) as { connectors: Status[] };
   return connectors.find((c) => c.name === name) as Status;
 };
+
+test("connectors status requires internal admin authentication", async () => {
+  const { fetch } = setup([]);
+  for (const headers of [undefined, { "x-admin-token": "wrong" }]) {
+    const res = await fetch(new Request("http://x/connectors", { headers }));
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
+  }
+});
 
 test("connectors status: echo is none + connected, no creds required", async () => {
   const { fetch } = setup([]);
