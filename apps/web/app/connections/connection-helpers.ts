@@ -8,6 +8,15 @@ export type SlackConnection = {
   lastError?: string;
 };
 
+export function slackBotName(suffix: string): string {
+  const slug = suffix
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `flooagents-${slug}` : "";
+}
+
 export function slackStartupError(connection: SlackConnection | null): string | null {
   if (connection?.status !== "error") return null;
   return connection.lastError?.trim() || "Slack bot failed to start";

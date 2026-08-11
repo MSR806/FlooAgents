@@ -17,8 +17,16 @@ export const metadata: Metadata = {
   description: "Any agent. Any harness. Any channel.",
   applicationName: "Floo Agents",
   icons: {
-    icon: "/brand/floo-agents-owl-sitting.png",
-    apple: "/brand/floo-agents-owl-sitting.png",
+    icon: {
+      url: "/brand/floo-agents-favicon.png",
+      sizes: "64x64",
+      type: "image/png",
+    },
+    apple: {
+      url: "/brand/floo-agents-apple-touch-icon.png",
+      sizes: "180x180",
+      type: "image/png",
+    },
   },
   openGraph: {
     title: "Floo Agents",

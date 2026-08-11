@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { safeAgentReturnTo, slackStartupError } from "./connection-helpers";
+import { safeAgentReturnTo, slackBotName, slackStartupError } from "./connection-helpers";
+
+test("slackBotName requires a non-empty slug", () => {
+  expect(slackBotName("Acme Support")).toBe("flooagents-acme-support");
+  expect(slackBotName("---")).toBe("");
+  expect(slackBotName("  ")).toBe("");
+});
 
 test("slackStartupError surfaces failed bot startup", () => {
   expect(

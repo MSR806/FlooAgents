@@ -7,17 +7,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type SlackConnection, slackStartupError } from "./connection-helpers";
+import { type SlackConnection, slackBotName, slackStartupError } from "./connection-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
-
-/** Slack app/display name → lowercase, hyphenated (Slack rejects spaces/punctuation). */
-const slugify = (s: string) =>
-  s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 
 // Socket Mode → no public URL, so the manifest is static except the bot name (mirrors
 // docs/slack-app-manifest.yaml). The name lands in both display_information and bot_user.
@@ -82,7 +74,7 @@ export default function ConnectionForm({
   // Create-wizard state. `suffix` → botName `flooagents-<suffix>` (also the connection name).
   const [step, setStep] = useState(0);
   const [suffix, setSuffix] = useState("");
-  const botName = suffix ? `flooagents-${slugify(suffix)}` : "";
+  const botName = slackBotName(suffix);
 
   // Shared token state (create + edit).
   const [name, setName] = useState(initial?.name ?? "");
@@ -251,7 +243,7 @@ export default function ConnectionForm({
 
   // --- Create: a next/next wizard ---
   const canAdvance =
-    step === 0 ? botName.length > 6 : step === 2 ? !!botToken.trim() && !!appToken.trim() : true;
+    step === 0 ? !!botName : step === 2 ? !!botToken.trim() && !!appToken.trim() : true;
   const last = step === CREATE_STEPS.length - 1;
 
   return (
