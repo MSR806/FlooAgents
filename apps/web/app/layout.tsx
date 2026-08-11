@@ -13,6 +13,9 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://flooagents.com"),
+  alternates: {
+    canonical: "/",
+  },
   title: "Floo Agents",
   description: "Any agent. Any harness. Any channel.",
   applicationName: "Floo Agents",

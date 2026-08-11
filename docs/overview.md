@@ -53,7 +53,7 @@ That's how you get an agent. People can create as many different types as they n
 
 Once an agent exists, you connect it to wherever the work begins:
 
-- **Slack bot** — tag `@flooagents-review` in a thread and the agent replies right there
+- **Slack bot** — tag `@flooagents` in a thread and the agent replies right there
 - **Cron schedule** — a report runs every weekday at 9 AM
 - **GitHub trigger** — a review kicks off when a PR opens
 - **Direct chat** — open the platform and just talk to the agent
@@ -92,7 +92,7 @@ Back into the Slack thread, a specific channel, an email, the web UI, or attache
 | QA agent | Web chat that answers questions by searching across repositories |
 | Ampy | Slack bot that answers questions from Amplitude dashboards |
 | PR review agent | Starts on a new PR, posts review notes |
-| Dev Slack bot | `@flooagents-dev` answers engineering questions, does the work, and raises PRs |
+| Dev Slack bot | `@flooagents` answers engineering questions, does the work, and raises PRs |
 | Growth report | Runs each morning, posts campaign insights to Slack |
 | Upgrade fleet | Opens upgrade PRs across selected repos |
 | Support analysis | Summarizes tickets and recurring customer issues |

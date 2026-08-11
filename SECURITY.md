@@ -5,7 +5,7 @@
 **Please do not open a public issue for a security problem.**
 
 Report it through GitHub's private vulnerability reporting:
-[Report a vulnerability](https://github.com/MSR806/flooagents/security/advisories/new).
+[Report a vulnerability](https://github.com/MSR806/FlooAgents/security/advisories/new).
 If that isn't available to you, email **sujith@pratilipi.com** instead.
 
 Please include what the problem is, how to reproduce it, and what an attacker could

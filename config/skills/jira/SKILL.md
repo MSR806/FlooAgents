@@ -5,7 +5,8 @@ description: "Use when working with Jira: fetching tickets assigned to the user,
 
 # Jira
 
-Reach Jira via the tooling gateway (`jira.*` tools). Always load the `agent-tooling` skill first if the gateway isn't already set up.
+Reach Jira via the Tool Gateway (`jira.*` tools). Always load the `agent-tooling` skill first if
+the gateway isn't already set up.
 
 ## Site
 - cloudId: `pratilipi.atlassian.net`

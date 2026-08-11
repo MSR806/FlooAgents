@@ -5,12 +5,12 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MSR806/flooagents.git"
+    "url": "git+https://github.com/MSR806/FlooAgents.git"
   },
   "bugs": {
-    "url": "https://github.com/MSR806/flooagents/issues"
+    "url": "https://github.com/MSR806/FlooAgents/issues"
   },
-  "homepage": "https://github.com/MSR806/flooagents#readme",
+  "homepage": "https://github.com/MSR806/FlooAgents#readme",
   "workspaces": [
     "apps/*",
     "packages/*"

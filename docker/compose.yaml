@@ -41,7 +41,7 @@ services:
       - ../config:/app/config:ro      # agent + skill JSON, read-only
       - platform-data:/data           # SQLite store persists across runs
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:4000:4000" # trusted management API
+      - "127.0.0.1:4000:4000" # trusted management API; never publish beyond loopback
 
   gateway:
     build:
@@ -57,7 +57,7 @@ services:
     volumes:
       - platform-data:/data
     ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:4100:4100"
+      - "127.0.0.1:4100:4100" # internal Tool Gateway; never publish beyond loopback
 
   web:
     build:
@@ -69,6 +69,7 @@ services:
       # Next.js rewrites /api/* to the control-plane over the Docker network.
       API_URL: http://control-plane:4000
     ports:
+      # The web UI is the only service whose host bind may be configured.
       - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
 
 volumes:

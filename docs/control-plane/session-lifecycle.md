@@ -101,13 +101,13 @@ supports it.
 | Run status, history, result, errors, artifacts | Control-plane database |
 | Follow-up queue | Control-plane database |
 | Agent, skill, channel, trigger configuration | Control-plane database |
-| Filesystem/workspace state | AgentCore managed session storage |
+| Filesystem/workspace state | AgentCore-managed session storage |
 | Harness conversation state | Harness-specific storage, such as Claude SDK session persistence or AgentCore Memory |
 | Long-term external outputs | The target system, such as a PR, issue, Slack thread, report, or artifact store |
 
 For the MVP, the platform does **not** build its own filesystem snapshot system. If the sandbox
 provider gives us reliable provider-native persistence, we use it. AgentCore is the first runtime
-provider, so Workspace persistence is AgentCore managed session storage.
+provider, so Workspace persistence is AgentCore-managed session storage.
 
 ---
 
@@ -137,7 +137,7 @@ The first implementation should be intentionally narrow:
 
 1. The control plane owns Session, Run, Follow-up, and Workspace records.
 2. AgentCore is the only runtime provider.
-3. AgentCore managed session storage is the only filesystem persistence path.
+3. AgentCore-managed session storage is the only filesystem persistence path.
 4. A Session has one active Run at a time.
 5. Follow-ups received during a Run are queued and processed in order.
 6. Runtime and harness IDs are stored as provider metadata, not treated as platform IDs.

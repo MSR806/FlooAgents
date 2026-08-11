@@ -9,7 +9,7 @@ Floo Agents is an internal platform for building AI agents and connecting them t
 
 ## The one mental model: three replaceable layers
 
-```
+```text
 Control Plane          what runs, when, with what access, where output goes   ← we own & build this
    Harness              the agent loop (Claude and OpenAI SDKs)                  ← vendor, replaceable
    Runtime              the sandbox the harness runs in (AgentCore, local now)   ← vendor, replaceable
@@ -30,7 +30,7 @@ Interface and implementation live in separate files (the Channel/RuntimeProvider
 
 ## Monorepo layout
 
-```
+```text
 apps/
   control-plane/   Channels (Slack, Web), engine, management API, SkillStore (stores/), index.ts wiring
   harness/         Shared AgentCore HTTP server with harness-claude/ and harness-openai/ loops

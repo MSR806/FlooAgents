@@ -7,7 +7,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type SlackConnection, slackBotName, slackStartupError } from "./connection-helpers";
+import {
+  type SlackConnection,
+  slackStartupError,
+  validateSlackBotName,
+} from "./connection-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -74,7 +78,7 @@ export default function ConnectionForm({
   // Create-wizard state. `suffix` → botName `flooagents-<suffix>` (also the connection name).
   const [step, setStep] = useState(0);
   const [suffix, setSuffix] = useState("");
-  const botName = slackBotName(suffix);
+  const { name: botName, error: botNameError } = validateSlackBotName(suffix);
 
   // Shared token state (create + edit).
   const [name, setName] = useState(initial?.name ?? "");
@@ -279,13 +283,21 @@ export default function ConnectionForm({
               value={suffix}
               autoFocus
               placeholder="acme"
+              aria-invalid={!!botNameError}
+              aria-describedby="conn-suffix-help"
               onChange={(e) => setSuffix(e.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Your bot will be named <code>{botName || "flooagents-…"}</code> in Slack and in this
-            list.
-          </p>
+          {botNameError ? (
+            <p id="conn-suffix-help" role="alert" className="text-xs text-destructive">
+              {botNameError}
+            </p>
+          ) : (
+            <p id="conn-suffix-help" className="text-xs text-muted-foreground">
+              Your bot will be named <code>{botName || "flooagents-…"}</code> in Slack and in this
+              list.
+            </p>
+          )}
         </div>
       ) : null}
 

@@ -125,8 +125,8 @@ the control-plane and gateway env files; it is an internal server-to-server secr
 be sent to the browser. `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
 The web management UI currently has no browser authentication and assumes a trusted deployment.
-Docker binds published ports to loopback by default. Set `BIND_ADDRESS` only to an address
-on a trusted network; never expose the management ports publicly.
+Docker always binds the control-plane and Tool Gateway ports to loopback. `BIND_ADDRESS` controls
+only the web UI; set it only to an address on a trusted network and never expose it publicly.
 
 Then run the services you need:
 
