@@ -87,12 +87,12 @@ export default function SkillDetailPage() {
               />
             </section>
           ) : (
-            <div className="grid min-w-0 overflow-hidden rounded-lg border bg-card lg:grid-cols-[14rem_minmax(0,1fr)]">
+            <div className="grid min-w-0 overflow-hidden rounded-lg border bg-card lg:grid-cols-[16rem_minmax(0,1fr)]">
               <aside
                 className="min-w-0 border-b bg-muted/20 lg:border-r lg:border-b-0"
                 aria-label="Skill files"
               >
-                <div className="border-b px-3 py-2.5 text-xs font-semibold text-muted-foreground">
+                <div className="border-b px-3 py-2.5 font-mono text-[0.7rem] font-medium tracking-[0.12em] text-muted-foreground uppercase">
                   Files
                 </div>
                 <div className="max-h-64 overflow-y-auto p-2 lg:max-h-[42rem]">
@@ -113,10 +113,10 @@ export default function SkillDetailPage() {
                       <button
                         key={`file:${entry.path}`}
                         type="button"
-                        className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-sm transition-colors ${
+                        className={`flex h-8 w-full min-w-0 items-center gap-2 rounded-sm pr-2 text-left font-mono text-[0.78rem] transition-colors ${
                           selected?.path === entry.path
                             ? "bg-accent text-accent-foreground"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         }`}
                         style={{ paddingLeft: 12 + entry.depth * 16 }}
                         onClick={() => setSelectedPath(entry.path)}
@@ -160,7 +160,7 @@ export default function SkillDetailPage() {
 
 function Markdown({ children }: { children: string }) {
   return (
-    <div className="max-w-3xl break-words text-[15px] leading-7 text-foreground/90 [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_code]:break-all [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em] [&_h1]:mt-8 [&_h1]:mb-3 [&_h1:first-child]:mt-0 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mt-7 [&_h2]:mb-3 [&_h2:first-child]:mt-0 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:my-4 [&_ol]:list-decimal [&_p]:my-4 [&_p:first-child]:mt-0 [&_pre]:my-5 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_pre_code]:break-normal [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_strong]:font-semibold [&_ul]:my-4 [&_ul]:list-disc">
+    <div className="break-words text-[15px] leading-7 text-foreground/90 [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground [&_code]:break-all [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em] [&_h1]:mt-8 [&_h1]:mb-3 [&_h1:first-child]:mt-0 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:mt-7 [&_h2]:mb-3 [&_h2:first-child]:mt-0 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:my-4 [&_ol]:list-decimal [&_p]:my-4 [&_p:first-child]:mt-0 [&_pre]:my-5 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-4 [&_pre_code]:break-normal [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_strong]:font-semibold [&_ul]:my-4 [&_ul]:list-disc">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

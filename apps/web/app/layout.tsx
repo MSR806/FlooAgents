@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AppSidebar />
           <SidebarInset>
             <SidebarTrigger className="fixed top-3 left-3 z-40 md:hidden" />
-            <main className="mx-auto w-full max-w-4xl flex-1 p-6 pt-14 md:p-6">{children}</main>
+            <main className="mx-auto w-full max-w-6xl flex-1 p-6 pt-14 md:p-6">{children}</main>
           </SidebarInset>
         </SidebarProvider>
       </body>

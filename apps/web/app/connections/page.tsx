@@ -79,7 +79,7 @@ export default function ConnectionsPage() {
           </Link>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {connections.map((c) => (
             <li
               key={c.id}
