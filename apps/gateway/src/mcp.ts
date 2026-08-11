@@ -1,5 +1,5 @@
-import type { Db } from "@gilly/db";
-import type { McpConnector } from "@gilly/gateway-kit";
+import type { Db } from "@flooagents/db";
+import type { McpConnector } from "@flooagents/gateway-kit";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -111,7 +111,7 @@ export function makeRealMcp(deps: { db: Db; vault: Vault; gatewayUrl: string }):
     const cached = clients.get(connector.name);
     if (cached) return cached;
 
-    const client = new Client({ name: "gilly-gateway", version: "0.0.0" });
+    const client = new Client({ name: "tool-gateway", version: "0.0.0" });
     const { transport, auth } = connector;
     if (transport.kind === "http") {
       if (auth.kind === "oauth") {

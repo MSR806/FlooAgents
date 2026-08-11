@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@gilly/runtime";
+import type { StreamEvent } from "@flooagents/runtime";
 import {
   newProgressState,
   reduceProgress,

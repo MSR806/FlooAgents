@@ -306,7 +306,7 @@ function ConnectorCard({ connector, onChange }: { connector: Connector; onChange
           </div>
           <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
             {toolCount > 0 ? `${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : "Custom tools"}
-            {` available through ${connector.kind === "mcp" ? "MCP" : "the Gilly gateway"}.`}
+            {` available through ${connector.kind === "mcp" ? "MCP" : "the tool gateway"}.`}
           </p>
         </div>
       </div>

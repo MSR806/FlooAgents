@@ -1,4 +1,4 @@
-# Project Gilly — Repo & Code Architecture
+# Floo Agents — Repo & Code Architecture
 
 **A Bun + TypeScript monorepo.** Deployable control-plane, harness, gateway, and web apps share packages that encode the layer boundaries. See [`mvp-scope.md`](../mvp-scope.md) and [`control-plane/control-plane.md`](../control-plane/control-plane.md).
 
@@ -7,9 +7,9 @@
 ## Layout
 
 ```text
-project-gilly/
+flooagents/
 ├── apps/
-│   ├── control-plane/      # Gilly server: channels, session/run engine, management API
+│   ├── control-plane/      # Channels, session/run engine, management API
 │   ├── harness/            # One AgentCore server with Claude and OpenAI loops
 │   ├── gateway/            # Canonical custom/Composio tool and control-plane gateway
 │   └── web/                # Next.js management UI and web chat
@@ -38,7 +38,7 @@ availability and model catalogs runtime-editable while agents select a harness e
 
 `apps/gateway` is the canonical provider-neutral tool boundary. Exact dotted `gatewayTools` names
 from built-in connectors and connected Composio toolkits share one catalog, grant, auth, and trace
-path; Composio owns downstream provider credentials while Gilly enforces agent and user access.
+path; Composio owns downstream provider credentials while Floo Agents enforces agent and user access.
 
 A third seam lives inside the control plane: the **`Channel` interface** (`apps/control-plane/src/channels/channel.ts`) is the named inbound surface. Slack conforms to it today; Web/Telegram are future implementations, each translating its native event into the engine's input — interface + composition, no inheritance.
 
@@ -104,7 +104,7 @@ Slack thread message
 | **Bun** over pnpm+Vitest+tsx | One tool; fast; native TS; built-in test. Runs both harness SDKs directly. |
 | **SQLite registries** | Agent and harness definitions are runtime-editable; bootstrap files and built-ins use idempotent upserts/inserts. |
 | **SQLite** for operational state | Sessions/Runs must survive restarts (to resume threads) without an extra container. Same Drizzle schema swaps to Postgres later. |
-| **Canonical tooling gateway** | Custom and Composio tools use one dotted-name catalog and one Gilly-owned authorization boundary. |
+| **Canonical Tool Gateway** | Custom and Composio tools use one dotted-name catalog and one platform-owned authorization boundary. |
 | **Slack Socket Mode** | No public URL/tunnel for local dev. |
 | **AgentCore contract from day one** | Same harness image runs locally and (later) in AgentCore; runtime swap is a provider change, not a rewrite. |
 | **`runtime/` + `harness-protocol/` as packages** | Makes the design's "replaceable layers" real, enforced boundaries. |

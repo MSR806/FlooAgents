@@ -13,10 +13,10 @@ export type CatalogEntry = { name: string; description: string; inputSchema?: un
 type FetchFn = typeof fetch;
 
 function env(): { url: string; token: string } {
-  const url = process.env.GILLY_GATEWAY_URL;
-  const token = process.env.GILLY_GATEWAY_TOKEN;
-  if (!url) throw new Error("GILLY_GATEWAY_URL is not set");
-  if (!token) throw new Error("GILLY_GATEWAY_TOKEN is not set");
+  const url = process.env.TOOL_GATEWAY_URL;
+  const token = process.env.TOOL_GATEWAY_TOKEN;
+  if (!url) throw new Error("TOOL_GATEWAY_URL is not set");
+  if (!token) throw new Error("TOOL_GATEWAY_TOKEN is not set");
   return { url, token };
 }
 
@@ -29,7 +29,7 @@ async function post(path: string, body: unknown, fetchFn: FetchFn): Promise<unkn
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
-      "x-gilly-lane": "script",
+      "x-tool-gateway-lane": "script",
     },
     body: JSON.stringify(body),
   });

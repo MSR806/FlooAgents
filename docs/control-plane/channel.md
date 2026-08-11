@@ -1,4 +1,4 @@
-# Project Gilly — Channel
+# Floo Agents — Channel
 
 **A Channel is an interactive, conversational surface where people talk to an agent.** Slack, WhatsApp, Telegram, and the platform's own Web chat are all channels. Unlike a trigger, a channel holds a continuing, stateful conversation. See [`control-plane.md`](control-plane.md) and [`connection.md`](connection.md).
 

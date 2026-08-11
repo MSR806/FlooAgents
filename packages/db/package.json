@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/db",
+  "name": "@flooagents/db",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gilly/core": "workspace:*",
+    "@flooagents/core": "workspace:*",
     "drizzle-orm": "^0.45.2"
   }
 }

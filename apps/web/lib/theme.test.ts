@@ -18,6 +18,10 @@ describe("resolveTheme", () => {
 });
 
 describe("THEME_INIT_SCRIPT", () => {
+  it("stores the preference under a product-neutral key", () => {
+    expect(THEME_STORAGE_KEY).toBe("console-theme");
+  });
+
   it("adds .dark exactly when ink is stored", () => {
     const run = (stored: string | null) => {
       const classes = new Set<string>();

@@ -12,8 +12,27 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "Gilly",
-  description: "Gilly management console",
+  metadataBase: new URL("https://flooagents.com"),
+  title: "Floo Agents",
+  description: "Any agent. Any harness. Any channel.",
+  applicationName: "Floo Agents",
+  icons: {
+    icon: "/brand/floo-agents-owl-sitting.png",
+    apple: "/brand/floo-agents-owl-sitting.png",
+  },
+  openGraph: {
+    title: "Floo Agents",
+    description: "Any agent. Any harness. Any channel.",
+    type: "website",
+    images: [
+      {
+        url: "/brand/floo-agents-owl-sitting.png",
+        width: 1254,
+        height: 1254,
+        alt: "Floo Agents owl mascot",
+      },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

@@ -1,4 +1,4 @@
-# Project Gilly — Connection
+# Floo Agents — Connection
 
 **A Connection is a link to an external system, holding its identity and secrets.** It's the foundation the other surfaces build on — channels, triggers, and targets all reference a Connection when they need to reach an outside system. See [`control-plane.md`](control-plane.md).
 

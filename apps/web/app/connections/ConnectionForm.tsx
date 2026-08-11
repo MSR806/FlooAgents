@@ -79,10 +79,10 @@ export default function ConnectionForm({
   const [copied, setCopied] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
-  // Create-wizard state. `suffix` → botName `gilly-<suffix>` (also the connection name).
+  // Create-wizard state. `suffix` → botName `flooagents-<suffix>` (also the connection name).
   const [step, setStep] = useState(0);
   const [suffix, setSuffix] = useState("");
-  const botName = suffix ? `gilly-${slugify(suffix)}` : "";
+  const botName = suffix ? `flooagents-${slugify(suffix)}` : "";
 
   // Shared token state (create + edit).
   const [name, setName] = useState(initial?.name ?? "");
@@ -90,7 +90,7 @@ export default function ConnectionForm({
   const [appToken, setAppToken] = useState("");
 
   async function copyManifest() {
-    await navigator.clipboard.writeText(buildManifest(botName || "gilly-bot"));
+    await navigator.clipboard.writeText(buildManifest(botName || "flooagents-bot"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -281,7 +281,7 @@ export default function ConnectionForm({
         <div className="grid gap-2">
           <Label htmlFor="conn-suffix">Bot name</Label>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">gilly-</span>
+            <span className="text-sm text-muted-foreground">flooagents-</span>
             <Input
               id="conn-suffix"
               value={suffix}
@@ -291,7 +291,8 @@ export default function ConnectionForm({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Your bot will be named <code>{botName || "gilly-…"}</code> in Slack and in this list.
+            Your bot will be named <code>{botName || "flooagents-…"}</code> in Slack and in this
+            list.
           </p>
         </div>
       ) : null}

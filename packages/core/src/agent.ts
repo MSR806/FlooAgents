@@ -15,7 +15,7 @@ export const AgentConfig = z.object({
   /** Role, scope, and style — not the task (the task arrives at invocation time). */
   systemPrompt: z.string().min(1),
   /**
-   * High-level Gilly tool abstractions this agent may use: "Read", "Write", "Bash". The harness
+   * High-level platform tool abstractions this agent may use: "Read", "Write", "Bash". The harness
    * maps these to the concrete SDK tools (e.g. Read → Read/Glob/Grep), so vendor tool names never
    * surface to users. Omitted or empty → chat-only (no filesystem/shell). Granting any tool
    * (or a skill) gives the agent a per-session workspace; see the harness loop.

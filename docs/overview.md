@@ -1,8 +1,12 @@
-# Project Gilly
+# Floo Agents
 
-**Gilly is an internal platform for building AI agents that do real work — and connecting them to the places work already happens.**
+**Any agent. Any harness. Any channel.**
 
-Today, AI inside most companies lives in scattered chat windows and one-off scripts. Prompts get lost, every team rebuilds the same automations, and no one can see what's running or trust it at scale. Gilly turns that scattered activity into a shared, governed platform: build an agent once, reuse it everywhere, and let it run safely on its own.
+**Floo Agents is an internal platform for building AI agents that do real work — and connecting them to the places work already happens.**
+
+The project lives at [flooagents.com](https://flooagents.com).
+
+Today, AI inside most companies lives in scattered chat windows and one-off scripts. Prompts get lost, every team rebuilds the same automations, and no one can see what's running or trust it at scale. Floo Agents turns that scattered activity into a shared, governed platform: build an agent once, reuse it everywhere, and let it run safely on its own.
 
 ---
 
@@ -15,7 +19,7 @@ We've already built agents like this by hand:
 
 Each took **weeks** to build from scratch — wiring up the interface, the triggers, the data access, the deployment.
 
-There are dozens more use cases like these waiting to be built. We shouldn't have to build each one from the ground up. With Gilly, the same kind of agent can be assembled in **a couple of hours, by anyone** — no custom infrastructure, just configuration. The platform is the build effort, done once, so every future agent is cheap.
+There are dozens more use cases like these waiting to be built. We shouldn't have to build each one from the ground up. With Floo Agents, the same kind of agent can be assembled in **a couple of hours, by anyone** — no custom infrastructure, just configuration. The platform is the build effort, done once, so every future agent is cheap.
 
 ---
 
@@ -49,7 +53,7 @@ That's how you get an agent. People can create as many different types as they n
 
 Once an agent exists, you connect it to wherever the work begins:
 
-- **Slack bot** — tag `@gilly-review` in a thread and the agent replies right there
+- **Slack bot** — tag `@flooagents-review` in a thread and the agent replies right there
 - **Cron schedule** — a report runs every weekday at 9 AM
 - **GitHub trigger** — a review kicks off when a PR opens
 - **Direct chat** — open the platform and just talk to the agent
@@ -88,7 +92,7 @@ Back into the Slack thread, a specific channel, an email, the web UI, or attache
 | QA agent | Web chat that answers questions by searching across repositories |
 | Ampy | Slack bot that answers questions from Amplitude dashboards |
 | PR review agent | Starts on a new PR, posts review notes |
-| Dev Slack bot | `@gilly-dev` answers engineering questions, does the work, and raises PRs |
+| Dev Slack bot | `@flooagents-dev` answers engineering questions, does the work, and raises PRs |
 | Growth report | Runs each morning, posts campaign insights to Slack |
 | Upgrade fleet | Opens upgrade PRs across selected repos |
 | Support analysis | Summarizes tickets and recurring customer issues |

@@ -1,4 +1,5 @@
-import { AgentConfig, HarnessDefinition as HarnessDefinitionSchema } from "@gilly/core";
+import { AgentConfig } from "@flooagents/core/agent";
+import { HarnessDefinition as HarnessDefinitionSchema } from "@flooagents/core/harness";
 
 export type AgentValues = ReturnType<typeof AgentConfig.parse>;
 export type HarnessDefinition = ReturnType<typeof HarnessDefinitionSchema.parse>;

@@ -1,9 +1,9 @@
-# Project Gilly — Open Questions & Notes
+# Floo Agents — Open Questions & Notes
 
 Loose ends and unresolved tensions to revisit. Not blockers — parking lot for things we've flagged but deliberately deferred.
 
 ## Session lifecycle edge cases
-The high-level lifecycle now lives in [`session-lifecycle.md`](session-lifecycle.md): Gilly owns Sessions, Runs, Follow-ups, and Workspaces; AgentCore is only the first runtime provider. Remaining details to define later: cancellation behavior, human approval pauses, how much run-event detail is stored, and whether live Web/voice channels can interrupt instead of queueing.
+The high-level lifecycle now lives in [`session-lifecycle.md`](session-lifecycle.md): Floo Agents owns Sessions, Runs, Follow-ups, and Workspaces; AgentCore is only the first runtime provider. Remaining details to define later: cancellation behavior, human approval pauses, how much run-event detail is stored, and whether live Web/voice channels can interrupt instead of queueing.
 
 ## Channel "bound vs open" distinction
 Slack is a *bound* channel (one fixed agent chosen at setup); Web is *open* (the user picks which agent to talk to per conversation). Only lightly mentioned in [`channel.md`](channel.md); the difference may deserve fuller treatment.

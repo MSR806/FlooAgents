@@ -107,7 +107,7 @@ const providerMessage = (error: unknown) =>
 const isMissingConnection = (message: string) =>
   /not connected|connected account|connection required|authentication required/i.test(message);
 
-/** Convert an upstream slug into Gilly's provider-neutral dotted name. */
+/** Convert an upstream slug into the platform's provider-neutral dotted name. */
 export function canonicalComposioToolName(toolkit: string, upstreamSlug: string): string {
   const prefix = `${toolkit.replace(/[^a-z0-9]+/gi, "_").toUpperCase()}_`;
   const action = upstreamSlug.startsWith(prefix) ? upstreamSlug.slice(prefix.length) : upstreamSlug;

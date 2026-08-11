@@ -5,7 +5,7 @@ import {
   type SlackConnection,
   SlackConnectionInput,
   type Vault,
-} from "@gilly/core";
+} from "@flooagents/core";
 import {
   addGrant,
   bindSlackConnection,
@@ -32,8 +32,8 @@ import {
   updateAgent,
   updateHarness,
   updateSlackConnection,
-} from "@gilly/db";
-import type { StreamEvent } from "@gilly/runtime";
+} from "@flooagents/db";
+import type { StreamEvent } from "@flooagents/runtime";
 import { WebClient } from "@slack/web-api";
 import { z } from "zod";
 import type { createEngine, MessageInput } from "../engine.ts";
@@ -76,7 +76,7 @@ type WebDeps = {
   db: Db;
   skillStore: SkillStore;
   port: number;
-  /** Tooling gateway base URL; proxied for management tool and connector APIs. */
+  /** Tool Gateway base URL; proxied for management tool and connector APIs. */
   gatewayUrl?: string;
   /** Gateway admin token; injected server-side so the browser never handles it. */
   adminToken?: string;

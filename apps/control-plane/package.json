@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/control-plane",
+  "name": "@flooagents/control-plane",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gilly/core": "workspace:*",
-    "@gilly/db": "workspace:*",
-    "@gilly/harness-protocol": "workspace:*",
-    "@gilly/runtime": "workspace:*",
+    "@flooagents/core": "workspace:*",
+    "@flooagents/db": "workspace:*",
+    "@flooagents/harness-protocol": "workspace:*",
+    "@flooagents/runtime": "workspace:*",
     "@slack/bolt": "^4.7.3",
     "@slack/types": "^2.21.1",
     "@slack/web-api": "^7.17.0",

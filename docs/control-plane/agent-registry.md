@@ -1,8 +1,8 @@
-# Project Gilly — Agent Registry
+# Floo Agents — Agent Registry
 
-**The catalog of every agent in Gilly.** An agent is a configured AI worker; the registry is where it's created, edited, and looked up. Sources fire agents, the Fleet runs them, and agents delegate to each other — all resolving back to one entry here. See [`control-plane.md`](control-plane.md).
+**The catalog of every agent in Floo Agents.** An agent is a configured AI worker; the registry is where it's created, edited, and looked up. Sources fire agents, the Fleet runs them, and agents delegate to each other — all resolving back to one entry here. See [`control-plane.md`](control-plane.md).
 
-Gilly ships with **no default agent** — every agent is user-authored. The registry starts empty.
+Floo Agents ships with **no default agent** — every agent is user-authored. The registry starts empty.
 
 ## What makes up an agent
 

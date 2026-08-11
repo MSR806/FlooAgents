@@ -1,10 +1,12 @@
 {
-  "name": "@gilly/core",
+  "name": "@flooagents/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./agent": "./src/agent.ts",
+    "./harness": "./src/harness.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

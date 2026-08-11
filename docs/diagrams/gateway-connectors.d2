@@ -11,7 +11,7 @@ agent: Agent {
   verbs: "gateway_catalog + gateway_invoke\n(transport invisible)"
 }
 
-gw: Tooling Gateway {
+gw: Tool Gateway {
   registry: "Tool Registry\ngmail.* · amplitude.* · postgres.* · branch.*"
   vault: "Credential Vault\n(provider, key)\nadmin-configured, shared"
   registry -> vault: "resolve creds at invoke"

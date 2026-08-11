@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BUILT_IN_HARNESSES } from "@gilly/core";
+import { BUILT_IN_HARNESSES } from "@flooagents/core";
 import {
   appendRunStep,
   completeRun,
@@ -10,7 +10,7 @@ import {
   createRun,
   failRun,
   getOrCreateSession,
-} from "@gilly/db";
+} from "@flooagents/db";
 import type { createEngine } from "../engine.ts";
 import { LocalSkillStore } from "../stores/local-skill-store.ts";
 import type { SkillStore } from "../stores/skill-store.ts";
@@ -281,7 +281,7 @@ test("web API does not advertise cross-origin access or handle CORS preflight", 
 });
 
 test("POST /api/skills persists a skill with supporting files; GET returns them", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "gilly-web-skills-"));
+  const dir = mkdtempSync(join(tmpdir(), "platform-web-skills-"));
   const fetch = createWebHandler({
     engine: {} as ReturnType<typeof createEngine>,
     db: createDb(":memory:"),
@@ -523,14 +523,14 @@ test("web chat session history lists conversations and returns turns with tool s
 
 // --- Slack connections: redaction + blank-token-keep (no Slack network needed) ---
 
-import { makeVault } from "@gilly/core";
+import { makeVault } from "@flooagents/core";
 import {
   createAgent,
   createSlackConnection,
   getAgent,
   getSlackConnection,
   setSlackConnectionStatus,
-} from "@gilly/db";
+} from "@flooagents/db";
 import type { SlackManager } from "./slack-manager.ts";
 
 /** A no-op Slack manager that records which lifecycle calls the routes make. */

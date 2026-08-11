@@ -1,9 +1,9 @@
 ---
 name: test-conventions
-description: How to write and run tests in this repo (Gilly). Read BEFORE adding tests or changing tested code — covers the bun:test runner, the inject-don't-mock philosophy, the per-seam faking cheat-sheet (RuntimeProvider, SDK query, HTTP handlers, in-memory SQLite, async streams), what to test vs skip, and recipes for testing a channel translator, a runtime provider, engine behavior, or a harness route. Triggers: "write a test", "add tests", "how do I test X", "testing", "test patterns", "fake/mock X".
+description: How to write and run tests in this repo (Floo Agents). Read BEFORE adding tests or changing tested code — covers the bun:test runner, the inject-don't-mock philosophy, the per-seam faking cheat-sheet (RuntimeProvider, SDK query, HTTP handlers, in-memory SQLite, async streams), what to test vs skip, and recipes for testing a channel translator, a runtime provider, engine behavior, or a harness route. Triggers: "write a test", "add tests", "how do I test X", "testing", "test patterns", "fake/mock X".
 ---
 
-# Testing in Gilly
+# Testing in Floo Agents
 
 Tests are **`bun:test`, fully offline, and every seam is injectable** — no mocking frameworks, no network, no real Slack/Anthropic calls. Tests live **next to the code** as `*.test.ts`. The whole architecture is built so the interesting logic can be exercised by passing a fake in, not by intercepting modules. See [`coding-conventions`](../coding-conventions/SKILL.md) for the seams these tests target.
 

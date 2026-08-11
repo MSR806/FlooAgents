@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentConfig, SlackConnection } from "@gilly/core";
+import type { AgentConfig, SlackConnection } from "@flooagents/core";
 import { eq } from "drizzle-orm";
 import { createDb } from "./client.ts";
 import {

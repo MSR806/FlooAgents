@@ -24,7 +24,7 @@ test("compactCommand keeps a conservative command label while hiding arguments",
 
 test("groupActivity strips workspace prefixes and groups consecutive file operations", () => {
   const prefix =
-    "/Users/msr/project-gilly/data/workspaces/9d217d8f-a28a-4dd0-898d-70ed41238ee7/vaani-backend";
+    "/Users/msr/flooagents/data/workspaces/9d217d8f-a28a-4dd0-898d-70ed41238ee7/vaani-backend";
   const items: ActivityItem[] = [
     { name: "Read", summary: `${prefix}/app/services/translation_service.py` },
     { name: "Read", summary: `${prefix}/app/utils/translation_mappings.py` },

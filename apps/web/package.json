@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/web",
+  "name": "@flooagents/web",
   "private": true,
   "version": "0.0.0",
   "scripts": {
@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@gilly/core": "workspace:*",
-    "@gilly/design-tokens": "workspace:*",
+    "@flooagents/core": "workspace:*",
+    "@flooagents/design-tokens": "workspace:*",
     "@tailwindcss/postcss": "^4.3.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

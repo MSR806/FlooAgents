@@ -1,4 +1,4 @@
-# Project Gilly — Tooling Gateway
+# Floo Agents — Tool Gateway
 
 **The gateway is the one door for every external and internal tool call. Credential and access boundaries are enforced here, every call is traced here — and agents call tools programmatically, so large data never flows through model context.**
 
@@ -33,7 +33,7 @@ Provider schemas (Amplitude's 50 tools, Meta's parameter sprawl) live in the gat
 ## Two Lanes for Calling
 
 1. **Direct** — one small lookup: the agent calls `gateway_invoke` and answers. One round-trip.
-2. **Script** — chained or heavy calls: the agent writes a TypeScript file in its workspace and runs it with Bash. The script imports `@gilly/gateway-client` (authenticated via `GILLY_GATEWAY_URL` / `GILLY_GATEWAY_TOKEN` env), chains as many tool calls as it needs, and prints only the summary. Raw payloads live and die inside the sandbox.
+2. **Script** — chained or heavy calls: the agent writes a TypeScript file in its workspace and runs it with Bash. The script imports `@flooagents/gateway-client` (authenticated via `TOOL_GATEWAY_URL` / `TOOL_GATEWAY_TOKEN` env), chains as many tool calls as it needs, and prints only the summary. Raw payloads live and die inside the sandbox.
 
 A skill teaches the agent which lane to pick. Composite capabilities (e.g. "compute CAC" = Meta spend + Branch installs + math) are skills carrying a script — new composite means a new skill file, not a deploy.
 
@@ -80,10 +80,10 @@ Invoke errors form a closed set: `user_missing_grant` (stop and inform the user)
 
 ## Credentials
 
-A `credentials` table in the existing SQLite: `(provider, key, value)` — single tenant, so one credential per provider, configured once by an admin and shared by everyone the grants allow. Values are encrypted at rest with a master key from env (`GILLY_VAULT_KEY`, AES-GCM); losing the key means re-entering credentials, which is acceptable at this scale. For custom API tools, the gateway resolves declared `creds` from the vault at invocation time and injects them into `ctx`; MCP transport credentials are resolved at the same boundary. Credentials never appear in tool output, tokens, or the sandbox.
+A `credentials` table in the existing SQLite: `(provider, key, value)` — single tenant, so one credential per provider, configured once by an admin and shared by everyone the grants allow. Values are encrypted at rest with a master key from env (`CREDENTIAL_VAULT_KEY`, AES-GCM); losing the key means re-entering credentials, which is acceptable at this scale. For custom API tools, the gateway resolves declared `creds` from the vault at invocation time and injects them into `ctx`; MCP transport credentials are resolved at the same boundary. Credentials never appear in tool output, tokens, or the sandbox.
 
 Composio is an upstream provider, not an agent connector. Its discovered concrete tools join the
-same catalog by canonical Gilly name. Shared authentication and credential ownership are defined in
+same catalog by canonical tool name. Shared authentication and credential ownership are defined in
 [`connectors-and-auth.md`](connectors-and-auth.md).
 
 ## Tracing

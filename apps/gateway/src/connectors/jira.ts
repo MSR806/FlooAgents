@@ -1,4 +1,4 @@
-import { defineMcpConnector } from "@gilly/gateway-kit";
+import { defineMcpConnector } from "@flooagents/gateway-kit";
 
 /**
  * Atlassian's hosted MCP server, reached over Streamable HTTP with OAuth 2.1 (auth-code + PKCE,

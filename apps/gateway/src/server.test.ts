@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createDb, createGatewayToken, getCredential, schema, setCredential } from "@gilly/db";
+import { createDb, createGatewayToken, getCredential, schema, setCredential } from "@flooagents/db";
 import { ComposioNotConnectedError, type ComposioService } from "./composio.ts";
 import { type McpGateway, McpToolError, NotConnectedError } from "./mcp.ts";
 import { allTools } from "./registry.ts";
@@ -187,8 +187,8 @@ async function withControlPlane<T>(
   }) => Promise<T>,
 ): Promise<T> {
   const oldFetch = globalThis.fetch;
-  const oldUrl = process.env.GILLY_CONTROL_PLANE_URL;
-  const oldAdminToken = process.env.GILLY_ADMIN_TOKEN;
+  const oldUrl = process.env.CONTROL_PLANE_URL;
+  const oldAdminToken = process.env.INTERNAL_API_TOKEN;
   const state = {
     agents: new Map<string, Agent>([
       [
@@ -202,13 +202,20 @@ async function withControlPlane<T>(
       ],
     ]),
     skills: new Map<string, Skill>([
-      ["tooling", { name: "tooling", description: "Use gateway tools.", content: "# Tools" }],
+      [
+        "agent-tooling",
+        {
+          name: "agent-tooling",
+          description: "Use agent gateway tools.",
+          content: "# Tools",
+        },
+      ],
     ]),
     starts: [] as { id: string; message: string; userId: string; adminToken: string | null }[],
     runs: new Map<string, RunState>(),
   };
-  process.env.GILLY_CONTROL_PLANE_URL = "http://control-plane.test";
-  process.env.GILLY_ADMIN_TOKEN = ADMIN;
+  process.env.CONTROL_PLANE_URL = "http://control-plane.test";
+  process.env.INTERNAL_API_TOKEN = ADMIN;
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.origin !== "http://control-plane.test") return oldFetch(input, init);
@@ -295,10 +302,10 @@ async function withControlPlane<T>(
     return await fn(state);
   } finally {
     globalThis.fetch = oldFetch;
-    if (oldUrl === undefined) delete process.env.GILLY_CONTROL_PLANE_URL;
-    else process.env.GILLY_CONTROL_PLANE_URL = oldUrl;
-    if (oldAdminToken === undefined) delete process.env.GILLY_ADMIN_TOKEN;
-    else process.env.GILLY_ADMIN_TOKEN = oldAdminToken;
+    if (oldUrl === undefined) delete process.env.CONTROL_PLANE_URL;
+    else process.env.CONTROL_PLANE_URL = oldUrl;
+    if (oldAdminToken === undefined) delete process.env.INTERNAL_API_TOKEN;
+    else process.env.INTERNAL_API_TOKEN = oldAdminToken;
   }
 }
 
@@ -312,23 +319,23 @@ test("catalog returns exact agent gateway tools only", async () => {
   expect(tools[0]?.inputSchema).toBeDefined();
 });
 
-test("catalog includes connected gilly tools", async () => {
-  const { fetch, token } = setup(["gilly.*"]);
+test("catalog includes connected agent-builder tools", async () => {
+  const { fetch, token } = setup(["agent_builder.*"]);
   const res = await post(fetch, "/catalog", auth(token), {});
   const { tools } = (await res.json()) as { tools: { name: string }[] };
-  expect(tools.map((t) => t.name)).toContain("gilly.create_agent");
-  expect(tools.map((t) => t.name)).toContain("gilly.list_harnesses");
-  expect(tools.map((t) => t.name)).toContain("gilly.start_agent");
-  expect(tools.map((t) => t.name)).toContain("gilly.get_run");
-  expect(tools.map((t) => t.name)).not.toContain("gilly.invoke_agent");
-  expect(tools.map((t) => t.name)).toContain("gilly.update_skill");
+  expect(tools.map((t) => t.name)).toContain("agent_builder.create_agent");
+  expect(tools.map((t) => t.name)).toContain("agent_builder.list_harnesses");
+  expect(tools.map((t) => t.name)).toContain("agent_builder.start_agent");
+  expect(tools.map((t) => t.name)).toContain("agent_builder.get_run");
+  expect(tools.map((t) => t.name)).not.toContain("agent_builder.invoke_agent");
+  expect(tools.map((t) => t.name)).toContain("agent_builder.update_skill");
 });
 
-test("gilly.update_agent patches through the control-plane API", async () => {
+test("agent_builder.update_agent patches through the control-plane API", async () => {
   await withControlPlane(async ({ agents }) => {
-    const { fetch, token } = setup(["gilly.*"]);
+    const { fetch, token } = setup(["agent_builder.*"]);
     const harnesses = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.list_harnesses",
+      tool: "agent_builder.list_harnesses",
       input: {},
     });
     expect(await harnesses.json()).toEqual([
@@ -341,13 +348,13 @@ test("gilly.update_agent patches through the control-plane API", async () => {
       },
     ]);
     const create = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.create_agent",
+      tool: "agent_builder.create_agent",
       input: {
         id: "helper",
         name: "Helper",
         harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
         systemPrompt: "Help.",
-        gatewayTools: ["gilly.list_agents"],
+        gatewayTools: ["agent_builder.list_agents"],
       },
     });
     expect(await create.json()).toEqual({
@@ -355,15 +362,15 @@ test("gilly.update_agent patches through the control-plane API", async () => {
       name: "Helper",
       harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "Help.",
-      gatewayTools: ["gilly.list_agents"],
+      gatewayTools: ["agent_builder.list_agents"],
     });
-    expect(agents.get("helper")?.gatewayTools).toEqual(["gilly.list_agents"]);
+    expect(agents.get("helper")?.gatewayTools).toEqual(["agent_builder.list_agents"]);
 
     const res = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.update_agent",
+      tool: "agent_builder.update_agent",
       input: {
         id: "coder",
-        patch: { name: "Coder 2", gatewayTools: ["gilly.list_agents"] },
+        patch: { name: "Coder 2", gatewayTools: ["agent_builder.list_agents"] },
       },
     });
     expect(await res.json()).toEqual({
@@ -371,17 +378,17 @@ test("gilly.update_agent patches through the control-plane API", async () => {
       name: "Coder 2",
       harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
       systemPrompt: "code",
-      gatewayTools: ["gilly.list_agents"],
+      gatewayTools: ["agent_builder.list_agents"],
     });
     expect(agents.get("coder")?.name).toBe("Coder 2");
   });
 });
 
-test("gilly.start_agent and get_run use the control-plane background-run API", async () => {
+test("agent_builder start and run lookup use the control-plane background-run API", async () => {
   await withControlPlane(async ({ runs, starts }) => {
-    const { fetch, token } = setup(["gilly.*"]);
+    const { fetch, token } = setup(["agent_builder.*"]);
     const start = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.start_agent",
+      tool: "agent_builder.start_agent",
       input: { id: "coder", message: "inspect this" },
     });
     expect(await start.json()).toEqual({ runId: "run-1" });
@@ -403,7 +410,7 @@ test("gilly.start_agent and get_run use the control-plane background-run API", a
       output: "ran coder",
     });
     const status = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.get_run",
+      tool: "agent_builder.get_run",
       input: { runId: "run-1" },
     });
     expect(await status.json()).toEqual({
@@ -427,7 +434,7 @@ test("gilly.start_agent and get_run use the control-plane background-run API", a
       runError: "child failed",
     });
     const failed = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.get_run",
+      tool: "agent_builder.get_run",
       input: { runId: "run-1" },
     });
     expect(await failed.json()).toEqual({
@@ -439,11 +446,11 @@ test("gilly.start_agent and get_run use the control-plane background-run API", a
   });
 });
 
-test("gilly.create_skill and update_skill write through the control-plane API", async () => {
+test("agent-builder skill tools write through the control-plane API", async () => {
   await withControlPlane(async ({ skills }) => {
-    const { fetch, token } = setup(["gilly.*"]);
+    const { fetch, token } = setup(["agent_builder.*"]);
     const create = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.create_skill",
+      tool: "agent_builder.create_skill",
       input: {
         name: "agent-admin",
         description: "Manage agents.",
@@ -458,14 +465,14 @@ test("gilly.create_skill and update_skill write through the control-plane API", 
     ]);
 
     const update = await post(fetch, "/invoke", auth(token), {
-      tool: "gilly.update_skill",
-      input: { name: "agent-admin", patch: { description: "Manage Gilly agents." } },
+      tool: "agent_builder.update_skill",
+      input: { name: "agent-admin", patch: { description: "Manage agents." } },
     });
     expect(await update.json()).toEqual({ name: "agent-admin" });
     // Patching description alone preserves the existing files (merge over the current skill).
     expect(skills.get("agent-admin")).toEqual({
       name: "agent-admin",
-      description: "Manage Gilly agents.",
+      description: "Manage agents.",
       content: "# Agent Admin",
       files: [{ path: "run.ts", contents: "console.log('go')" }],
     });
@@ -497,11 +504,11 @@ test("invoke caps a large result by default, but the script lane opts out", asyn
     error: "result_too_large",
     message: "result too large for the direct lane; use the script lane",
   });
-  // Script lane (x-gilly-lane: script) → full payload through.
+  // Script lane (x-tool-gateway-lane: script) → full payload through.
   const full = await post(
     fetch,
     "/invoke",
-    { ...auth(token), "x-gilly-lane": "script" },
+    { ...auth(token), "x-tool-gateway-lane": "script" },
     { tool: "echo.ping", input: { message: big } },
   );
   expect(await full.json()).toEqual({ echoed: big });

@@ -1,4 +1,8 @@
-import { type InvocationRequest, InvocationResult, StreamEvent } from "@gilly/harness-protocol";
+import {
+  type InvocationRequest,
+  InvocationResult,
+  StreamEvent,
+} from "@flooagents/harness-protocol";
 import type { RuntimeProvider } from "./provider.ts";
 
 /**

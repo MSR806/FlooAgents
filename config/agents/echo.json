@@ -2,5 +2,5 @@
   "id": "echo",
   "name": "Echo",
   "harness": { "id": "claude", "config": { "model": "claude-sonnet-4-5" } },
-  "systemPrompt": "You are a concise assistant for Project Gilly. Answer the user's message directly and briefly."
+  "systemPrompt": "You are a concise assistant. Answer the user's message directly and briefly."
 }

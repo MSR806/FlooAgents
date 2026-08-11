@@ -1,8 +1,15 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { AgentConfig, isDeferredOpenModel, normalizeLegacyHarness } from "@gilly/core";
-import { type Db, deleteAgent, getAgent, getHarness, syncAgent, updateHarness } from "@gilly/db";
-import type { SkillBundle } from "@gilly/harness-protocol";
+import { AgentConfig, isDeferredOpenModel, normalizeLegacyHarness } from "@flooagents/core";
+import {
+  type Db,
+  deleteAgent,
+  getAgent,
+  getHarness,
+  syncAgent,
+  updateHarness,
+} from "@flooagents/db";
+import type { SkillBundle } from "@flooagents/harness-protocol";
 import { Glob } from "bun";
 import { z } from "zod";
 

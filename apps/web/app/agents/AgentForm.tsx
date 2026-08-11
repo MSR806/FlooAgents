@@ -32,8 +32,8 @@ export type { AgentValues } from "./agent-form-helpers";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
 /**
- * High-level Gilly tool capabilities the agent may be granted. These abstractions are what we store
- * and show; the harness maps them to concrete SDK tools. Any tool (or skill) gives the agent a
+ * High-level platform tool capabilities the agent may be granted. These abstractions are what we
+ * store and show; the harness maps them to concrete SDK tools. Any tool (or skill) gives the agent a
  * per-session workspace; see the harness loop.
  */
 const TOOL_GROUPS: Group[] = [

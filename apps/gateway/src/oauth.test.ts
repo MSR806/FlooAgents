@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createDb, getCredential } from "@gilly/db";
+import { createDb, getCredential } from "@flooagents/db";
 import type { OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { clearOAuth, VaultOAuthProvider } from "./oauth.ts";
 import { makeVault } from "./vault.ts";

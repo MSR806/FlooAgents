@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { InvocationRequest, StreamEvent } from "@gilly/harness-protocol";
+import type { InvocationRequest, StreamEvent } from "@flooagents/harness-protocol";
 import type {
   CodexOptions,
   ThreadEvent,
@@ -302,14 +302,14 @@ test("buildCodexOptions exposes the gateway through a stdio MCP bridge without a
     },
   );
   expect(options.env).toMatchObject({
-    GILLY_GATEWAY_URL: "http://gateway",
-    GILLY_GATEWAY_TOKEN: "gateway-secret",
+    TOOL_GATEWAY_URL: "http://gateway",
+    TOOL_GATEWAY_TOKEN: "gateway-secret",
   });
   expect(options.config?.mcp_servers).toEqual({
     gateway: {
       command: "/usr/bin/bun",
       args: ["/app/gateway-mcp.ts"],
-      env_vars: ["GILLY_GATEWAY_URL", "GILLY_GATEWAY_TOKEN"],
+      env_vars: ["TOOL_GATEWAY_URL", "TOOL_GATEWAY_TOKEN"],
       enabled_tools: ["gateway_catalog", "gateway_invoke"],
       default_tools_approval_mode: "approve",
       required: true,
@@ -318,9 +318,9 @@ test("buildCodexOptions exposes the gateway through a stdio MCP bridge without a
   expect(JSON.stringify(options.config)).not.toContain("gateway-secret");
 });
 
-test("materializeWorkspace replaces only Gilly-managed skills and rejects traversal", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "gilly-openai-"));
-  const state = mkdtempSync(join(tmpdir(), "gilly-openai-state-"));
+test("materializeWorkspace replaces only platform-managed skills and rejects traversal", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "platform-openai-"));
+  const state = mkdtempSync(join(tmpdir(), "platform-openai-state-"));
   mkdirSync(join(cwd, ".agents/skills/native"), { recursive: true });
   writeFileSync(join(cwd, ".agents/skills/native/SKILL.md"), "# Native");
   materializeWorkspace(
@@ -356,16 +356,16 @@ test("materializeWorkspace replaces only Gilly-managed skills and rejects traver
 });
 
 test("materialization rejects symlinked managed paths before writing or deleting", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "gilly-openai-link-"));
-  const outside = mkdtempSync(join(tmpdir(), "gilly-openai-outside-"));
-  const state = mkdtempSync(join(tmpdir(), "gilly-openai-state-"));
+  const cwd = mkdtempSync(join(tmpdir(), "platform-openai-link-"));
+  const outside = mkdtempSync(join(tmpdir(), "platform-openai-outside-"));
+  const state = mkdtempSync(join(tmpdir(), "platform-openai-state-"));
   symlinkSync(outside, join(cwd, ".agents"));
   expect(() => materializeWorkspace(request, cwd, state)).toThrow("Symbolic links are not allowed");
 });
 
 test("materialization rejects duplicate skill bundles before changing managed state", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "gilly-openai-duplicate-"));
-  const state = mkdtempSync(join(tmpdir(), "gilly-openai-state-"));
+  const cwd = mkdtempSync(join(tmpdir(), "platform-openai-duplicate-"));
+  const state = mkdtempSync(join(tmpdir(), "platform-openai-state-"));
   const duplicate = { name: "review", files: [{ path: "SKILL.md", contents: "review" }] };
   expect(() =>
     materializeWorkspace({ ...request, skills: [duplicate, duplicate] }, cwd, state),
@@ -374,9 +374,9 @@ test("materialization rejects duplicate skill bundles before changing managed st
 });
 
 test("materializeCodexHome removes the obsolete permission profile", () => {
-  const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
+  const root = mkdtempSync(join(tmpdir(), "codex-state-home-"));
   const home = join(root, "session");
-  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
+  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "platform-fake-home-"));
   mkdirSync(home);
   writeFileSync(join(home, "config.toml"), "old profile");
 
@@ -386,9 +386,9 @@ test("materializeCodexHome removes the obsolete permission profile", () => {
 });
 
 test("materializeCodexHome forwards a logged-in codex session when no API key is configured", () => {
-  const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
+  const root = mkdtempSync(join(tmpdir(), "codex-state-home-"));
   const home = join(root, "session");
-  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
+  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "platform-fake-home-"));
   const authPath = loginAuthPath(fakeLoginRoot);
   mkdirSync(join(fakeLoginRoot, ".codex"), { recursive: true });
   writeFileSync(authPath, '{"tokens":"secret"}');
@@ -399,9 +399,9 @@ test("materializeCodexHome forwards a logged-in codex session when no API key is
 });
 
 test("materializeCodexHome skips the logged-in session when an API key is configured", () => {
-  const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
+  const root = mkdtempSync(join(tmpdir(), "codex-state-home-"));
   const home = join(root, "session");
-  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
+  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "platform-fake-home-"));
   const authPath = loginAuthPath(fakeLoginRoot);
   mkdirSync(join(fakeLoginRoot, ".codex"), { recursive: true });
   writeFileSync(authPath, '{"tokens":"secret"}');
@@ -412,9 +412,9 @@ test("materializeCodexHome skips the logged-in session when an API key is config
 });
 
 test("materializeCodexHome is a no-op when there is no logged-in session either", () => {
-  const root = mkdtempSync(join(tmpdir(), "gilly-codex-home-"));
+  const root = mkdtempSync(join(tmpdir(), "codex-state-home-"));
   const home = join(root, "session");
-  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "gilly-fake-home-"));
+  const fakeLoginRoot = mkdtempSync(join(tmpdir(), "platform-fake-home-"));
 
   materializeCodexHome(home, {}, loginAuthPath(fakeLoginRoot));
 

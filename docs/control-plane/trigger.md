@@ -1,4 +1,4 @@
-# Project Gilly — Trigger
+# Floo Agents — Trigger
 
 **A Trigger fires a run when an event happens.** Unlike a channel, it's one-shot: an event occurs, a run is created for an agent, and the trigger is done. See [`control-plane.md`](control-plane.md) and [`connection.md`](connection.md).
 

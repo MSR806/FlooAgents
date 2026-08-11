@@ -1,4 +1,4 @@
-import { defineConnector, defineTool } from "@gilly/gateway-kit";
+import { defineConnector, defineTool } from "@flooagents/gateway-kit";
 import { z } from "zod";
 
 const BRANCH_QUERY_URL = "https://api2.branch.io/v1/query/analytics";

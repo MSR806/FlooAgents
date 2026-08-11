@@ -1,9 +1,9 @@
 ---
-name: tooling
-description: Use whenever a task needs an external service or internal tool (analytics, ad spend, attribution, email, a database, any connector). Explains the tooling gateway — the two tools you have and how to call them cheaply.
+name: agent-tooling
+description: Use whenever a task needs an external service or internal agent tool (analytics, ad spend, attribution, email, a database, any connector). Explains the agent tool gateway and how to call it efficiently.
 ---
 
-# External Tools — the Gateway
+# Agent Tooling — the Gateway
 
 Every external and internal tool is reached through **one gateway**. You never hold credentials
 and you never see a provider's full API. You have exactly two tools:
@@ -29,8 +29,8 @@ The direct lane refuses results larger than ~50KB (you'll get an error pointing 
 chained work goes in the script lane so raw payloads never fill your context.
 
 **Script** — chained calls, or heavy data you only need to summarize. Write a TypeScript file in
-your workspace and run it with Bash. It imports `@gilly/gateway-client`, which is already
-authenticated via the `GILLY_GATEWAY_URL` / `GILLY_GATEWAY_TOKEN` env vars in your sandbox. Chain
+your workspace and run it with Bash. It imports `@flooagents/gateway-client`, which is already
+authenticated via the `TOOL_GATEWAY_URL` / `TOOL_GATEWAY_TOKEN` env vars in your sandbox. Chain
 as many calls as you need and **print only the summary** — the full results live and die inside
 the script.
 
@@ -40,7 +40,7 @@ exit code alone is not proof that the script is correct.
 
 ```ts
 // cac.ts — run with: bun cac.ts
-import { invoke } from "@gilly/gateway-client";
+import { invoke } from "@flooagents/gateway-client";
 
 const spend = await invoke("meta.insights", { accountId: "…", since, until });
 const installs = await invoke("branch.query", { since, until });

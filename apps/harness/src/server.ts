@@ -2,7 +2,7 @@ import {
   InvocationRequest,
   type InvocationResult,
   type StreamEvent,
-} from "@gilly/harness-protocol";
+} from "@flooagents/harness-protocol";
 import {
   runAgentLoop as runClaudeAgentLoop,
   streamAgentLoop as streamClaudeAgentLoop,

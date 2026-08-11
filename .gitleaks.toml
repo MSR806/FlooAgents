@@ -1,8 +1,8 @@
 # Gitleaks config. Keeps every built-in rule and adds the ones this repo needs.
 #
 # Verified empirically: gitleaks 8.30.1 catches GitHub PATs, Slack bot/app tokens,
-# private keys, and generic high-entropy assignments like GILLY_VAULT_KEY — but
-# misses Anthropic and OpenAI API keys. Those are the credentials Gilly is built
+# private keys, and generic high-entropy assignments like CREDENTIAL_VAULT_KEY — but
+# misses Anthropic and OpenAI API keys. Those are the credentials Floo Agents is built
 # around (the Claude harness today, an OpenAI one in flight), so they get rules.
 
 [extend]

@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/gateway",
+  "name": "@flooagents/gateway",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@composio/core": "^0.15.0",
-    "@gilly/core": "workspace:*",
-    "@gilly/db": "workspace:*",
-    "@gilly/gateway-kit": "workspace:*",
+    "@flooagents/core": "workspace:*",
+    "@flooagents/db": "workspace:*",
+    "@flooagents/gateway-kit": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
   }

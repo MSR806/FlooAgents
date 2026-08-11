@@ -1,6 +1,6 @@
 export type Theme = "paper" | "ink";
 
-export const THEME_STORAGE_KEY = "gilly-theme";
+export const THEME_STORAGE_KEY = "console-theme";
 
 /** Paper is the default — Ink applies only when it was explicitly chosen. */
 export const resolveTheme = (stored: string | null): Theme => (stored === "ink" ? "ink" : "paper");

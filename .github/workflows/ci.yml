@@ -37,7 +37,7 @@ jobs:
       # Catches what `tsc --noEmit` can't: bad imports, server/client boundary
       # violations, route-level build failures.
       - name: Build web
-        run: bun run --filter '@gilly/web' build
+        run: bun run --filter '@flooagents/web' build
 
   # Separate job so it runs in parallel and keeps its deep clone out of the main
   # one. This — not the pre-commit hook — is what actually enforces the scan:

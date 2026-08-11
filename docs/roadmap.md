@@ -1,4 +1,4 @@
-# Project Gilly — Roadmap
+# Floo Agents — Roadmap
 
 **Goal: a public open-source launch.** Order is driven by what a stranger needs to be
 impressed and get running — not by what's most fun to build. Everything here is
@@ -10,23 +10,17 @@ each of those three claims true and demonstrable before anyone reads it.
 
 ---
 
-## Phase 0 — The name  ·  [#7](https://github.com/MSR806/project-gilly/issues/7)
+## Phase 0 — Brand foundation  ·  [#7](https://github.com/MSR806/flooagents/issues/7)
 
-Blocks the website, docs, UI copy, package scope, repo name, and every diagram. Cheap
-to decide, expensive to change later. Do it first.
+**Locked:** Floo Agents, [flooagents.com](https://flooagents.com), and the tagline
+**Any agent. Any harness. Any channel.** The owl is the product mascot.
 
-**Candidates** (metaphor → why it fits):
+This phase covers the repository, package scope, product UI, Slack app, documentation, diagrams,
+and deploy-time configuration. Internal capability names remain brand-neutral so the architecture
+describes responsibilities instead of duplicating the product name.
 
-| Name | Metaphor |
-| --- | --- |
-| **Belay** *(recommended)* | Climbing: the belayer holds the rope, someone else climbs. Exactly the thesis — Gilly doesn't do the work, it holds the harness. 5 letters, a verb, memorable. |
-| **Bridle** | The harness, literally. Unusual in software, easy to say and spell. |
-| **Switchyard** | Where trains get routed onto whichever engine pulls them. Matches control plane + swappable harness. Longer. |
-| **Groundcrew** | Preps and launches aircraft, doesn't fly them. Descriptive, less evocative. |
-
-**Done when:** name picked and cleared — npm scope free, GitHub org available, `.dev`
-domain available, no trademark or notable OSS collision. Rename lands as one PR
-(packages, docs, diagrams, repo).
+**Done when:** the brand is consistent across every current-tree surface and no legacy identifiers
+remain outside Git history or explicitly retained backups.
 
 ---
 
@@ -34,7 +28,7 @@ domain available, no trademark or notable OSS collision. Rename lands as one PR
 
 This is the substance. Without it, launching is launching a diagram.
 
-### 1. Composio in the tooling gateway  ·  [#8](https://github.com/MSR806/project-gilly/issues/8)
+### 1. Composio in the Tool Gateway  ·  [#8](https://github.com/MSR806/flooagents/issues/8)
 The gateway already wraps custom API and MCP implementations ([`gateway.md`](gateway/gateway.md),
 `apps/gateway/src/connectors/`). Composio becomes another upstream provider behind the same catalog:
 one integration, ~1000 apps, managed auth. It reduces the need to hand-write
@@ -44,11 +38,11 @@ The provider-neutral catalog contract is owned by [`gateway.md`](gateway/gateway
 identity and credential ownership are defined in
 [`connectors-and-auth.md`](gateway/connectors-and-auth.md).
 
-**Done when:** an admin authenticates Gmail or Linear from Gilly's Tools UI, its concrete tools join
+**Done when:** an admin authenticates Gmail or Linear from the Tools UI, its concrete tools join
 the unified catalog, an agent selects one exact tool without knowing its provider, and the call is
-authorized and traced under its canonical Gilly name in `tool_calls`.
+authorized and traced under its canonical tool name in `tool_calls`.
 
-### 2. Git + gh CLI access for agents  ·  [#9](https://github.com/MSR806/project-gilly/issues/9)
+### 2. Git + gh CLI access for agents  ·  [#9](https://github.com/MSR806/flooagents/issues/9)
 `config/skills/our-repos/SKILL.md` already tells agents to `git clone` — but nothing
 injects credentials into the workspace, so private repos fail. The `coder` agent isn't
 real until this works.
@@ -61,18 +55,18 @@ is for the sandbox doing actual code work.
 **Done when:** the `coder` agent clones a private Pratilipi repo, branches, commits, and
 opens a PR from a Slack message.
 
-### 3. More default skills  ·  [#10](https://github.com/MSR806/project-gilly/issues/10)
+### 3. More default skills  ·  [#10](https://github.com/MSR806/flooagents/issues/10)
 Bundled skills are the difference between "here's a framework" and "here's something
 that works". Two clusters:
-- **Tooling skills** — teach the direct-vs-script lane discipline for Composio-era
-  tooling (extend `config/skills/tooling/`), plus git/gh workflow conventions.
+- **Agent tooling skill** — teach the direct-vs-script lane discipline for Composio-era
+  tools (extend `config/skills/agent-tooling/`), plus git/gh workflow conventions.
 - **Agent-builder skills** — the `agent-builder` agent should be able to write a good
   agent JSON, pick exact gateway tools, and scaffold a skill folder unaided.
 
 **Done when:** a fresh install can build a working agent by talking to `agent-builder`,
 with no hand-editing of JSON.
 
-### Launch gate: [#6](https://github.com/MSR806/project-gilly/issues/6)
+### Launch gate: [#6](https://github.com/MSR806/flooagents/issues/6)
 Agents currently inherit the host developer's Claude tools and MCP connectors. That's a
 correctness *and* trust bug — not shippable to strangers. Fix before anything public.
 
@@ -80,11 +74,11 @@ correctness *and* trust bug — not shippable to strangers. Fix before anything 
 
 ## Phase 2 — Prove the harness bet
 
-### 4. Claude, Codex, and an open-model harness  ·  [#11](https://github.com/MSR806/project-gilly/issues/11)
+### 4. Claude, Codex, and an open-model harness  ·  [#11](https://github.com/MSR806/flooagents/issues/11)
 The README's central claim is harness-agnosticism, and today `apps/harness-claude` is
 the only harness. Launching with one harness undercuts the whole pitch.
 
-- Land [PR #5](https://github.com/MSR806/project-gilly/pull/5) (OpenAI) — currently
+- Land [PR #5](https://github.com/MSR806/flooagents/pull/5) (OpenAI) — currently
   `changes_requested`.
 - Add Codex.
 - Add an open-model harness (pi, or whichever fits) so self-hosters aren't forced onto
@@ -104,7 +98,7 @@ endpoint, its provider credentials, and which models it offers. Agent config gai
 it as data, not env vars, or the dashboard has nothing to edit.
 
 Agent creation follows a **harness-first configuration** hierarchy
-([#26](https://github.com/MSR806/project-gilly/issues/26)): select and persist the harness,
+([#26](https://github.com/MSR806/flooagents/issues/26)): select and persist the harness,
 then show the settings that harness owns. Model is the only setting initially and its real
 harness model ID passes through unchanged. Future settings such as Codex service tier become
 explicit harness options, not pseudo-model names or control-plane inference.
@@ -118,7 +112,7 @@ the gateway works on all three; creating an agent selects its harness before its
 
 A stranger's first ten minutes decide whether they come back.
 
-### 5. CLI to deploy on EC2  ·  [#12](https://github.com/MSR806/project-gilly/issues/12)
+### 5. CLI to deploy on EC2  ·  [#12](https://github.com/MSR806/flooagents/issues/12)
 One command from clone to running stack. The Compose stack (`docker/compose.yaml`)
 already exists — the CLI provisions an instance, ships env, brings the stack up, and
 prints the URL. Reuse Compose; don't write a second orchestration path.
@@ -126,9 +120,9 @@ prints the URL. Reuse Compose; don't write a second orchestration path.
 **Done when:** `<name> deploy` on a clean AWS account yields a reachable web UI and a
 working Slack connection.
 
-### 6. Setup / config dashboard for the operator  ·  [#13](https://github.com/MSR806/project-gilly/issues/13)
+### 6. Setup / config dashboard for the operator  ·  [#13](https://github.com/MSR806/flooagents/issues/13)
 Distinct from the existing per-resource pages under `apps/web/app/`. This is the
-first-run surface for whoever installs Gilly, with a checklist that says what's still
+first-run surface for whoever installs Floo Agents, with a checklist that says what's still
 unconfigured:
 
 - **Harnesses** — enable and configure each installed harness (Claude Code, Codex, an
@@ -151,27 +145,27 @@ picking and configuring a harness — without touching a `.env` file or reading 
 Do these together, after the product's shape stops moving. Building them earlier means
 rebuilding them.
 
-### 7. UI revamp  ·  [#14](https://github.com/MSR806/project-gilly/issues/14)
+### 7. UI revamp  ·  [#14](https://github.com/MSR806/flooagents/issues/14)
 `apps/web` works but was built feature-by-feature. Revamp against the vocabulary
 already settled — Channels / Tools / Built-in tools — with a coherent information
 architecture and chat as the centrepiece. Stack stays Tailwind v4 + shadcn (Base UI).
 
-### 8. Open-source technical documentation  ·  [#15](https://github.com/MSR806/project-gilly/issues/15)
+### 8. Open-source technical documentation  ·  [#15](https://github.com/MSR806/flooagents/issues/15)
 The `docs/` tree is good design material but is written for us, not for a newcomer.
 A launch needs a real docs site: install, concepts, build-your-first-agent, connect a
 tool, write a skill, harness authoring, self-hosting, and an architecture reference.
 Existing design docs become the reference layer; the missing layer is tutorials and
 how-tos. Should be published from the repo so it can't drift.
 
-### 9. Website  ·  [#16](https://github.com/MSR806/project-gilly/issues/16)
+### 9. Website  ·  [#16](https://github.com/MSR806/flooagents/issues/16)
 Landing page: the pitch, one honest demo (Slack thread → agent → PR or report), the
 harness-agnostic diagram, install command, link to docs and GitHub. Small; the docs
 site does the heavy lifting.
 
-### 10. Repo development skills  ·  [#19](https://github.com/MSR806/project-gilly/issues/19)
+### 10. Repo development skills  ·  [#19](https://github.com/MSR806/flooagents/issues/19)
 `coding-conventions` and `test-conventions` already make an agent productive in this repo
-on day one. Three gaps, same treatment — these are skills *for people working on Gilly*,
-not skills shipped to Gilly's agents (that's item 3):
+on day one. Three gaps, same treatment — these are skills *for people working on Floo Agents*,
+not skills shipped to the platform's agents (that's item 3):
 
 - **ui-conventions** — `apps/web` patterns: Tailwind v4 + shadcn (Base UI) with the render
   prop rather than `asChild`, components vendored in `apps/web/components/ui`, server vs
@@ -192,12 +186,12 @@ a new skill is written once. (These were duplicated copies that had already drif
 
 ## Phase 5 — Depth after launch
 
-### 11. Cron triggers  ·  [#17](https://github.com/MSR806/project-gilly/issues/17)
+### 11. Cron triggers  ·  [#17](https://github.com/MSR806/flooagents/issues/17)
 Design is already written ([`trigger.md`](control-plane/trigger.md)) — a cron is a
 trigger with a schedule instead of an event filter, plus the optional "deliver to"
 channel. Small and self-contained; **pull this forward any time as filler.**
 
-### 12. Knowledge bases  ·  [#18](https://github.com/MSR806/project-gilly/issues/18)
+### 12. Knowledge bases  ·  [#18](https://github.com/MSR806/flooagents/issues/18)
 The one genuinely new concept on the list — needs a design doc before code. Decide
 early whether a knowledge base is a first-class registry entry alongside agents and
 skills, or just a skill that queries a store through the gateway. The lazy answer
@@ -208,7 +202,7 @@ skills, or just a skill that queries a store through the gateway. The lazy answe
 ## Sequencing at a glance
 
 ```text
-Phase 0  Name                                    ← blocks all branding work
+Phase 0  Brand foundation                        ← blocks all branding work
 Phase 1  Composio · git/gh · default skills      ← + fix #6 (launch gate)
 Phase 2  Codex + OpenAI + open-model harness
 Phase 3  EC2 CLI · operator dashboard

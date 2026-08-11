@@ -17,4 +17,4 @@ RUN mkdir -p /data/workspaces /data/codex && chown -R bun:bun /data/workspaces /
 
 EXPOSE 8080
 USER bun
-CMD ["bun", "run", "--filter", "@gilly/harness", "start"]
+CMD ["bun", "run", "--filter", "@flooagents/harness", "start"]

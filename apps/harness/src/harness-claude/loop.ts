@@ -13,7 +13,7 @@ import type {
   InvocationResult,
   SkillBundle,
   StreamEvent,
-} from "@gilly/harness-protocol";
+} from "@flooagents/harness-protocol";
 import { z } from "zod";
 import { gatewayPost } from "../gateway-http.ts";
 
@@ -64,14 +64,14 @@ function nextSdkMessage(
   });
 }
 
-/** Scratch dir for one Gilly session's workspace. Pure: same request → same path. */
+/** Scratch dir for one agent session's workspace. Pure: same request → same path. */
 export function workspaceDir(req: InvocationRequest): string {
   const root = resolve(repoRoot, process.env.WORKSPACES_DIR ?? "data/workspaces");
   return join(root, req.workspace?.handle ?? "default");
 }
 
 /**
- * Gilly tool abstractions → concrete Claude Agent SDK tools. Users (and the DB) only ever deal in
+ * platform tool abstractions → concrete Claude Agent SDK tools. Users (and the DB) only ever deal in
  * the three high-level capabilities; the exact harness tool names live here and never leak upward.
  */
 const TOOL_MAP: Record<string, string[]> = {
@@ -80,9 +80,9 @@ const TOOL_MAP: Record<string, string[]> = {
   Bash: ["Bash"],
 };
 
-/** Expand Gilly tool abstractions into SDK tool names (unknowns pass through), de-duplicated. */
-export function expandTools(gillyTools: string[]): string[] {
-  return [...new Set(gillyTools.flatMap((t) => TOOL_MAP[t] ?? [t]))];
+/** Expand platform tool abstractions into SDK tool names (unknowns pass through), de-duplicated. */
+export function expandTools(abstractTools: string[]): string[] {
+  return [...new Set(abstractTools.flatMap((t) => TOOL_MAP[t] ?? [t]))];
 }
 
 /** Wrap a JSON-serializable value as an MCP tool text result. */
@@ -157,7 +157,7 @@ export function buildOptions(
   streaming: boolean,
   abortController?: AbortController,
 ): Options {
-  // `req.agent.tools` holds Gilly abstractions (Read/Write/Bash); expand to real SDK tools here.
+  // `req.agent.tools` holds platform abstractions (Read/Write/Bash); expand to real SDK tools here.
   const fsTools = expandTools(req.agent.tools ?? []);
   const skills = req.skills ?? [];
   const hasSkills = skills.length > 0;
@@ -185,8 +185,8 @@ export function buildOptions(
       ? {
           env: {
             ...process.env,
-            GILLY_GATEWAY_URL: req.gateway.url,
-            GILLY_GATEWAY_TOKEN: req.gateway.token,
+            TOOL_GATEWAY_URL: req.gateway.url,
+            TOOL_GATEWAY_TOKEN: req.gateway.token,
           },
         }
       : {}),

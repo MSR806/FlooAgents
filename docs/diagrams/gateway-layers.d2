@@ -1,6 +1,6 @@
 direction: down
 
-title: Tooling Gateway — Big Picture {
+title: Tool Gateway — Big Picture {
   near: top-center
   shape: text
   style.font-size: 24
@@ -19,7 +19,7 @@ cp: Control Plane {
 
 harness: Harness (Claude Agent SDK) {
   mcp: "MCP tools:\ngateway_catalog + gateway_invoke"
-  env: "env: GILLY_GATEWAY_URL / TOKEN"
+  env: "env: TOOL_GATEWAY_URL / TOKEN"
 }
 
 runtime: Runtime Sandbox (workspace) {
@@ -27,7 +27,7 @@ runtime: Runtime Sandbox (workspace) {
   builtin: "Read / Write / Bash"
 }
 
-gw: Tooling Gateway (apps/gateway) {
+gw: Tool Gateway (apps/gateway) {
   registry: "Tool Registry\ndefineTool(name, zod input, creds, handler)"
   access: "Access Resolver\nagent connectors ∩ user grants"
   vault: "Credential Vault\n(provider, key) encrypted, admin-configured"
