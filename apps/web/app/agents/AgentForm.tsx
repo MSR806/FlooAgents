@@ -187,7 +187,7 @@ export default function AgentForm({
             return (
               <label
                 key={harness.id}
-                className={`relative min-w-0 cursor-pointer rounded-xl border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 ${
+                className={`relative min-w-0 cursor-pointer rounded-lg border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 ${
                   selected
                     ? "border-foreground bg-accent"
                     : "border-border hover:border-foreground/30 hover:bg-accent/50"
@@ -202,7 +202,7 @@ export default function AgentForm({
                   onChange={() => set("harness", { id: harness.id, config: { model: "" } })}
                 />
                 <span className="flex min-w-0 items-center gap-3 pr-5">
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-white p-2.5 ring-1 ring-black/10">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-sm bg-tile p-2.5 ring-1 ring-border">
                     <HarnessImage src={harness.image} size={48} />
                   </span>
                   <span className="min-w-0 text-left">

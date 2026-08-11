@@ -1,10 +1,22 @@
+import { PageHeader } from "@/components/page-header";
 import ConnectionForm from "../ConnectionForm";
+import { safeAgentReturnTo } from "../connection-helpers";
 
-export default function NewConnectionPage() {
+export default async function NewConnectionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ bindTo?: string | string[]; returnTo?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const bindTo = typeof params.bindTo === "string" ? params.bindTo : undefined;
+  const returnTo = safeAgentReturnTo(
+    typeof params.returnTo === "string" ? params.returnTo : undefined,
+  );
+
   return (
     <section>
-      <h1 className="mb-4 text-xl font-semibold tracking-tight">New channel</h1>
-      <ConnectionForm mode="create" />
+      <PageHeader title="New Slack bot" />
+      <ConnectionForm mode="create" bindTo={bindTo} returnTo={returnTo ?? undefined} />
     </section>
   );
 }

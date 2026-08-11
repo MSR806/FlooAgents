@@ -45,6 +45,7 @@ deployments should treat the runtime as untrusted: keep it network-isolated from
 anything you wouldn't grant an agent, and scope provider credentials to the minimum
 the connected tools need.
 
-The Tools administration page uses HTTP Basic authentication and the control-plane setup routes
-require the internal gateway admin token. Other management pages still assume a trusted internal
-deployment. Do not expose the control-plane management port publicly.
+The web management UI currently has no browser authentication. The internal `GILLY_ADMIN_TOKEN`
+is shared only by the control plane and gateway and must never reach the browser. Docker binds
+published ports to loopback by default; set `GILLY_BIND_ADDRESS` only to an address on a trusted
+network. Do not expose the management ports publicly.

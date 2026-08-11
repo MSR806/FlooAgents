@@ -12,7 +12,13 @@ import {
   schema,
   updateHarness,
 } from "@gilly/db";
-import { loadAgents, loadSkills, syncAgents } from "./config.ts";
+import {
+  loadAgents,
+  loadBuiltinAgents,
+  loadSkills,
+  pruneBuiltinAgents,
+  syncAgents,
+} from "./config.ts";
 
 const tmp = (p: string) => mkdtempSync(join(tmpdir(), p));
 const agent = {
@@ -142,4 +148,39 @@ test("syncAgents preserves legacy connectors until they can migrate", () => {
   syncAgents(db, dir);
 
   expect(getLegacyAgentConnectors(db, "echo")).toEqual(["echo"]);
+});
+
+test("loadBuiltinAgents keys configs by id and tolerates a missing directory", () => {
+  const dir = tmp("gilly-builtin-");
+  writeFileSync(join(dir, "builder.json"), JSON.stringify({ ...agent, id: "agent-builder" }));
+
+  const builtins = loadBuiltinAgents(dir);
+  expect([...builtins.keys()]).toEqual(["agent-builder"]);
+
+  // An absent directory is a valid deployment, not an error.
+  expect(loadBuiltinAgents(join(dir, "nope")).size).toBe(0);
+});
+
+test("pruneBuiltinAgents removes stale rows left by older seeded installs", () => {
+  const db = createDb(":memory:");
+  createAgent(db, { ...agent, id: "agent-builder" });
+  createAgent(db, agent);
+
+  expect(pruneBuiltinAgents(db, ["agent-builder"])).toBe(1);
+  expect(getAgent(db, "agent-builder")).toBeUndefined();
+  // Only the built-in is pruned — DB-owned agents survive.
+  expect(listAgents(db).map((a) => a.id)).toEqual(["echo"]);
+  // Idempotent across boots.
+  expect(pruneBuiltinAgents(db, ["agent-builder"])).toBe(0);
+});
+
+test("a DB row colliding with a built-in id is removed — the built-in always wins", () => {
+  const db = createDb(":memory:");
+  // The API refuses to create one (409), so this can only arrive from an older seeded install.
+  // The built-in shadows it in the lookup either way, so leaving it would be a row nothing reads.
+  createAgent(db, { ...agent, id: "agent-builder", name: "Stale copy" });
+
+  expect(pruneBuiltinAgents(db, ["agent-builder"])).toBe(1);
+  expect(getAgent(db, "agent-builder")).toBeUndefined();
+  expect(listAgents(db)).toHaveLength(0);
 });

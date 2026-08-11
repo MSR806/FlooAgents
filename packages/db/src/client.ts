@@ -58,11 +58,13 @@ function migrate(sqlite: Database) {
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS slack_connections (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, agent_id TEXT NOT NULL,
+      id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      agent_id TEXT UNIQUE REFERENCES agents(id) ON DELETE SET NULL,
       bot_token TEXT NOT NULL, app_token TEXT NOT NULL, team_id TEXT, team_name TEXT,
       status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
     );
   `);
+  migrateSlackConnections(sqlite);
   addColumn(sqlite, "follow_ups", "ref", "TEXT");
   addColumn(sqlite, "agents", "gateway_tools", "TEXT");
   addColumn(sqlite, "agents", "connectors", "TEXT");
@@ -97,6 +99,69 @@ function migrate(sqlite: Database) {
 
   const addedSessionHarness = addColumn(sqlite, "sessions", "harness_id", "TEXT");
   if (addedSessionHarness) migrateLegacySessions(sqlite);
+}
+
+/** Rebuild the predecessor table because SQLite cannot alter nullability, uniqueness, or FKs. */
+function migrateSlackConnections(sqlite: Database): void {
+  const agentColumn = (
+    sqlite.query("PRAGMA table_info(slack_connections)").all() as {
+      name: string;
+      notnull: number;
+    }[]
+  ).find(({ name }) => name === "agent_id");
+  const uniqueAgent = (
+    sqlite.query("PRAGMA index_list(slack_connections)").all() as {
+      name: string;
+      unique: number;
+      partial: number;
+    }[]
+  ).some((index) => {
+    if (index.unique !== 1 || index.partial !== 0) return false;
+    const columns = sqlite.query(`PRAGMA index_info(${index.name})`).all() as { name: string }[];
+    return columns.length === 1 && columns[0]?.name === "agent_id";
+  });
+  const setNullFk = (
+    sqlite.query("PRAGMA foreign_key_list(slack_connections)").all() as {
+      from: string;
+      table: string;
+      to: string;
+      on_delete: string;
+    }[]
+  ).some(
+    (fk) =>
+      fk.from === "agent_id" &&
+      fk.table === "agents" &&
+      fk.to === "id" &&
+      fk.on_delete.toUpperCase() === "SET NULL",
+  );
+  if (agentColumn?.notnull === 0 && uniqueAgent && setNullFk) return;
+
+  sqlite.exec(`
+    ALTER TABLE slack_connections RENAME TO slack_connections_legacy;
+    CREATE TABLE slack_connections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      agent_id TEXT UNIQUE REFERENCES agents(id) ON DELETE SET NULL,
+      bot_token TEXT NOT NULL, app_token TEXT NOT NULL, team_id TEXT, team_name TEXT,
+      status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
+    );
+    WITH ranked AS (
+      SELECT s.*, a.id IS NOT NULL AS valid_agent,
+        ROW_NUMBER() OVER (PARTITION BY s.agent_id ORDER BY s.created_at, s.id) AS binding_rank
+      FROM slack_connections_legacy s
+      LEFT JOIN agents a ON a.id = s.agent_id
+    )
+    INSERT INTO slack_connections (
+      id, name, agent_id, bot_token, app_token, team_id, team_name, status, last_error, created_at
+    )
+    SELECT id, name,
+      CASE WHEN valid_agent AND binding_rank = 1 THEN agent_id ELSE NULL END,
+      bot_token, app_token, team_id, team_name,
+      CASE WHEN valid_agent AND binding_rank = 1 THEN status ELSE 'disabled' END,
+      CASE WHEN valid_agent AND binding_rank = 1 THEN last_error ELSE NULL END,
+      created_at
+    FROM ranked;
+    DROP TABLE slack_connections_legacy;
+  `);
 }
 
 function addColumn(sqlite: Database, table: string, column: string, definition: string): boolean {
@@ -157,7 +222,9 @@ function migrateLegacySessions(sqlite: Database): void {
 /** Open the SQLite store, apply DDL, and return a Drizzle client. */
 export function createDb(path: string) {
   const sqlite = new Database(path, { create: true });
-  sqlite.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; BEGIN IMMEDIATE;");
+  sqlite.exec(
+    "PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; BEGIN IMMEDIATE;",
+  );
   try {
     migrate(sqlite);
     sqlite.exec("COMMIT;");

@@ -48,7 +48,7 @@ harness.
 
 | Area | Today |
 | --- | --- |
-| Agent config | SQLite records managed through the UI/API, with JSON seeds in `config/agents/` |
+| Agent config | SQLite records managed through the UI/API, with JSON seeds in `config/agents/`. Built-in agents live in `config/builtin-agents/` and change only through code |
 | Channels | Slack Socket Mode plus a web channel surface in progress |
 | Control plane | Session/run engine, follow-up queue, channel translation |
 | Harness | Universal registry-backed endpoint for Claude Agent SDK and OpenAI Codex SDK |
@@ -112,16 +112,15 @@ Create local env files:
 cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
 cp apps/gateway/.env.example apps/gateway/.env
-cp apps/web/.env.example apps/web/.env
 ```
 
 Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY_ADMIN_TOKEN` in
-the control-plane, gateway, and web env files, and set `GILLY_WEB_ADMIN_PASSWORD` for the Tools
-page login (username `admin`). `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
+the control-plane and gateway env files; it is an internal server-to-server secret and must never
+be sent to the browser. `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
-The Tools administration page uses HTTP Basic authentication. Other management pages and the
-direct control-plane API still assume a trusted internal deployment. Docker binds published ports
-to loopback by default; set `GILLY_BIND_ADDRESS` only when trusted-network access is required.
+The web management UI currently has no browser authentication and assumes a trusted deployment.
+Docker binds published ports to loopback by default. Set `GILLY_BIND_ADDRESS` only to an address
+on a trusted network; never expose the management ports publicly.
 
 Then run the services you need:
 
@@ -143,7 +142,6 @@ Run the stack with Compose:
 cp apps/harness/.env.example apps/harness/.env
 cp apps/control-plane/.env.example apps/control-plane/.env
 cp apps/gateway/.env.example apps/gateway/.env
-cp apps/web/.env.example apps/web/.env
 
 docker compose -f docker/compose.yaml up --build
 ```
@@ -167,7 +165,8 @@ packages/runtime         Runtime provider interface + local provider
 packages/harness-protocol  Control-plane <-> harness contract
 packages/gateway-client  Gateway client
 packages/gateway-kit     Gateway helpers
-config/agents            Agent JSON definitions
+config/agents            Agent JSON definitions (seeded into the DB)
+config/builtin-agents    Agents that ship with the product; never stored in the DB
 config/skills            Seed skills
 docs                     Design and engineering notes
 docker                   Dockerfiles and compose stack

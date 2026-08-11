@@ -11,6 +11,7 @@ import {
   getLegacyAgentConnectors,
   getSessionBySourceKey,
   listHarnesses,
+  listSlackConnections,
   migrateLegacyAgentTools,
   updateHarness,
 } from "./repo.ts";
@@ -76,6 +77,66 @@ test("legacy agent/session migration is idempotent and preserves custom models",
   const reopened = createDb(path);
   expect(getHarness(reopened, "codex")?.name).toBe("Custom Codex");
   expect(getAgent(reopened, "fast")?.harness.config.serviceTier).toBe("fast");
+});
+
+test("migrates Slack bindings to nullable one-to-one rows deterministically", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "gilly-slack-migration-")), "gilly.db");
+  const legacy = new Database(path);
+  legacy.exec(`
+    CREATE TABLE agents (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, model TEXT NOT NULL,
+      system_prompt TEXT NOT NULL, tools TEXT, skills TEXT, created_at INTEGER NOT NULL
+    );
+    INSERT INTO agents VALUES ('a1', 'Agent', 'sonnet', 'x', NULL, NULL, 1);
+    CREATE TABLE slack_connections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, agent_id TEXT NOT NULL,
+      bot_token TEXT NOT NULL, app_token TEXT NOT NULL, team_id TEXT, team_name TEXT,
+      status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
+    );
+    INSERT INTO slack_connections VALUES
+      ('newer', 'Newer', 'a1', 'bot', 'app', NULL, NULL, 'active', NULL, 2),
+      ('old-b', 'Old B', 'a1', 'bot', 'app', NULL, NULL, 'active', NULL, 1),
+      ('old-a', 'Old A', 'a1', 'bot', 'app', NULL, NULL, 'error', 'retry', 1),
+      ('invalid', 'Invalid', 'missing', 'bot', 'app', NULL, NULL, 'active', NULL, 0);
+  `);
+  legacy.close();
+
+  expect(listSlackConnections(createDb(path))).toEqual([
+    expect.objectContaining({ id: "invalid", agentId: undefined, status: "disabled" }),
+    expect.objectContaining({ id: "old-a", agentId: "a1", status: "error" }),
+    expect.objectContaining({ id: "old-b", agentId: undefined, status: "disabled" }),
+    expect.objectContaining({ id: "newer", agentId: undefined, status: "disabled" }),
+  ]);
+  expect(
+    listSlackConnections(createDb(path)).filter(({ agentId }) => agentId === "a1"),
+  ).toHaveLength(1);
+});
+
+test("rebuilds Slack bindings when agent uniqueness is only a partial index", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "gilly-slack-partial-index-")), "gilly.db");
+  const legacy = new Database(path);
+  legacy.exec(`
+    CREATE TABLE agents (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, model TEXT NOT NULL,
+      system_prompt TEXT NOT NULL, tools TEXT, skills TEXT, created_at INTEGER NOT NULL
+    );
+    INSERT INTO agents VALUES ('a1', 'Agent', 'sonnet', 'x', NULL, NULL, 1);
+    CREATE TABLE slack_connections (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+      bot_token TEXT NOT NULL, app_token TEXT NOT NULL, team_id TEXT, team_name TEXT,
+      status TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX active_agent_only ON slack_connections(agent_id) WHERE status = 'active';
+    INSERT INTO slack_connections VALUES
+      ('old', 'Old', 'a1', 'bot', 'app', NULL, NULL, 'active', NULL, 1),
+      ('new', 'New', 'a1', 'bot', 'app', NULL, NULL, 'disabled', NULL, 2);
+  `);
+  legacy.close();
+
+  expect(listSlackConnections(createDb(path)).filter(({ agentId }) => agentId === "a1")).toEqual([
+    expect.objectContaining({ id: "old" }),
+  ]);
 });
 
 test("adds images to the predecessor harness registry without breaking custom rows", () => {

@@ -16,7 +16,7 @@ import { LocalSkillStore } from "../stores/local-skill-store.ts";
 import type { SkillStore } from "../stores/skill-store.ts";
 import { createWebHandler } from "./web.ts";
 
-// The proxy routes only need db + gateway config; engine/skillStore are unused by them.
+// Gateway proxy routes only need db + gateway config; engine/skillStore are unused by them.
 const handler = () =>
   createWebHandler({
     engine: {} as ReturnType<typeof createEngine>,
@@ -27,7 +27,7 @@ const handler = () =>
     adminToken: "admin-secret",
   });
 
-const adminRequest = (url: string, init: RequestInit = {}) => {
+const delegatedRunRequest = (url: string, init: RequestInit = {}) => {
   const headers = new Headers(init.headers);
   headers.set("x-admin-token", "admin-secret");
   return new Request(url, { ...init, headers });
@@ -111,6 +111,7 @@ test("agent API returns nested harness summaries and rejects unavailable selecti
   );
   expect(bad.status).toBe(400);
   expect(await bad.json()).toEqual({ error: 'Harness "codex" does not offer model "not-offered"' });
+  expect((await fetch(new Request("http://x/api/agents/%E0%A4%A"))).status).toBe(404);
 });
 
 test("PUT credentials proxy injects x-admin-token and forwards the body", async () => {
@@ -124,7 +125,7 @@ test("PUT credentials proxy injects x-admin-token and forwards the body", async 
   }) as unknown as typeof fetch;
 
   const res = await handler()(
-    adminRequest("http://x/api/connectors/github/credentials", {
+    new Request("http://x/api/connectors/github/credentials", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ key: "github_pat", value: "SECRET" }),
@@ -138,16 +139,32 @@ test("PUT credentials proxy injects x-admin-token and forwards the body", async 
   expect(await seen?.text()).toBe(JSON.stringify({ key: "github_pat", value: "SECRET" }));
 });
 
+test("GET connectors accepts a browser request and authenticates to the gateway", async () => {
+  let seen: Request | undefined;
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    seen = new Request(input as string, init);
+    return Response.json({ connectors: [] });
+  }) as unknown as typeof fetch;
+
+  const res = await handler()(new Request("http://x/api/connectors"));
+  expect(await res.json()).toEqual({ connectors: [] });
+  expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
+});
+
 test("connect proxy relays the gateway's 302 Location to the browser", async () => {
-  globalThis.fetch = (async () =>
-    new Response(null, {
+  let seen: Request | undefined;
+  globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+    seen = new Request(input as string, init);
+    return new Response(null, {
       status: 302,
       headers: { location: "https://auth.atlassian.com/authorize" },
-    })) as unknown as typeof fetch;
+    });
+  }) as unknown as typeof fetch;
 
-  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
+  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("https://auth.atlassian.com/authorize");
+  expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
 });
 
 test("connect proxy bounces back to the connectors page when already connected (200)", async () => {
@@ -157,7 +174,7 @@ test("connect proxy bounces back to the connectors page when already connected (
       headers: { "content-type": "application/json" },
     })) as unknown as typeof fetch;
 
-  const res = await handler()(adminRequest("http://x/api/connectors/jira/connect"));
+  const res = await handler()(new Request("http://x/api/connectors/jira/connect"));
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe("/connectors?connected=jira");
 });
@@ -179,7 +196,7 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
     });
   }) as unknown as typeof fetch;
 
-  const res = await handler()(adminRequest("http://x/api/tools"));
+  const res = await handler()(new Request("http://x/api/tools"));
   expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
   expect(await res.json()).toEqual({
     tools: [
@@ -199,17 +216,12 @@ test("GET /api/tools reports an unavailable gateway", async () => {
     throw new Error("offline");
   }) as unknown as typeof fetch;
 
-  const res = await handler()(adminRequest("http://x/api/tools"));
+  const res = await handler()(new Request("http://x/api/tools"));
   expect(res.status).toBe(502);
   expect(await res.json()).toEqual({ error: "gateway unavailable" });
 });
 
-test("GET /api/tools requires admin authentication", async () => {
-  const res = await handler()(new Request("http://x/api/tools"));
-  expect(res.status).toBe(401);
-});
-
-test("GET /api/tools fails closed when internal admin auth is not configured", async () => {
+test("gateway proxies fail closed when internal admin auth is not configured", async () => {
   let calls = 0;
   globalThis.fetch = (async () => {
     calls += 1;
@@ -223,8 +235,17 @@ test("GET /api/tools fails closed when internal admin auth is not configured", a
     gatewayUrl: "http://gw",
   });
 
-  const res = await webFetch(new Request("http://x/api/tools"));
-  expect(res.status).toBe(503);
+  const requests = [
+    new Request("http://x/api/connectors"),
+    new Request("http://x/api/tools"),
+    new Request("http://x/api/composio/toolkits"),
+    new Request("http://x/api/composio/toolkits/gmail/connect"),
+    new Request("http://x/api/connectors/jira/connect"),
+    new Request("http://x/api/connectors/github/credentials", { method: "PUT" }),
+  ];
+  for (const request of requests) {
+    expect((await webFetch(request)).status).toBe(503);
+  }
   expect(calls).toBe(0);
 });
 
@@ -242,36 +263,21 @@ test("Composio toolkit proxies preserve query, inject admin auth, and relay redi
     return Response.json({ configured: true, items: [], nextCursor: "next" });
   }) as unknown as typeof fetch;
 
-  const list = await handler()(
-    adminRequest("http://x/api/composio/toolkits?query=mail&cursor=one"),
-  );
+  const list = await handler()(new Request("http://x/api/composio/toolkits?query=mail&cursor=one"));
   expect(await list.json()).toEqual({ configured: true, items: [], nextCursor: "next" });
   expect(seen[0]?.url).toBe("http://gw/admin/composio/toolkits?query=mail&cursor=one");
   expect(seen[0]?.headers.get("x-admin-token")).toBe("admin-secret");
 
-  const connect = await handler()(adminRequest("http://x/api/composio/toolkits/gmail/connect"));
+  const connect = await handler()(new Request("http://x/api/composio/toolkits/gmail/connect"));
   expect(connect.status).toBe(302);
   expect(connect.headers.get("location")).toBe("https://connect.composio.dev");
   expect(seen[1]?.headers.get("x-admin-token")).toBe("admin-secret");
 });
 
-test("connector and Composio administration rejects unauthenticated callers", async () => {
-  let calls = 0;
-  globalThis.fetch = (async () => {
-    calls += 1;
-    return Response.json({ ok: true });
-  }) as unknown as typeof fetch;
-
-  const requests = [
-    new Request("http://x/api/composio/toolkits"),
-    new Request("http://x/api/composio/toolkits/gmail/connect"),
-    new Request("http://x/api/connectors/jira/connect"),
-    new Request("http://x/api/connectors/composio/credentials", { method: "PUT" }),
-  ];
-  for (const request of requests) {
-    expect((await handler()(request)).status).toBe(401);
-  }
-  expect(calls).toBe(0);
+test("web API does not advertise cross-origin access or handle CORS preflight", async () => {
+  const res = await handler()(new Request("http://x/api/tools", { method: "OPTIONS" }));
+  expect(res.status).toBe(404);
+  expect(res.headers.get("access-control-allow-origin")).toBeNull();
 });
 
 test("POST /api/skills persists a skill with supporting files; GET returns them", async () => {
@@ -372,7 +378,7 @@ test("POST /api/agents/:id/runs starts a background run; GET /api/runs/:id reads
   });
 
   const res = await fetch(
-    adminRequest("http://x/api/agents/helper/runs", {
+    delegatedRunRequest("http://x/api/agents/helper/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "do it", userId: "user-1" }),
@@ -390,7 +396,7 @@ test("POST /api/agents/:id/runs starts a background run; GET /api/runs/:id reads
   expect(String(seen?.sourceKey).startsWith("gateway:")).toBe(true);
 
   const bad = await fetch(
-    adminRequest("http://x/api/agents/helper/runs", {
+    delegatedRunRequest("http://x/api/agents/helper/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
@@ -406,7 +412,7 @@ test("POST /api/agents/:id/runs starts a background run; GET /api/runs/:id reads
   );
   expect(unauthorized.status).toBe(401);
   const missing = await fetch(
-    adminRequest("http://x/api/agents/missing/runs", {
+    delegatedRunRequest("http://x/api/agents/missing/runs", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ message: "do it", userId: "user-1" }),
@@ -518,27 +524,41 @@ test("web chat session history lists conversations and returns turns with tool s
 // --- Slack connections: redaction + blank-token-keep (no Slack network needed) ---
 
 import { makeVault } from "@gilly/core";
-import { createAgent, createSlackConnection, getSlackConnection } from "@gilly/db";
+import {
+  createAgent,
+  createSlackConnection,
+  getAgent,
+  getSlackConnection,
+  setSlackConnectionStatus,
+} from "@gilly/db";
 import type { SlackManager } from "./slack-manager.ts";
 
 /** A no-op Slack manager that records which lifecycle calls the routes make. */
-function fakeManager() {
+function fakeManager(stopFailures = 0, onRemove?: (id: string) => Promise<void>) {
   const calls: string[] = [];
+  let remainingStopFailures = stopFailures;
   const mgr = {
     name: "slack",
     start: async () => {},
-    add: async () => void calls.push("add"),
-    remove: async (id: string) => void calls.push(`remove:${id}`),
+    add: async (c: { id: string }) => void calls.push(`add:${c.id}`),
+    remove: async (id: string) => {
+      calls.push(`remove:${id}`);
+      await onRemove?.(id);
+      if (remainingStopFailures > 0) {
+        remainingStopFailures -= 1;
+        throw new Error("stop failed");
+      }
+    },
     restart: async (c: { id: string }) => void calls.push(`restart:${c.id}`),
   } as unknown as SlackManager;
   return { mgr, calls };
 }
 
 /** Handler wired with a real vault, a fake manager, and a seeded agent + connection. */
-function slackHandler() {
+function slackHandler(stopFailures = 0, onRemove?: (id: string) => Promise<void>) {
   const db = createDb(":memory:");
   const vault = makeVault("test-key");
-  const { mgr, calls } = fakeManager();
+  const { mgr, calls } = fakeManager(stopFailures, onRemove);
   createAgent(db, {
     id: "coder",
     name: "Coder",
@@ -563,6 +583,7 @@ function slackHandler() {
     port: 0,
     vault,
     slackManager: mgr,
+    testSlackAuth: async () => ({ ok: true, team: "Acme Inc", teamId: "T1" }),
   });
   return { fetch, db, vault, calls };
 }
@@ -587,13 +608,40 @@ test("GET connections never leaks tokens (redacted list + detail)", async () => 
   expect(one.appToken).toBeUndefined();
 });
 
-test("PUT with blank tokens keeps the stored tokens and restarts the connection", async () => {
+test("POST creates an unbound disabled connection without starting a socket", async () => {
+  const { fetch, db, calls } = slackHandler();
+  const res = await fetch(
+    new Request("http://x/api/slack/connections", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "New", botToken: "xoxb-new", appToken: "xapp-new" }),
+    }),
+  );
+  const body = (await res.json()) as { id: string; agentId: null; status: string };
+  expect(res.status).toBe(201);
+  expect(body).toMatchObject({ agentId: null, status: "disabled" });
+  expect(getSlackConnection(db, body.id)?.agentId).toBeUndefined();
+  expect(
+    (
+      await fetch(
+        new Request(`http://x/api/slack/connections/${body.id}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Updated" }),
+        }),
+      )
+    ).status,
+  ).toBe(200);
+  expect(calls).toEqual([]);
+});
+
+test("PUT with blank tokens keeps the stored tokens and restarts only a bound connection", async () => {
   const { fetch, db, vault, calls } = slackHandler();
   const res = await fetch(
     new Request("http://x/api/slack/connections/conn-1", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Renamed", agentId: "coder" }),
+      body: JSON.stringify({ name: "Renamed" }),
     }),
   );
   expect(res.status).toBe(200);
@@ -601,7 +649,233 @@ test("PUT with blank tokens keeps the stored tokens and restarts the connection"
   expect(stored?.name).toBe("Renamed");
   expect(vault.decrypt(stored?.botToken ?? "")).toBe("xoxb-secret"); // unchanged
   expect(vault.decrypt(stored?.appToken ?? "")).toBe("xapp-secret"); // unchanged
-  expect(calls).toContain("restart:conn-1");
+  expect(calls).toEqual(["remove:conn-1", "add:conn-1"]);
+});
+
+test("bound edit leaves stored fields unchanged when stopping fails", async () => {
+  const { fetch, db, vault, calls } = slackHandler(1);
+  const before = getSlackConnection(db, "conn-1");
+  const res = await fetch(
+    new Request("http://x/api/slack/connections/conn-1", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Changed",
+        botToken: "xoxb-changed",
+        appToken: "xapp-changed",
+      }),
+    }),
+  );
+
+  expect(res.status).toBe(500);
+  expect(getSlackConnection(db, "conn-1")).toEqual(before);
+  expect(vault.decrypt(getSlackConnection(db, "conn-1")?.botToken ?? "")).toBe("xoxb-secret");
+  expect(calls).toEqual(["remove:conn-1"]);
+});
+
+test("same-target binding preserves state and retries only a non-active connection", async () => {
+  const { fetch, db, calls } = slackHandler();
+  const put = () =>
+    fetch(
+      new Request("http://x/api/agents/coder/slack-connection", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId: "conn-1" }),
+      }),
+    );
+
+  expect((await put()).status).toBe(200);
+  expect(calls).toEqual([]);
+  setSlackConnectionStatus(db, "conn-1", "error", "retry me");
+  expect((await put()).status).toBe(200);
+  expect(calls).toEqual(["add:conn-1"]);
+  expect(getSlackConnection(db, "conn-1")).toMatchObject({
+    status: "error",
+    lastError: "retry me",
+  });
+  setSlackConnectionStatus(db, "conn-1", "disabled");
+  expect((await put()).status).toBe(200);
+  expect(calls).toEqual(["add:conn-1", "add:conn-1"]);
+});
+
+test("agent Slack endpoint swaps, unbinds, and rejects a connection bound elsewhere", async () => {
+  const { fetch, db, vault, calls } = slackHandler();
+  createAgent(db, {
+    id: "other",
+    name: "Other",
+    harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+    systemPrompt: "x",
+  });
+  createSlackConnection(db, {
+    id: "conn-2",
+    name: "Second",
+    botToken: vault.encrypt("xoxb-second"),
+    appToken: vault.encrypt("xapp-second"),
+    status: "disabled",
+    createdAt: 2,
+  });
+  createSlackConnection(db, {
+    id: "conn-3",
+    name: "Other's",
+    agentId: "other",
+    botToken: vault.encrypt("xoxb-third"),
+    appToken: vault.encrypt("xapp-third"),
+    status: "active",
+    createdAt: 3,
+  });
+
+  const put = (connectionId: string | null) =>
+    fetch(
+      new Request("http://x/api/agents/coder/slack-connection", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId }),
+      }),
+    );
+  expect((await put("missing")).status).toBe(404);
+  expect((await put("conn-3")).status).toBe(409);
+  expect((await put("conn-2")).status).toBe(200);
+  expect(getSlackConnection(db, "conn-1")).toMatchObject({
+    agentId: undefined,
+    status: "disabled",
+  });
+  expect(getSlackConnection(db, "conn-2")?.agentId).toBe("coder");
+  expect(calls).toEqual(["remove:conn-1", "add:conn-2"]);
+
+  expect(await (await put(null)).json()).toBeNull();
+  expect(getSlackConnection(db, "conn-2")).toMatchObject({
+    agentId: undefined,
+    status: "disabled",
+  });
+  expect(calls).toContain("remove:conn-2");
+  expect(
+    (
+      await fetch(
+        new Request("http://x/api/agents/missing/slack-connection", {
+          method: "PUT",
+          body: JSON.stringify({ connectionId: null }),
+        }),
+      )
+    ).status,
+  ).toBe(404);
+});
+
+test("concurrent swaps serialize the full operation for one agent", async () => {
+  let firstRemoveEntered!: () => void;
+  let releaseFirstRemove!: () => void;
+  const entered = new Promise<void>((resolve) => (firstRemoveEntered = resolve));
+  const blocked = new Promise<void>((resolve) => (releaseFirstRemove = resolve));
+  let removes = 0;
+  const { fetch, db, vault, calls } = slackHandler(0, async () => {
+    removes += 1;
+    if (removes === 1) {
+      firstRemoveEntered();
+      await blocked;
+    }
+  });
+  for (const id of ["conn-2", "conn-3"]) {
+    createSlackConnection(db, {
+      id,
+      name: id,
+      botToken: vault.encrypt(`xoxb-${id}`),
+      appToken: vault.encrypt(`xapp-${id}`),
+      status: "disabled",
+      createdAt: Number(id.at(-1)),
+    });
+  }
+  const put = (connectionId: string) =>
+    fetch(
+      new Request("http://x/api/agents/coder/slack-connection", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId }),
+      }),
+    );
+
+  const first = put("conn-2");
+  await entered;
+  const second = put("conn-3");
+  await Promise.resolve();
+  expect(calls).toEqual(["remove:conn-1"]);
+  releaseFirstRemove();
+  expect((await first).status).toBe(200);
+  expect((await second).status).toBe(200);
+  expect(getSlackConnection(db, "conn-2")?.agentId).toBeUndefined();
+  expect(getSlackConnection(db, "conn-3")?.agentId).toBe("coder");
+  expect(calls).toEqual(["remove:conn-1", "add:conn-2", "remove:conn-2", "add:conn-3"]);
+});
+
+test("deleting an agent stops its bot and preserves the unbound connection", async () => {
+  const { fetch, db, calls } = slackHandler();
+  const res = await fetch(new Request("http://x/api/agents/coder", { method: "DELETE" }));
+  expect(res.status).toBe(200);
+  expect(calls).toContain("remove:conn-1");
+  expect(getSlackConnection(db, "conn-1")).toMatchObject({
+    agentId: undefined,
+    status: "disabled",
+  });
+});
+
+test("failed stops leave swap and unbind database state retryable", async () => {
+  const { fetch, db, vault } = slackHandler(1);
+  createSlackConnection(db, {
+    id: "conn-2",
+    name: "Second",
+    botToken: vault.encrypt("xoxb-second"),
+    appToken: vault.encrypt("xapp-second"),
+    status: "disabled",
+    createdAt: 2,
+  });
+  const put = (connectionId: string | null) =>
+    fetch(
+      new Request("http://x/api/agents/coder/slack-connection", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId }),
+      }),
+    );
+
+  expect((await put("conn-2")).status).toBe(500);
+  expect(getSlackConnection(db, "conn-1")?.agentId).toBe("coder");
+  expect(getSlackConnection(db, "conn-2")?.agentId).toBeUndefined();
+  expect((await put("conn-2")).status).toBe(200);
+
+  const unbind = slackHandler(1);
+  const failed = await unbind.fetch(
+    new Request("http://x/api/agents/coder/slack-connection", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connectionId: null }),
+    }),
+  );
+  expect(failed.status).toBe(500);
+  expect(getSlackConnection(unbind.db, "conn-1")?.agentId).toBe("coder");
+  expect(
+    (
+      await unbind.fetch(
+        new Request("http://x/api/agents/coder/slack-connection", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ connectionId: null }),
+        }),
+      )
+    ).status,
+  ).toBe(200);
+});
+
+test("failed stops leave agent and connection deletes retryable", async () => {
+  const agentDelete = slackHandler(1);
+  const request = () => new Request("http://x/api/agents/coder", { method: "DELETE" });
+  expect((await agentDelete.fetch(request())).status).toBe(500);
+  expect(getAgent(agentDelete.db, "coder")).toBeDefined();
+  expect(getSlackConnection(agentDelete.db, "conn-1")?.agentId).toBe("coder");
+  expect((await agentDelete.fetch(request())).status).toBe(200);
+
+  const connectionDelete = slackHandler(1);
+  const remove = () => new Request("http://x/api/slack/connections/conn-1", { method: "DELETE" });
+  expect((await connectionDelete.fetch(remove())).status).toBe(500);
+  expect(getSlackConnection(connectionDelete.db, "conn-1")).toBeDefined();
+  expect((await connectionDelete.fetch(remove())).status).toBe(200);
 });
 
 test("DELETE stops the socket and removes the row", async () => {

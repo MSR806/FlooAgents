@@ -1,6 +1,6 @@
 import type { MessageInput } from "../engine.ts";
 
-/** Fields we read off a Slack message / event (assistant thread or channel mention). */
+/** Fields we read off a Slack app mention event. */
 export type SlackMessageFields = {
   channel: string;
   ts: string;
@@ -11,35 +11,40 @@ export type SlackMessageFields = {
   channel_type?: string;
 };
 
-const sourceKeyOf = (m: SlackMessageFields) => `${m.channel}:${m.thread_ts ?? m.ts}`;
+export type SlackSourceIdentity = { connectionId: string; workspaceId: string; agentId: string };
+type LegacySession = { source: string; agentId: string };
 
-/** Pure translation of an assistant-thread message into engine input. */
-export function assistantMessageToInput(
-  message: SlackMessageFields,
-  agentId: string,
-  source = "slack",
-  userId?: string,
-): MessageInput {
-  return {
-    agentId,
-    source,
-    sourceKey: sourceKeyOf(message),
-    userMessage: (message.text ?? "").trim(),
-    userId,
-  };
+export function slackSourceKey(
+  event: SlackMessageFields,
+  identity: SlackSourceIdentity,
+  getSession?: (sourceKey: string) => LegacySession | undefined,
+): string {
+  const legacy = `${event.channel}:${event.thread_ts ?? event.ts}`;
+  const session = getSession?.(legacy);
+  if (session?.source === "slack" && session.agentId === identity.agentId) return legacy;
+  return [
+    "slack",
+    identity.connectionId,
+    identity.workspaceId,
+    identity.agentId,
+    event.channel,
+    event.thread_ts ?? event.ts,
+  ]
+    .map(encodeURIComponent)
+    .join(":");
 }
 
 /** Pure translation of a channel `app_mention` event — strips the bot mention. */
 export function mentionEventToInput(
   event: SlackMessageFields,
-  agentId: string,
-  source = "slack",
+  identity: SlackSourceIdentity,
   userId?: string,
+  getSession?: (sourceKey: string) => LegacySession | undefined,
 ): MessageInput {
   return {
-    agentId,
-    source,
-    sourceKey: sourceKeyOf(event),
+    agentId: identity.agentId,
+    source: "slack",
+    sourceKey: slackSourceKey(event, identity, getSession),
     userMessage: (event.text ?? "").replace(/<@[^>]+>/g, "").trim(),
     userId,
   };

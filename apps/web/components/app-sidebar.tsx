@@ -1,11 +1,13 @@
 "use client";
 
-import { BookOpen, Bot, Cable, MessageSquare, Users } from "lucide-react";
+import { BookOpen, Bot, Cable, Home, MessageSquare, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -16,9 +18,10 @@ import {
 } from "@/components/ui/sidebar";
 
 const NAV = [
+  { title: "Home", href: "/", icon: Home },
   { title: "Agents", href: "/agents", icon: Bot },
   { title: "Skills", href: "/skills", icon: BookOpen },
-  { title: "Channels", href: "/connections", icon: MessageSquare },
+  { title: "Connections", href: "/connections", icon: MessageSquare },
   { title: "Tools", href: "/connectors", icon: Cable },
   { title: "Users", href: "/users", icon: Users },
 ];
@@ -65,6 +68,9 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="group-data-[collapsible=icon]:hidden">
+        <ThemeToggle />
+      </SidebarFooter>
     </Sidebar>
   );
 }

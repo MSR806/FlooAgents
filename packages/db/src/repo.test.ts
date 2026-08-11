@@ -5,6 +5,7 @@ import { createDb } from "./client.ts";
 import {
   addGrant,
   appendRunStep,
+  bindSlackConnection,
   completeRun,
   createAgent,
   createGatewayToken,
@@ -26,6 +27,7 @@ import {
   getRun,
   getSessionBySourceKey,
   getSlackConnection,
+  getSlackConnectionByAgentId,
   hasActiveRun,
   listAgents,
   listGrants,
@@ -99,6 +101,14 @@ test("updateAgent replaces config; deleteAgent removes it", () => {
   expect(() => updateAgent(db, "ghost", agentCfg)).toThrow(/not found/);
   deleteAgent(db, "coder");
   expect(getAgent(db, "coder")).toBeUndefined();
+});
+
+test("deleteAgent preserves and disables its Slack connection", () => {
+  const db = freshDb();
+  createAgent(db, agentCfg);
+  createSlackConnection(db, conn);
+  deleteAgent(db, "coder");
+  expect(getSlackConnection(db, conn.id)).toMatchObject({ agentId: undefined, status: "disabled" });
 });
 
 test("harness registry is seeded, editable, and validates agent selections", () => {
@@ -378,32 +388,69 @@ const conn: SlackConnection = {
   createdAt: 1,
 };
 
-test("slack connection round-trips through the DB", () => {
+const freshSlackDb = () => {
   const db = freshDb();
+  createAgent(db, agentCfg);
+  return db;
+};
+
+test("slack connection round-trips through the DB", () => {
+  const db = freshSlackDb();
   createSlackConnection(db, conn);
   expect(getSlackConnection(db, "conn-1")).toEqual(conn);
   expect(listSlackConnections(db)).toEqual([conn]);
+  expect(() => createSlackConnection(db, { ...conn, id: "conn-2" })).toThrow();
 });
 
 test("createSlackConnection rejects a duplicate id", () => {
-  const db = freshDb();
+  const db = freshSlackDb();
   createSlackConnection(db, conn);
   expect(() => createSlackConnection(db, conn)).toThrow(/already exists/);
 });
 
 test("updateSlackConnection writes only the keys present in the patch", () => {
-  const db = freshDb();
+  const db = freshSlackDb();
   createSlackConnection(db, conn);
-  // Rebind the agent and rename; leave tokens untouched (blank-on-edit case).
-  const updated = updateSlackConnection(db, "conn-1", { name: "Renamed", agentId: "other" });
+  const updated = updateSlackConnection(db, "conn-1", { name: "Renamed" });
   expect(updated.name).toBe("Renamed");
-  expect(updated.agentId).toBe("other");
+  expect(updated.agentId).toBe("coder");
   expect(updated.botToken).toBe("enc-bot"); // unchanged
   expect(updated.appToken).toBe("enc-app"); // unchanged
 });
 
-test("setSlackConnectionStatus records an error and clears it again", () => {
+test("bindSlackConnection atomically binds, swaps, unbinds, and rejects conflicts", () => {
   const db = freshDb();
+  createAgent(db, agentCfg);
+  createAgent(db, { ...agentCfg, id: "other" });
+  createSlackConnection(db, { ...conn, agentId: undefined, status: "disabled" });
+  createSlackConnection(db, {
+    ...conn,
+    id: "conn-2",
+    agentId: undefined,
+    status: "disabled",
+    createdAt: 2,
+  });
+
+  expect(bindSlackConnection(db, "coder", "conn-1")?.agentId).toBe("coder");
+  setSlackConnectionStatus(db, "conn-1", "error", "retry me");
+  expect(bindSlackConnection(db, "coder", "conn-1")).toMatchObject({
+    status: "error",
+    lastError: "retry me",
+  });
+  expect(bindSlackConnection(db, "coder", "conn-2")?.id).toBe("conn-2");
+  expect(getSlackConnection(db, "conn-1")).toMatchObject({
+    agentId: undefined,
+    status: "disabled",
+  });
+  expect(getSlackConnectionByAgentId(db, "coder")?.id).toBe("conn-2");
+  expect(() => bindSlackConnection(db, "other", "conn-2")).toThrow(/already bound/);
+  expect(getSlackConnectionByAgentId(db, "other")).toBeUndefined();
+  expect(bindSlackConnection(db, "coder", null)).toBeNull();
+  expect(getSlackConnectionByAgentId(db, "coder")).toBeUndefined();
+});
+
+test("setSlackConnectionStatus records an error and clears it again", () => {
+  const db = freshSlackDb();
   createSlackConnection(db, conn);
   setSlackConnectionStatus(db, "conn-1", "error", "bad token");
   expect(getSlackConnection(db, "conn-1")).toMatchObject({
@@ -418,7 +465,7 @@ test("setSlackConnectionStatus records an error and clears it again", () => {
 });
 
 test("deleteSlackConnection removes the row", () => {
-  const db = freshDb();
+  const db = freshSlackDb();
   createSlackConnection(db, conn);
   deleteSlackConnection(db, "conn-1");
   expect(getSlackConnection(db, "conn-1")).toBeUndefined();

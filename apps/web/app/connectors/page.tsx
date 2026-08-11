@@ -3,6 +3,7 @@
 import { Cable, Search, X } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -94,20 +95,17 @@ export default function ConnectorsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="border-b pb-5">
-        <h1 className="text-xl font-semibold tracking-tight">Tools</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Browse and connect the integrations available to your agents.
-        </p>
-      </div>
+      <PageHeader
+        title="Tools"
+        className="mb-0"
+        description="Browse and connect the integrations available to your agents."
+      />
 
       {feedback ? (
         <p
           role={feedback.kind === "error" ? "alert" : "status"}
           className={
-            feedback.kind === "error"
-              ? "text-sm text-destructive"
-              : "text-sm text-green-700 dark:text-green-400"
+            feedback.kind === "error" ? "text-sm text-destructive" : "text-sm text-success"
           }
         >
           {feedback.message}
@@ -195,7 +193,7 @@ export default function ConnectorsPage() {
                 </ul>
                 {nextCursor ? (
                   <Button
-                    className="justify-self-center rounded-xl"
+                    className="justify-self-center rounded-lg"
                     variant="outline"
                     disabled={toolkitLoading}
                     onClick={() => loadToolkits(activeQuery, nextCursor)}
@@ -262,7 +260,7 @@ function SearchField({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
-        className="h-9 rounded-xl pl-9"
+        className="h-9 rounded-lg pl-9"
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
@@ -271,7 +269,7 @@ function SearchField({
 
 function CatalogMessage({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-xl border border-dashed bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
+    <p className="rounded-lg border border-dashed bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
       {children}
     </p>
   );
@@ -281,7 +279,7 @@ function CatalogError({ message, onRetry }: { message: string; onRetry: () => vo
   return (
     <div
       role="alert"
-      className="flex items-center justify-between gap-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3"
+      className="flex items-center justify-between gap-4 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3"
     >
       <p className="text-sm text-destructive">{message}</p>
       <Button variant="outline" size="sm" onClick={onRetry}>
@@ -296,14 +294,14 @@ function ConnectorCard({ connector, onChange }: { connector: Connector; onChange
   const toolCount = connector.toolCount ?? 0;
   const [credentialModalOpen, setCredentialModalOpen] = useState(false);
   return (
-    <li className="group flex min-h-40 min-w-0 flex-col rounded-2xl border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-muted/10">
+    <li className="group flex min-h-40 min-w-0 flex-col rounded-lg border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-muted/10">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-tile text-muted-foreground ring-1 ring-border">
           <Cable className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate font-medium capitalize">{name}</p>
+            <p className="truncate font-mono text-[0.9rem] font-bold capitalize">{name}</p>
             {connected ? <ConnectionStatus connected /> : null}
           </div>
           <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
@@ -320,7 +318,7 @@ function ConnectorCard({ connector, onChange }: { connector: Connector; onChange
         {auth === "oauth" ? <OAuthConnect name={name} connected={connected} /> : null}
         {auth === "api_key" ? (
           <Button
-            className="rounded-xl"
+            className="rounded-lg"
             variant="outline"
             size="sm"
             onClick={() => setCredentialModalOpen(true)}
@@ -348,9 +346,9 @@ function ToolkitCard({ toolkit }: { toolkit: ComposioToolkit }) {
   };
 
   return (
-    <li className="group flex min-h-40 min-w-0 flex-col rounded-2xl border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-muted/10">
+    <li className="group flex min-h-40 min-w-0 flex-col rounded-lg border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-muted/10">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted/50">
+        <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/50">
           {toolkit.logo ? (
             <Image
               src={toolkit.logo}
@@ -366,7 +364,7 @@ function ToolkitCard({ toolkit }: { toolkit: ComposioToolkit }) {
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">{toolkit.name}</p>
+            <p className="font-mono text-[0.9rem] font-bold">{toolkit.name}</p>
             {toolkit.noAuth ? (
               <ConnectionStatus connected label="Ready" />
             ) : toolkit.connected ? (
@@ -383,7 +381,7 @@ function ToolkitCard({ toolkit }: { toolkit: ComposioToolkit }) {
           {toolkit.toolsCount} {toolkit.toolsCount === 1 ? "tool" : "tools"}
         </span>
         {!toolkit.noAuth ? (
-          <Button className="rounded-xl" variant="outline" size="sm" onClick={connect}>
+          <Button className="rounded-lg" variant="outline" size="sm" onClick={connect}>
             {toolkit.connected ? "Reconnect" : "Connect"}
           </Button>
         ) : null}
@@ -396,9 +394,7 @@ function ConnectionStatus({ connected, label }: { connected: boolean; label?: st
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        connected
-          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-          : "bg-destructive/10 text-destructive"
+        connected ? "bg-success/15 text-success" : "bg-destructive/10 text-destructive"
       }`}
     >
       {label ?? (connected ? "Connected" : "Not connected")}
@@ -460,7 +456,7 @@ function CredentialModal({
     <dialog
       ref={dialog}
       aria-labelledby={`credential-title-${connector.name}`}
-      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/35"
+      className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border bg-background p-0 text-foreground shadow-2xl backdrop:bg-black/35"
       onCancel={(event) => {
         if (saving) event.preventDefault();
         else onClose();
@@ -537,7 +533,7 @@ function OAuthConnect({ name, connected }: { name: string; connected: boolean })
     window.location.assign(`${API_BASE}/connectors/${encodeURIComponent(name)}/connect`);
   };
   return (
-    <Button className="rounded-xl" variant="outline" size="sm" onClick={connect}>
+    <Button className="rounded-lg" variant="outline" size="sm" onClick={connect}>
       {connected ? "Reconnect" : "Connect"}
     </Button>
   );

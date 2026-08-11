@@ -28,8 +28,8 @@ grants(userId, toolPattern, createdAt)
 
 Admins are marked by `isAdmin` on the user row; the first admin is set manually in the DB. Runs
 started as an admin receive grants for every exact tool attached to the agent. This is separate from
-operator access to the Tools page, which uses the server-configured HTTP Basic credential described
-in [`SECURITY.md`](../../SECURITY.md).
+operator access to the web management UI, which currently has no browser authentication and must be
+limited to a trusted network as described in [`SECURITY.md`](../../SECURITY.md).
 
 ## Single Tenant
 

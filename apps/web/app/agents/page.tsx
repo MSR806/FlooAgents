@@ -3,6 +3,7 @@
 import { Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import HarnessImage from "./HarnessImage";
 
@@ -41,19 +42,18 @@ export default function AgentsPage() {
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Agents</h1>
+      <PageHeader title="Agents">
         <Button size="sm" render={<Link href="/agents/new" />} nativeButton={false}>
           <Plus /> New agent
         </Button>
-      </div>
+      </PageHeader>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       {agents === null ? (
         <p className="py-6 text-sm text-muted-foreground">Loading agents…</p>
       ) : agents.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed bg-card px-6 py-16 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card px-6 py-16 text-center">
           <div className="mb-2 flex size-10 items-center justify-center rounded-lg border bg-background">
             <Sparkles className="size-5 text-muted-foreground" />
           </div>
@@ -66,37 +66,40 @@ export default function AgentsPage() {
           </Link>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {agents.map((agent) => (
             <li
               key={agent.id}
-              className="flex items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:border-ring"
+              className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-colors hover:border-brand"
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white p-2 ring-1 ring-black/10">
-                <HarnessImage src={harnessImages[agent.harness.id]} size={40} />
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-tile p-1.5 ring-1 ring-border">
+                  <HarnessImage src={harnessImages[agent.harness.id]} size={36} />
+                </div>
+                <Link href={`/agents/${agent.id}`} className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-[0.9rem] font-bold">{agent.name}</p>
+                  <p className="truncate font-mono text-[0.72rem] text-muted-foreground">
+                    {agent.id}
+                  </p>
+                </Link>
               </div>
-              <Link href={`/agents/${agent.id}`} className="min-w-0 flex-1">
-                <p className="font-medium">{agent.name}</p>
-                <p className="truncate text-sm text-muted-foreground">
-                  <code className="font-mono text-xs">{agent.id}</code>
-                  <span className="mx-2">·</span>
-                  <code className="font-mono text-xs">
-                    {agent.harness.id} · {agent.harness.config.model}
-                  </code>
-                </p>
-              </Link>
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  render={<Link href={`/chat/${agent.id}`} />}
-                  nativeButton={false}
-                >
-                  Chat
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => remove(agent.id)}>
-                  Delete
-                </Button>
+
+              <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2.5 font-mono text-[0.7rem] text-muted-foreground">
+                <span>{agent.harness.id}</span>
+                <span>{agent.harness.config.model}</span>
+                <div className="ml-auto flex shrink-0 gap-1">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    render={<Link href={`/chat/${agent.id}`} />}
+                    nativeButton={false}
+                  >
+                    Chat
+                  </Button>
+                  <Button variant="ghost" size="xs" onClick={() => remove(agent.id)}>
+                    Delete
+                  </Button>
+                </div>
               </div>
             </li>
           ))}

@@ -201,7 +201,13 @@ export function migrateLegacyAgentTools(
 }
 
 export function deleteAgent(db: Db, id: string): void {
-  db.delete(agents).where(eq(agents.id, id)).run();
+  db.transaction((tx) => {
+    tx.update(slackConnections)
+      .set({ agentId: null, status: "disabled", lastError: null })
+      .where(eq(slackConnections.agentId, id))
+      .run();
+    tx.delete(agents).where(eq(agents.id, id)).run();
+  });
 }
 
 // --- Harness registry --------------------------------------------------------
@@ -641,7 +647,7 @@ function rowToSlackConnection(row: SlackConnectionRow): SlackConnection {
   return SlackConnection.parse({
     id: row.id,
     name: row.name,
-    agentId: row.agentId,
+    agentId: row.agentId ?? undefined,
     botToken: row.botToken,
     appToken: row.appToken,
     teamId: row.teamId ?? undefined,
@@ -667,6 +673,11 @@ export function getSlackConnection(db: Db, id: string): SlackConnection | undefi
   return row ? rowToSlackConnection(row) : undefined;
 }
 
+export function getSlackConnectionByAgentId(db: Db, agentId: string): SlackConnection | undefined {
+  const row = db.select().from(slackConnections).where(eq(slackConnections.agentId, agentId)).get();
+  return row ? rowToSlackConnection(row) : undefined;
+}
+
 /** Insert a fully-formed connection (tokens already encrypted). Throws if the id exists. */
 export function createSlackConnection(db: Db, conn: SlackConnection): SlackConnection {
   if (getSlackConnection(db, conn.id))
@@ -676,7 +687,7 @@ export function createSlackConnection(db: Db, conn: SlackConnection): SlackConne
     .values({
       id: c.id,
       name: c.name,
-      agentId: c.agentId,
+      agentId: c.agentId ?? null,
       botToken: c.botToken,
       appToken: c.appToken,
       teamId: c.teamId ?? null,
@@ -695,7 +706,6 @@ export function updateSlackConnection(
   id: string,
   patch: {
     name?: string;
-    agentId?: string;
     botToken?: string;
     appToken?: string;
     teamId?: string;
@@ -706,13 +716,51 @@ export function updateSlackConnection(
   if (!existing) throw new Error(`Slack connection "${id}" not found`);
   const set: Partial<SlackConnectionRow> = {};
   if (patch.name !== undefined) set.name = patch.name;
-  if (patch.agentId !== undefined) set.agentId = patch.agentId;
   if (patch.botToken !== undefined) set.botToken = patch.botToken;
   if (patch.appToken !== undefined) set.appToken = patch.appToken;
   if (patch.teamId !== undefined) set.teamId = patch.teamId;
   if (patch.teamName !== undefined) set.teamName = patch.teamName;
   db.update(slackConnections).set(set).where(eq(slackConnections.id, id)).run();
   return getSlackConnection(db, id) as SlackConnection;
+}
+
+/** Atomically bind, swap, or unbind an agent's Slack connection. */
+export function bindSlackConnection(
+  db: Db,
+  agentId: string,
+  connectionId: string | null,
+): SlackConnection | null {
+  return db.transaction((tx) => {
+    if (!tx.select({ id: agents.id }).from(agents).where(eq(agents.id, agentId)).get()) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+    const target = connectionId
+      ? tx.select().from(slackConnections).where(eq(slackConnections.id, connectionId)).get()
+      : undefined;
+    if (connectionId && !target) throw new Error(`Slack connection "${connectionId}" not found`);
+    if (target?.agentId && target.agentId !== agentId) {
+      throw new Error(
+        `Slack connection "${connectionId}" is already bound to agent "${target.agentId}"`,
+      );
+    }
+    if (target?.agentId === agentId) return rowToSlackConnection(target);
+
+    tx.update(slackConnections)
+      .set({ agentId: null, status: "disabled", lastError: null })
+      .where(eq(slackConnections.agentId, agentId))
+      .run();
+    if (!connectionId) return null;
+    tx.update(slackConnections)
+      .set({ agentId, status: "active", lastError: null })
+      .where(eq(slackConnections.id, connectionId))
+      .run();
+    const bound = tx
+      .select()
+      .from(slackConnections)
+      .where(eq(slackConnections.id, connectionId))
+      .get();
+    return rowToSlackConnection(bound as SlackConnectionRow);
+  });
 }
 
 /** Record a connection's start/runtime outcome (the manager calls this). */

@@ -3,6 +3,7 @@
 import { BookOpen, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
@@ -30,12 +31,11 @@ export default function SkillsPage() {
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-tight">Skills</h1>
+      <PageHeader title="Skills">
         <Button size="sm" render={<Link href="/skills/new" />} nativeButton={false}>
           <Plus /> New skill
         </Button>
-      </div>
+      </PageHeader>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
@@ -46,22 +46,31 @@ export default function SkillsPage() {
           No skills yet — create one to give agents reusable instructions.
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-3">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {skills.map((skill) => (
             <li
               key={skill.name}
-              className="flex items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:border-ring"
+              className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card p-4 transition-colors hover:border-brand"
             >
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background">
-                <BookOpen className="size-4 text-muted-foreground" />
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-sm border border-border bg-background">
+                  <BookOpen className="size-4 text-muted-foreground" />
+                </div>
+                <Link href={`/skills/${skill.name}`} className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-[0.9rem] font-bold">{skill.name}</p>
+                </Link>
               </div>
-              <Link href={`/skills/${skill.name}`} className="min-w-0 flex-1">
-                <p className="font-medium">{skill.name}</p>
-                <p className="truncate text-sm text-muted-foreground">{skill.description}</p>
-              </Link>
-              <Button variant="ghost" size="sm" onClick={() => remove(skill.name)}>
-                Delete
-              </Button>
+              <p className="line-clamp-2 text-sm text-muted-foreground">{skill.description}</p>
+              <div className="mt-auto flex items-center border-t border-border pt-2.5">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="ml-auto"
+                  onClick={() => remove(skill.name)}
+                >
+                  Delete
+                </Button>
+              </div>
             </li>
           ))}
         </ul>

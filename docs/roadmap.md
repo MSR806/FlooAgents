@@ -103,8 +103,14 @@ endpoint, its provider credentials, and which models it offers. Agent config gai
 `harness` field selecting from that set. The registry is what item 6 configures — build
 it as data, not env vars, or the dashboard has nothing to edit.
 
+Agent creation follows a **harness-first configuration** hierarchy
+([#26](https://github.com/MSR806/project-gilly/issues/26)): select and persist the harness,
+then show the settings that harness owns. Model is the only setting initially and its real
+harness model ID passes through unchanged. Future settings such as Codex service tier become
+explicit harness options, not pseudo-model names or control-plane inference.
+
 **Done when:** the same agent JSON runs on three harnesses by changing one field, and
-the gateway works on all three.
+the gateway works on all three; creating an agent selects its harness before its model.
 
 ---
 

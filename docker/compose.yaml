@@ -34,6 +34,7 @@ services:
       HARNESS_URL: http://harness:8080
       GILLY_GATEWAY_URL: http://gateway:4100
       AGENTS_DIR: /app/config/agents
+      BUILTIN_AGENTS_DIR: /app/config/builtin-agents
       SKILLS_DIR: /app/config/skills
       DATABASE_PATH: /data/gilly.db
     volumes:
@@ -64,9 +65,6 @@ services:
       dockerfile: docker/Dockerfile.web
     depends_on:
       - control-plane
-    env_file:
-      - path: ../apps/web/.env        # admin password and matching GILLY_ADMIN_TOKEN
-        required: false
     environment:
       # Next.js rewrites /api/* to the control-plane over the Docker network.
       API_URL: http://control-plane:4000

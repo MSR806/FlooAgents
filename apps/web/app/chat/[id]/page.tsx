@@ -101,7 +101,12 @@ function ChatPageContent() {
   const params = useParams<{ id: string }>();
   const agentId = params.id;
   const router = useRouter();
-  const requestedConversationId = useSearchParams().get("conversation") ?? undefined;
+  const searchParams = useSearchParams();
+  const requestedConversationId = searchParams.get("conversation") ?? undefined;
+  // Home is a launcher: it hands the first message over via ?prompt= rather than duplicating the
+  // streaming machinery. Sent once, then stripped from the URL so a refresh can't replay it.
+  const handoffPrompt = searchParams.get("prompt") ?? undefined;
+  const handoffSent = useRef(false);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -119,6 +124,22 @@ function ChatPageContent() {
   const requestRef = useRef<AbortController>(null);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  // Home hands the first message over via ?prompt=, sent once per mount. The param is stripped
+  // only after the response lands, so the effect stays live for the whole exchange.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `send` is an in-render closure; adding it would re-fire on every keystroke.
+  useEffect(() => {
+    if (!handoffPrompt || handoffSent.current || !inputRef.current) return;
+    handoffSent.current = true;
+    inputRef.current.value = handoffPrompt;
+    void send().finally(() => {
+      // Drop only `prompt`. Replacing the whole URL would also discard the `conversation` id the
+      // send just set, and the conversation effect would then wipe the transcript.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("prompt");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    });
+  }, [handoffPrompt, agentId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `messages` is the trigger, not an input — the body only reads the ref. Dropping it would stop the list from following new output.
   useEffect(() => {
@@ -168,7 +189,8 @@ function ChatPageContent() {
       conversationId.current = undefined;
       loadedConversationKey.current = undefined;
       setActiveConversationId(undefined);
-      setMessages([]);
+      // While ?prompt= is present the handoff owns the transcript — clearing would drop it.
+      if (!handoffPrompt) setMessages([]);
       setHistoryLoading(false);
       return;
     }
@@ -206,7 +228,9 @@ function ChatPageContent() {
       cancelled = true;
       request.abort();
     };
-  }, [agentId, requestedConversationId]);
+    // handoffPrompt is stable for the life of the mount — it is stripped with history.replaceState,
+    // which deliberately doesn't notify the router, so listing it adds no extra runs.
+  }, [agentId, requestedConversationId, handoffPrompt]);
 
   function newChat() {
     conversationId.current = undefined;
@@ -320,18 +344,20 @@ function ChatPageContent() {
 
   return (
     <div className="flex h-[calc(100svh-5rem)] min-h-[32rem] flex-col overflow-hidden bg-background text-foreground md:h-[calc(100svh-3rem)]">
-      <div className="flex shrink-0 items-center justify-between pb-4 text-sm text-muted-foreground">
+      <div className="mb-4 flex shrink-0 items-center justify-between gap-3 border-b border-border pb-3">
         <Link
           href="/agents"
-          className="flex items-center gap-1 transition-colors hover:text-foreground"
+          className="flex items-center gap-1 font-mono text-[0.72rem] tracking-[0.06em] text-muted-foreground uppercase transition-colors hover:text-foreground"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className="size-3.5" />
           Agents
         </Link>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex min-w-0 items-center gap-2 rounded-full bg-muted px-3 py-1.5">
-            <Bot className="size-3.5 shrink-0 text-foreground" />
-            <span className="truncate font-medium text-foreground">{agentName ?? agentId}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <Bot className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate font-mono text-sm font-bold text-foreground">
+              {agentName ?? agentId}
+            </span>
           </span>
           <Button
             type="button"
@@ -369,8 +395,8 @@ function ChatPageContent() {
             }`}
           >
             {historyOpen ? (
-              <span className="flex items-center gap-2">
-                <History className="size-4" />
+              <span className="flex items-center gap-2 font-mono text-[0.7rem] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                <History className="size-3.5" />
                 Conversations
               </span>
             ) : null}
@@ -406,12 +432,12 @@ function ChatPageContent() {
                     key={conversation.conversationId}
                     disabled={streaming}
                     onClick={() => openConversation(conversation.conversationId)}
-                    className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted disabled:opacity-50 ${
-                      activeConversationId === conversation.conversationId ? "bg-muted" : ""
+                    className={`w-full rounded-sm px-2.5 py-2 text-left transition-colors hover:bg-accent disabled:opacity-50 ${
+                      activeConversationId === conversation.conversationId ? "bg-accent" : ""
                     }`}
                   >
                     <span className="block truncate text-sm">{conversation.title}</span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    <span className="mt-0.5 block font-mono text-[0.65rem] text-muted-foreground">
                       {new Date(conversation.updatedAt).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
@@ -464,7 +490,7 @@ function ChatPageContent() {
                     key={i}
                     className={
                       message.role === "user"
-                        ? "max-w-[75%] self-end whitespace-pre-wrap break-words rounded-2xl bg-muted px-5 py-3.5 text-[15px] leading-7 text-foreground"
+                        ? "max-w-[75%] self-end whitespace-pre-wrap break-words rounded-lg bg-muted px-5 py-3.5 text-[15px] leading-7 text-foreground"
                         : "w-full space-y-4 text-[15px] leading-7 text-foreground"
                     }
                   >
@@ -516,7 +542,7 @@ function ChatPageContent() {
             }}
           >
             {error ? <p className="mb-2 text-sm text-destructive">{error}</p> : null}
-            <div className="rounded-[18px] border border-input bg-card p-3 shadow-sm transition-colors focus-within:border-ring">
+            <div className="rounded-lg border border-input bg-card p-3 shadow-sm transition-colors focus-within:border-ring">
               <Textarea
                 ref={inputRef}
                 disabled={streaming || historyLoading}

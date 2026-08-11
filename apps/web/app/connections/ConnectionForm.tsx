@@ -1,18 +1,13 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { type SlackConnection, slackStartupError } from "./connection-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -31,10 +26,6 @@ const buildManifest = (botName: string) => `display_information:
   description: Always working cloud agent
   background_color: "#000d63"
 features:
-  app_home:
-    home_tab_enabled: false
-    messages_tab_enabled: false
-    messages_tab_read_only_enabled: true
   bot_user:
     display_name: ${botName}
     always_online: true
@@ -45,29 +36,22 @@ oauth_config:
       - app_mentions:read
       - reactions:write
       - channels:history
-      - channels:read
       - groups:history
-      - groups:read
       - users:read
 settings:
   event_subscriptions:
     bot_events:
       - app_mention
-  interactivity:
-    is_enabled: true
   socket_mode_enabled: true
 `;
 
 export type ConnectionValues = {
   name: string;
-  agentId: string;
   botToken: string;
   appToken: string;
 };
 
-type Agent = { id: string; name: string };
-
-const CREATE_STEPS = ["Name", "Create app", "Tokens", "Agent"];
+const CREATE_STEPS = ["Name", "Create app", "Tokens"];
 
 export default function ConnectionForm({
   mode,
@@ -75,6 +59,8 @@ export default function ConnectionForm({
   initial,
   onSaved,
   onCancel,
+  bindTo,
+  returnTo,
 }: {
   mode: "create" | "edit";
   /** Connection id (edit mode). */
@@ -82,32 +68,26 @@ export default function ConnectionForm({
   initial?: Partial<ConnectionValues>;
   onSaved?: () => void;
   onCancel?: () => void;
+  bindTo?: string;
+  returnTo?: string;
 }) {
   const router = useRouter();
-  const [agents, setAgents] = useState<Agent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   // Create-wizard state. `suffix` → botName `gilly-<suffix>` (also the connection name).
   const [step, setStep] = useState(0);
   const [suffix, setSuffix] = useState("");
   const botName = suffix ? `gilly-${slugify(suffix)}` : "";
 
-  // Shared token/agent state (create + edit).
+  // Shared token state (create + edit).
   const [name, setName] = useState(initial?.name ?? "");
-  const [agentId, setAgentId] = useState(initial?.agentId ?? "");
   const [botToken, setBotToken] = useState("");
   const [appToken, setAppToken] = useState("");
-
-  useEffect(() => {
-    fetch(`${API_BASE}/agents`)
-      .then((r) => r.json() as Promise<Agent[]>)
-      .then(setAgents)
-      .catch(() => setAgents([]));
-  }, []);
 
   async function copyManifest() {
     await navigator.clipboard.writeText(buildManifest(botName || "gilly-bot"));
@@ -115,7 +95,7 @@ export default function ConnectionForm({
     setTimeout(() => setCopied(false), 1500);
   }
 
-  async function testConnection() {
+  async function verifyBotToken() {
     setTesting(true);
     setTestResult(null);
     setError(null);
@@ -127,24 +107,54 @@ export default function ConnectionForm({
       });
       const body = (await res.json()) as { ok?: boolean; team?: string; error?: string };
       if (res.ok && body.ok) setTestResult(`Connected to ${body.team || "workspace"} ✓`);
-      else setError(body.error ?? "Connection test failed");
+      else setError(body.error ?? "Bot token verification failed");
     } catch {
-      setError("Connection test failed");
+      setError("Bot token verification failed");
     } finally {
       setTesting(false);
     }
   }
 
+  async function bindCreatedConnection(connectionId: string) {
+    const response = await fetch(
+      `${API_BASE}/agents/${encodeURIComponent(bindTo as string)}/slack-connection`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connectionId }),
+      },
+    );
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `Request failed (${response.status})`);
+    }
+    const bound = (await response.json()) as SlackConnection | null;
+    const startupError = slackStartupError(bound);
+    if (startupError) throw new Error(startupError);
+    router.push(returnTo ?? "/connections");
+  }
+
   async function submit() {
     setError(null);
     setSaving(true);
+    if (createdId && bindTo) {
+      try {
+        await bindCreatedConnection(createdId);
+      } catch (err) {
+        setError(
+          `Bot created, but it could not be connected: ${err instanceof Error ? err.message : "Binding failed"}`,
+        );
+        setSaving(false);
+      }
+      return;
+    }
+
     // On edit, only send tokens the user re-entered (blank = keep existing).
     const payload =
       mode === "create"
-        ? { name: botName, agentId, botToken, appToken }
+        ? { name: botName, botToken, appToken }
         : {
             name,
-            agentId,
             ...(botToken ? { botToken } : {}),
             ...(appToken ? { appToken } : {}),
           };
@@ -160,7 +170,17 @@ export default function ConnectionForm({
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Request failed (${res.status})`);
       }
-      if (onSaved) onSaved();
+      const saved = (await res.json()) as SlackConnection;
+      if (mode === "create" && bindTo) {
+        setCreatedId(saved.id);
+        try {
+          await bindCreatedConnection(saved.id);
+        } catch (err) {
+          throw new Error(
+            `Bot created, but it could not be connected: ${err instanceof Error ? err.message : "Binding failed"}`,
+          );
+        }
+      } else if (onSaved) onSaved();
       else router.push("/connections");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -168,30 +188,7 @@ export default function ConnectionForm({
     }
   }
 
-  const agentSelect = (
-    <div className="grid gap-2">
-      <Label>Agent</Label>
-      <Select value={agentId || null} onValueChange={(v) => setAgentId(v ?? "")}>
-        <SelectTrigger className="w-full">
-          <SelectValue>
-            {(val) => agents.find((a) => a.id === val)?.name ?? "Select an agent"}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {agents.map((a) => (
-            <SelectItem key={a.id} value={a.id}>
-              {a.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">
-        Every message on this channel runs this agent.
-      </p>
-    </div>
-  );
-
-  // --- Edit: a flat form (the Slack app already exists; just rename / rebind / rotate) ---
+  // --- Edit: a flat form (the Slack app already exists; just rename / rotate tokens) ---
   if (mode === "edit") {
     return (
       <div className="flex max-w-2xl flex-col gap-5">
@@ -199,7 +196,6 @@ export default function ConnectionForm({
           <Label htmlFor="conn-name">Name</Label>
           <Input id="conn-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        {agentSelect}
         <div className="grid gap-2">
           <Label htmlFor="conn-bot">Bot token</Label>
           <Input
@@ -208,7 +204,10 @@ export default function ConnectionForm({
             value={botToken}
             placeholder="Leave blank to keep current"
             autoComplete="off"
-            onChange={(e) => setBotToken(e.target.value)}
+            onChange={(e) => {
+              setBotToken(e.target.value);
+              setTestResult(null);
+            }}
           />
         </div>
         <div className="grid gap-2">
@@ -226,18 +225,16 @@ export default function ConnectionForm({
           <Button
             type="button"
             variant="outline"
-            onClick={testConnection}
+            onClick={verifyBotToken}
             disabled={testing || !botToken}
           >
-            {testing ? "Testing…" : "Test connection"}
+            {testing ? "Verifying…" : "Verify bot token"}
           </Button>
-          {testResult ? (
-            <span className="text-sm text-green-700 dark:text-green-400">{testResult}</span>
-          ) : null}
+          {testResult ? <span className="text-sm text-success">{testResult}</span> : null}
         </div>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex gap-2">
-          <Button type="button" onClick={submit} disabled={saving || !name || !agentId}>
+          <Button type="button" onClick={submit} disabled={saving || !name}>
             {saving ? "Saving…" : "Save"}
           </Button>
           <Button
@@ -253,7 +250,8 @@ export default function ConnectionForm({
   }
 
   // --- Create: a next/next wizard ---
-  const canAdvance = step === 0 ? botName.length > 6 : step === 2 ? !!botToken && !!appToken : true;
+  const canAdvance =
+    step === 0 ? botName.length > 6 : step === 2 ? !!botToken.trim() && !!appToken.trim() : true;
   const last = step === CREATE_STEPS.length - 1;
 
   return (
@@ -343,7 +341,10 @@ export default function ConnectionForm({
               value={botToken}
               placeholder="xoxb-…"
               autoComplete="off"
-              onChange={(e) => setBotToken(e.target.value)}
+              onChange={(e) => {
+                setBotToken(e.target.value);
+                setTestResult(null);
+              }}
             />
             <p className="text-xs text-muted-foreground">
               <em>OAuth &amp; Permissions</em> → Bot User OAuth Token.
@@ -367,24 +368,20 @@ export default function ConnectionForm({
             <Button
               type="button"
               variant="outline"
-              onClick={testConnection}
+              onClick={verifyBotToken}
               disabled={testing || !botToken}
             >
-              {testing ? "Testing…" : "Test connection"}
+              {testing ? "Verifying…" : "Verify bot token"}
             </Button>
-            {testResult ? (
-              <span className="text-sm text-green-700 dark:text-green-400">{testResult}</span>
-            ) : null}
+            {testResult ? <span className="text-sm text-success">{testResult}</span> : null}
           </div>
         </div>
       ) : null}
 
-      {step === 3 ? agentSelect : null}
-
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      <div className="flex gap-2">
-        {step > 0 ? (
+      <div className="flex flex-wrap gap-2">
+        {createdId ? null : step > 0 ? (
           <Button type="button" variant="outline" onClick={() => setStep((s) => s - 1)}>
             Back
           </Button>
@@ -392,14 +389,31 @@ export default function ConnectionForm({
           <Button
             type="button"
             variant="outline"
-            onClick={() => (onCancel ? onCancel() : router.push("/connections"))}
+            onClick={() => (onCancel ? onCancel() : router.push(returnTo ?? "/connections"))}
           >
             Cancel
           </Button>
         )}
-        {last ? (
-          <Button type="button" onClick={submit} disabled={saving || !agentId}>
-            {saving ? "Saving…" : "Create channel"}
+        {createdId ? (
+          <>
+            <Button type="button" onClick={submit} disabled={saving}>
+              {saving ? "Connecting…" : "Retry connection"}
+            </Button>
+            <Button
+              variant="outline"
+              render={<Link href={`/connections/${createdId}`} />}
+              nativeButton={false}
+            >
+              Continue to bot
+            </Button>
+          </>
+        ) : last ? (
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={saving || !botToken.trim() || !appToken.trim()}
+          >
+            {saving ? "Saving…" : "Create Slack bot"}
           </Button>
         ) : (
           <Button type="button" onClick={() => setStep((s) => s + 1)} disabled={!canAdvance}>
