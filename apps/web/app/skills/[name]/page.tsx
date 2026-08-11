@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import SkillForm, { type SkillValues } from "../SkillForm";
@@ -54,20 +55,12 @@ export default function SkillDetailPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border bg-card">
-                <BookOpen className="size-5 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="font-display text-2xl font-black tracking-[-0.03em]">
-                  {skill.name}
-                </h1>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  {skill.description}
-                </p>
-              </div>
-            </div>
+          <PageHeader
+            className="mb-0"
+            icon={<BookOpen className="size-5 text-muted-foreground" />}
+            title={skill.name}
+            description={skill.description}
+          >
             {!editing ? (
               <Button
                 variant="outline"
@@ -78,7 +71,7 @@ export default function SkillDetailPage() {
                 Edit
               </Button>
             ) : null}
-          </header>
+          </PageHeader>
 
           {editing ? (
             <section className="border-t pt-7">

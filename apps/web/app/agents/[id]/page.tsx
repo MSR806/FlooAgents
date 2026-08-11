@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -143,24 +144,20 @@ export default function AgentDetailPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <header className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
-              <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-tile p-3 ring-1 ring-border">
-                <HarnessImage src={harnessImages[agent.harness.id]} size={64} />
-              </div>
-              <div className="min-w-0">
-                <h1 className="font-display text-2xl font-black tracking-[-0.03em]">
-                  {agent.name}
-                </h1>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-                  <code className="text-xs">{agent.id}</code>
-                  <span aria-hidden="true">·</span>
-                  <code className="text-xs">{agent.harness.id}</code>
-                  <span aria-hidden="true">·</span>
-                  <code className="break-all text-xs">{agent.harness.config.model}</code>
-                </p>
-              </div>
-            </div>
+          <PageHeader
+            className="mb-0"
+            icon={<HarnessImage src={harnessImages[agent.harness.id]} size={44} />}
+            title={agent.name}
+            meta={
+              <>
+                <span>{agent.id}</span>
+                <span aria-hidden="true">·</span>
+                <span>{agent.harness.id}</span>
+                <span aria-hidden="true">·</span>
+                <span className="break-all">{agent.harness.config.model}</span>
+              </>
+            }
+          >
             {!editing ? (
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
@@ -182,7 +179,7 @@ export default function AgentDetailPage() {
                 </Button>
               </div>
             ) : null}
-          </header>
+          </PageHeader>
 
           <dialog
             ref={slackDialog}

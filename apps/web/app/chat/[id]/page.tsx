@@ -344,18 +344,20 @@ function ChatPageContent() {
 
   return (
     <div className="flex h-[calc(100svh-5rem)] min-h-[32rem] flex-col overflow-hidden bg-background text-foreground md:h-[calc(100svh-3rem)]">
-      <div className="flex shrink-0 items-center justify-between pb-4 text-sm text-muted-foreground">
+      <div className="mb-4 flex shrink-0 items-center justify-between gap-3 border-b border-border pb-3">
         <Link
           href="/agents"
-          className="flex items-center gap-1 transition-colors hover:text-foreground"
+          className="flex items-center gap-1 font-mono text-[0.72rem] tracking-[0.06em] text-muted-foreground uppercase transition-colors hover:text-foreground"
         >
-          <ChevronLeft className="size-4" />
+          <ChevronLeft className="size-3.5" />
           Agents
         </Link>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex min-w-0 items-center gap-2 rounded-sm bg-muted px-3 py-1.5">
-            <Bot className="size-3.5 shrink-0 text-foreground" />
-            <span className="truncate font-medium text-foreground">{agentName ?? agentId}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <Bot className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate font-mono text-sm font-bold text-foreground">
+              {agentName ?? agentId}
+            </span>
           </span>
           <Button
             type="button"
@@ -393,8 +395,8 @@ function ChatPageContent() {
             }`}
           >
             {historyOpen ? (
-              <span className="flex items-center gap-2">
-                <History className="size-4" />
+              <span className="flex items-center gap-2 font-mono text-[0.7rem] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                <History className="size-3.5" />
                 Conversations
               </span>
             ) : null}
@@ -430,12 +432,12 @@ function ChatPageContent() {
                     key={conversation.conversationId}
                     disabled={streaming}
                     onClick={() => openConversation(conversation.conversationId)}
-                    className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted disabled:opacity-50 ${
-                      activeConversationId === conversation.conversationId ? "bg-muted" : ""
+                    className={`w-full rounded-sm px-2.5 py-2 text-left transition-colors hover:bg-accent disabled:opacity-50 ${
+                      activeConversationId === conversation.conversationId ? "bg-accent" : ""
                     }`}
                   >
                     <span className="block truncate text-sm">{conversation.title}</span>
-                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                    <span className="mt-0.5 block font-mono text-[0.65rem] text-muted-foreground">
                       {new Date(conversation.updatedAt).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
