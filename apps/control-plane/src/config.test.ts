@@ -173,3 +173,14 @@ test("pruneBuiltinAgents removes stale rows left by older seeded installs", () =
   // Idempotent across boots.
   expect(pruneBuiltinAgents(db, ["agent-builder"])).toBe(0);
 });
+
+test("a DB row colliding with a built-in id is removed — the built-in always wins", () => {
+  const db = createDb(":memory:");
+  // The API refuses to create one (409), so this can only arrive from an older seeded install.
+  // The built-in shadows it in the lookup either way, so leaving it would be a row nothing reads.
+  createAgent(db, { ...agent, id: "agent-builder", name: "Stale copy" });
+
+  expect(pruneBuiltinAgents(db, ["agent-builder"])).toBe(1);
+  expect(getAgent(db, "agent-builder")).toBeUndefined();
+  expect(listAgents(db)).toHaveLength(0);
+});

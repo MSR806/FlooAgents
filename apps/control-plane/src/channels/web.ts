@@ -313,6 +313,11 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
       }
       if (method === "PUT") return updateConnectionRoute(req, connId);
       if (method === "DELETE") {
+        // The delete is unconditional and slackManager.remove no-ops for an untracked id, so
+        // without this an unknown id answers 200 here while GET on the same id answers 404.
+        if (!getSlackConnection(db, connId)) {
+          return json({ error: `Connection "${connId}" not found` }, 404);
+        }
         try {
           await slackManager?.remove(connId);
           deleteSlackConnection(db, connId);
