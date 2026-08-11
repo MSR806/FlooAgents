@@ -1,5 +1,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import type {
+  InvocationRequest,
+  InvocationResult,
+  SkillBundle,
+  StreamEvent,
+} from "@agent-platform/harness-protocol";
 import {
   createSdkMcpServer,
   type McpServerConfig,
@@ -8,12 +14,6 @@ import {
   type SDKMessage,
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
-import type {
-  InvocationRequest,
-  InvocationResult,
-  SkillBundle,
-  StreamEvent,
-} from "@agent-platform/harness-protocol";
 import { z } from "zod";
 import { gatewayPost } from "../gateway-http.ts";
 
@@ -98,7 +98,7 @@ export function gatewayMcpResult(ok: boolean, data: unknown) {
 }
 
 /**
- * Expose the tooling gateway as an in-process SDK MCP server named "gateway" with exactly two
+ * Expose the Tool Gateway as an in-process SDK MCP server named "gateway" with exactly two
  * tools: `gateway_catalog` (discover tools) and `gateway_invoke` (call one). Pure — `fetchFn` is
  * injectable for tests. HTTP failures / `{ error }` bodies come back as `isError` results so the
  * model sees a closed error set instead of a thrown exception.

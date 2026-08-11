@@ -1,5 +1,5 @@
 /**
- * Script-side client for the tooling gateway. Agent-written scripts run inside the sandbox and
+ * Script-side client for the Tool Gateway. Agent-written scripts run inside the sandbox and
  * import this to reach the gateway over HTTP, authenticated by the run-scoped token in the env.
  *
  * Wire contract (matched by the Wave 3 gateway server):

@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { query as realQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { InvocationRequest } from "@agent-platform/harness-protocol";
+import { query as realQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   buildOptions,
   expandTools,
