@@ -14,7 +14,7 @@
     "@floo/harness-protocol": "workspace:*",
     "@floo/runtime": "workspace:*",
     "@slack/bolt": "^4.7.3",
-    "@slack/types": "^2.21.1",
+    "@slack/types": "^3.0.0",
     "@slack/web-api": "^7.17.0",
     "zod": "^4.4.3"
   }
