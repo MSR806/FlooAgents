@@ -129,7 +129,6 @@ function ChatPageContent() {
 
     const key = `${agentId}:${requestedConversationId}`;
     if (loadedConversationKey.current === key) return;
-    loadedConversationKey.current = key;
     conversationId.current = requestedConversationId;
     setActiveConversationId(requestedConversationId);
     setHistoryLoading(true);
@@ -145,7 +144,10 @@ function ChatPageContent() {
         return res.json() as Promise<{ runs: HistoryRun[] }>;
       })
       .then(({ runs }) => {
-        if (!cancelled) setMessages(messagesFromRuns(runs));
+        if (!cancelled) {
+          loadedConversationKey.current = key;
+          setMessages(messagesFromRuns(runs));
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled && !(err instanceof Error && err.name === "AbortError")) {
