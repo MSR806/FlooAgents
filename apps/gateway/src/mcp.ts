@@ -1,5 +1,5 @@
-import type { Db } from "@agent-platform/db";
-import type { McpConnector } from "@agent-platform/gateway-kit";
+import type { Db } from "@floo/db";
+import type { McpConnector } from "@floo/gateway-kit";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";

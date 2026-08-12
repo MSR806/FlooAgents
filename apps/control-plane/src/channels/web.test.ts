@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BUILT_IN_HARNESSES } from "@agent-platform/core";
+import { BUILT_IN_HARNESSES } from "@floo/core";
 import {
   appendRunStep,
   completeRun,
@@ -10,7 +10,7 @@ import {
   createRun,
   failRun,
   getOrCreateSession,
-} from "@agent-platform/db";
+} from "@floo/db";
 import type { createEngine } from "../engine.ts";
 import { LocalSkillStore } from "../stores/local-skill-store.ts";
 import type { SkillStore } from "../stores/skill-store.ts";
@@ -523,14 +523,14 @@ test("web chat session history lists conversations and returns turns with tool s
 
 // --- Slack connections: redaction + blank-token-keep (no Slack network needed) ---
 
-import { makeVault } from "@agent-platform/core";
+import { makeVault } from "@floo/core";
 import {
   createAgent,
   createSlackConnection,
   getAgent,
   getSlackConnection,
   setSlackConnectionStatus,
-} from "@agent-platform/db";
+} from "@floo/db";
 import type { SlackManager } from "./slack-manager.ts";
 
 /** A no-op Slack manager that records which lifecycle calls the routes make. */

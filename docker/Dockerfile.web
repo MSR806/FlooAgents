@@ -11,4 +11,4 @@ RUN bun install --frozen-lockfile
 
 EXPOSE 3000
 # `next dev` binds 0.0.0.0 by default, so it's reachable through the published port.
-CMD ["bun", "run", "--filter", "@agent-platform/web", "dev"]
+CMD ["bun", "run", "--filter", "@floo/web", "dev"]

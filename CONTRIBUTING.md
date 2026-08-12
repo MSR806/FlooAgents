@@ -41,7 +41,7 @@ gitleaks scan of every commit in the branch. To run the same gate locally:
 bun run lint
 bun run typecheck
 bun test
-bun run --filter '@agent-platform/web' build
+bun run --filter '@floo/web' build
 gitleaks git . --redact
 ```
 

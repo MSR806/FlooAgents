@@ -2,7 +2,7 @@ import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core"
 
 /**
  * A configured agent, mutable at runtime via the management API. `tools`/`skills` are JSON
- * `string[]` (null = none); the rest mirror the `AgentConfig` schema in `@agent-platform/core`.
+ * `string[]` (null = none); the rest mirror the `AgentConfig` schema in `@floo/core`.
  */
 export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),

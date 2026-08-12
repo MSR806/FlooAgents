@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { StreamEvent } from "@agent-platform/runtime";
+import type { StreamEvent } from "@floo/runtime";
 import { type SlackMessage, toSlackMessages } from "./slack-format.ts";
 import { pumpSlackRun, type SlackRunDelivery } from "./slack-pump.ts";
 

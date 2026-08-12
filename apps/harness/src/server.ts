@@ -1,8 +1,4 @@
-import {
-  InvocationRequest,
-  type InvocationResult,
-  type StreamEvent,
-} from "@agent-platform/harness-protocol";
+import { InvocationRequest, type InvocationResult, type StreamEvent } from "@floo/harness-protocol";
 import {
   runAgentLoop as runClaudeAgentLoop,
   streamAgentLoop as streamClaudeAgentLoop,

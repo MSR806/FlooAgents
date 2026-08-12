@@ -1,11 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  createDb,
-  createGatewayToken,
-  getCredential,
-  schema,
-  setCredential,
-} from "@agent-platform/db";
+import { createDb, createGatewayToken, getCredential, schema, setCredential } from "@floo/db";
 import { ComposioNotConnectedError, type ComposioService } from "./composio.ts";
 import { type McpGateway, McpToolError, NotConnectedError } from "./mcp.ts";
 import { allTools } from "./registry.ts";

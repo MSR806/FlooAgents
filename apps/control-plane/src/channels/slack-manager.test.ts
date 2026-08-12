@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { makeVault, type SlackConnection } from "@agent-platform/core";
-import { createAgent, createDb, createSlackConnection } from "@agent-platform/db";
+import { makeVault, type SlackConnection } from "@floo/core";
+import { createAgent, createDb, createSlackConnection } from "@floo/db";
 import type { createEngine } from "../engine.ts";
 import { createSlackManager } from "./slack-manager.ts";
 

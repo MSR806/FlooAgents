@@ -1,5 +1,5 @@
 {
-  "name": "@agent-platform/runtime",
+  "name": "@floo/runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-platform/core": "workspace:*",
-    "@agent-platform/harness-protocol": "workspace:*"
+    "@floo/core": "workspace:*",
+    "@floo/harness-protocol": "workspace:*"
   }
 }

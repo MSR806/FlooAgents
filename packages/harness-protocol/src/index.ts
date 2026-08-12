@@ -1,4 +1,4 @@
-import { AgentConfig, WorkspaceRef } from "@agent-platform/core";
+import { AgentConfig, WorkspaceRef } from "@floo/core";
 import { z } from "zod";
 
 /**

@@ -1,4 +1,4 @@
-import type { AnyConnector } from "@agent-platform/gateway-kit";
+import type { AnyConnector } from "@floo/gateway-kit";
 import { agentBuilder } from "./agent-builder.ts";
 import { amplitude } from "./amplitude.ts";
 import { branch } from "./branch.ts";

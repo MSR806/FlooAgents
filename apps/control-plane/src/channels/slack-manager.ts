@@ -1,5 +1,5 @@
-import type { SlackConnection, Vault } from "@agent-platform/core";
-import { type Db, listSlackConnections, setSlackConnectionStatus } from "@agent-platform/db";
+import type { SlackConnection, Vault } from "@floo/core";
+import { type Db, listSlackConnections, setSlackConnectionStatus } from "@floo/db";
 import type { createEngine } from "../engine.ts";
 import type { Channel } from "./channel.ts";
 import { buildSlackApp } from "./slack.ts";

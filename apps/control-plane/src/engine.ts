@@ -1,4 +1,4 @@
-import type { AgentConfig } from "@agent-platform/core";
+import type { AgentConfig } from "@floo/core";
 import {
   appendRunStep,
   completeRun,
@@ -18,9 +18,9 @@ import {
   migrateLegacyAgentTools,
   setHarnessSession,
   validateAgentHarness,
-} from "@agent-platform/db";
-import type { SkillBundle } from "@agent-platform/harness-protocol";
-import type { RuntimeProvider, StreamEvent } from "@agent-platform/runtime";
+} from "@floo/db";
+import type { SkillBundle } from "@floo/harness-protocol";
+import type { RuntimeProvider, StreamEvent } from "@floo/runtime";
 
 const RUN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const GATEWAY_DISCOVERY_TIMEOUT_MS = 10_000;

@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@agent-platform/runtime";
+import type { StreamEvent } from "@floo/runtime";
 import {
   newProgressState,
   reduceProgress,

@@ -1,5 +1,5 @@
 {
-  "name": "@agent-platform/core",
+  "name": "@floo/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -3,9 +3,9 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-platform",
+      "name": "floo",
       "dependencies": {
-        "@agent-platform/gateway-client": "workspace:*",
+        "@floo/gateway-client": "workspace:*",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.5.0",
@@ -15,13 +15,13 @@
       },
     },
     "apps/control-plane": {
-      "name": "@agent-platform/control-plane",
+      "name": "@floo/control-plane",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-platform/core": "workspace:*",
-        "@agent-platform/db": "workspace:*",
-        "@agent-platform/harness-protocol": "workspace:*",
-        "@agent-platform/runtime": "workspace:*",
+        "@floo/core": "workspace:*",
+        "@floo/db": "workspace:*",
+        "@floo/harness-protocol": "workspace:*",
+        "@floo/runtime": "workspace:*",
         "@slack/bolt": "^4.7.3",
         "@slack/types": "^2.21.1",
         "@slack/web-api": "^7.17.0",
@@ -29,36 +29,36 @@
       },
     },
     "apps/gateway": {
-      "name": "@agent-platform/gateway",
+      "name": "@floo/gateway",
       "version": "0.0.0",
       "dependencies": {
         "@composio/core": "^0.15.0",
-        "@agent-platform/core": "workspace:*",
-        "@agent-platform/db": "workspace:*",
-        "@agent-platform/gateway-kit": "workspace:*",
+        "@floo/core": "workspace:*",
+        "@floo/db": "workspace:*",
+        "@floo/gateway-kit": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "zod": "^4.4.3",
       },
     },
     "apps/harness": {
-      "name": "@agent-platform/harness",
+      "name": "@floo/harness",
       "version": "0.0.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.179",
-        "@agent-platform/core": "workspace:*",
-        "@agent-platform/harness-protocol": "workspace:*",
+        "@floo/core": "workspace:*",
+        "@floo/harness-protocol": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@openai/codex-sdk": "0.144.6",
         "zod": "^4.4.3",
       },
     },
     "apps/web": {
-      "name": "@agent-platform/web",
+      "name": "@floo/web",
       "version": "0.0.0",
       "dependencies": {
         "@base-ui/react": "^1.6.0",
-        "@agent-platform/core": "workspace:*",
-        "@agent-platform/design-tokens": "workspace:*",
+        "@floo/core": "workspace:*",
+        "@floo/design-tokens": "workspace:*",
         "@tailwindcss/postcss": "^4.3.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
@@ -82,49 +82,49 @@
       },
     },
     "packages/core": {
-      "name": "@agent-platform/core",
+      "name": "@floo/core",
       "version": "0.0.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
     },
     "packages/db": {
-      "name": "@agent-platform/db",
+      "name": "@floo/db",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-platform/core": "workspace:*",
+        "@floo/core": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
     },
     "packages/design-tokens": {
-      "name": "@agent-platform/design-tokens",
+      "name": "@floo/design-tokens",
       "version": "0.0.0",
     },
     "packages/gateway-client": {
-      "name": "@agent-platform/gateway-client",
+      "name": "@floo/gateway-client",
       "version": "0.0.0",
     },
     "packages/gateway-kit": {
-      "name": "@agent-platform/gateway-kit",
+      "name": "@floo/gateway-kit",
       "version": "0.0.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
     },
     "packages/harness-protocol": {
-      "name": "@agent-platform/harness-protocol",
+      "name": "@floo/harness-protocol",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-platform/core": "workspace:*",
+        "@floo/core": "workspace:*",
         "zod": "^4.4.3",
       },
     },
     "packages/runtime": {
-      "name": "@agent-platform/runtime",
+      "name": "@floo/runtime",
       "version": "0.0.0",
       "dependencies": {
-        "@agent-platform/core": "workspace:*",
-        "@agent-platform/harness-protocol": "workspace:*",
+        "@floo/core": "workspace:*",
+        "@floo/harness-protocol": "workspace:*",
       },
     },
   },
@@ -251,27 +251,27 @@
 
     "@floating-ui/utils": ["@floating-ui/utils@0.2.12", "", {}, "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww=="],
 
-    "@agent-platform/control-plane": ["@agent-platform/control-plane@workspace:apps/control-plane"],
+    "@floo/control-plane": ["@floo/control-plane@workspace:apps/control-plane"],
 
-    "@agent-platform/core": ["@agent-platform/core@workspace:packages/core"],
+    "@floo/core": ["@floo/core@workspace:packages/core"],
 
-    "@agent-platform/db": ["@agent-platform/db@workspace:packages/db"],
+    "@floo/db": ["@floo/db@workspace:packages/db"],
 
-    "@agent-platform/design-tokens": ["@agent-platform/design-tokens@workspace:packages/design-tokens"],
+    "@floo/design-tokens": ["@floo/design-tokens@workspace:packages/design-tokens"],
 
-    "@agent-platform/gateway": ["@agent-platform/gateway@workspace:apps/gateway"],
+    "@floo/gateway": ["@floo/gateway@workspace:apps/gateway"],
 
-    "@agent-platform/gateway-client": ["@agent-platform/gateway-client@workspace:packages/gateway-client"],
+    "@floo/gateway-client": ["@floo/gateway-client@workspace:packages/gateway-client"],
 
-    "@agent-platform/gateway-kit": ["@agent-platform/gateway-kit@workspace:packages/gateway-kit"],
+    "@floo/gateway-kit": ["@floo/gateway-kit@workspace:packages/gateway-kit"],
 
-    "@agent-platform/harness": ["@agent-platform/harness@workspace:apps/harness"],
+    "@floo/harness": ["@floo/harness@workspace:apps/harness"],
 
-    "@agent-platform/harness-protocol": ["@agent-platform/harness-protocol@workspace:packages/harness-protocol"],
+    "@floo/harness-protocol": ["@floo/harness-protocol@workspace:packages/harness-protocol"],
 
-    "@agent-platform/runtime": ["@agent-platform/runtime@workspace:packages/runtime"],
+    "@floo/runtime": ["@floo/runtime@workspace:packages/runtime"],
 
-    "@agent-platform/web": ["@agent-platform/web@workspace:apps/web"],
+    "@floo/web": ["@floo/web@workspace:apps/web"],
 
     "@hono/node-server": ["@hono/node-server@2.1.0", "", { "peerDependencies": { "hono": "^4" } }, "sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg=="],
 

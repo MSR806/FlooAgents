@@ -4,7 +4,7 @@ import {
   HarnessModel,
   isDeferredOpenModel,
   normalizeLegacyHarness,
-} from "@agent-platform/core";
+} from "@floo/core";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
 

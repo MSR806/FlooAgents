@@ -1,11 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type {
-  InvocationRequest,
-  InvocationResult,
-  SkillBundle,
-  StreamEvent,
-} from "@agent-platform/harness-protocol";
 import {
   createSdkMcpServer,
   type McpServerConfig,
@@ -14,6 +8,12 @@ import {
   type SDKMessage,
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  InvocationRequest,
+  InvocationResult,
+  SkillBundle,
+  StreamEvent,
+} from "@floo/harness-protocol";
 import { z } from "zod";
 import { gatewayPost } from "../gateway-http.ts";
 

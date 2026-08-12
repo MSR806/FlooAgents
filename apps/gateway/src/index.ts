@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { createDb } from "@agent-platform/db";
+import { createDb } from "@floo/db";
 import { makeRealMcp } from "./mcp.ts";
 import { createGatewayServer } from "./server.ts";
 import { makeVault } from "./vault.ts";

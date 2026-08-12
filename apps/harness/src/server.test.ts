@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import type {
-  InvocationRequest,
-  InvocationResult,
-  StreamEvent,
-} from "@agent-platform/harness-protocol";
+import type { InvocationRequest, InvocationResult, StreamEvent } from "@floo/harness-protocol";
 import { createServer, type HarnessRunners } from "./server.ts";
 
 const completed = (finalText: string): InvocationResult => ({

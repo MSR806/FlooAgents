@@ -1,5 +1,5 @@
 {
-  "name": "@agent-platform/control-plane",
+  "name": "@floo/control-plane",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agent-platform/core": "workspace:*",
-    "@agent-platform/db": "workspace:*",
-    "@agent-platform/harness-protocol": "workspace:*",
-    "@agent-platform/runtime": "workspace:*",
+    "@floo/core": "workspace:*",
+    "@floo/db": "workspace:*",
+    "@floo/harness-protocol": "workspace:*",
+    "@floo/runtime": "workspace:*",
     "@slack/bolt": "^4.7.3",
     "@slack/types": "^2.21.1",
     "@slack/web-api": "^7.17.0",

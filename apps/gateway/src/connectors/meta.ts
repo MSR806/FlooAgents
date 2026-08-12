@@ -1,4 +1,4 @@
-import { defineConnector, defineTool } from "@agent-platform/gateway-kit";
+import { defineConnector, defineTool } from "@floo/gateway-kit";
 import { z } from "zod";
 
 const GRAPH = "https://graph.facebook.com/v25.0";
