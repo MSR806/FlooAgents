@@ -9,8 +9,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { isDeferredOpenModel } from "@gilly/core";
-import type { InvocationRequest, InvocationResult, StreamEvent } from "@gilly/harness-protocol";
+import { isDeferredOpenModel } from "@floo/core";
+import type { InvocationRequest, InvocationResult, StreamEvent } from "@floo/harness-protocol";
 import {
   Codex,
   type CodexOptions,
@@ -51,7 +51,7 @@ function invocationHandle(req: InvocationRequest): string {
   return handle;
 }
 
-/** Stable workspace for one Gilly session. */
+/** Stable workspace for one agent session. */
 export function workspaceDir(
   req: InvocationRequest,
   root = resolve(repoRoot, process.env.WORKSPACES_DIR ?? "data/workspaces"),
@@ -147,12 +147,12 @@ export function buildCodexOptions(req: InvocationRequest, input: CodexOptionsInp
 
   const mcpServers: Record<string, LocalMcpServerEntry> = {};
   if (req.gateway) {
-    env.GILLY_GATEWAY_URL = req.gateway.url;
-    env.GILLY_GATEWAY_TOKEN = req.gateway.token;
+    env.TOOL_GATEWAY_URL = req.gateway.url;
+    env.TOOL_GATEWAY_TOKEN = req.gateway.token;
     mcpServers.gateway = {
       command: input.executablePath ?? process.execPath,
       args: [input.bridgePath ?? gatewayBridgePath],
-      env_vars: ["GILLY_GATEWAY_URL", "GILLY_GATEWAY_TOKEN"],
+      env_vars: ["TOOL_GATEWAY_URL", "TOOL_GATEWAY_TOKEN"],
       enabled_tools: ["gateway_catalog", "gateway_invoke"],
       default_tools_approval_mode: "approve",
       required: true,
@@ -273,7 +273,7 @@ function readManagedSkills(manifestPath: string): string[] {
     !Array.isArray(parsed) ||
     !parsed.every((name) => typeof name === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name))
   ) {
-    throw new Error("Invalid Gilly managed-skills manifest");
+    throw new Error("Invalid platform-managed-skills manifest");
   }
   return parsed;
 }
@@ -351,7 +351,7 @@ function toolEvent(event: Extract<ThreadEvent, { type: "item.completed" }>): Str
   return null;
 }
 
-/** Run one Codex turn and translate its events to the stable Gilly protocol. */
+/** Run one Codex turn and translate its events to the stable harness protocol. */
 export async function* streamAgentLoop(
   req: InvocationRequest,
   codexFactory: CodexFactory = defaultCodexFactory,

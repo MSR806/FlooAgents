@@ -1,16 +1,16 @@
 ---
 name: coding-conventions
-description: How to write code in this repo (Gilly). Read BEFORE adding or modifying code — covers the three-layer architecture, the replaceable-layer seams (Channel / RuntimeProvider / SkillStore / harness-protocol), the agent/skill storage split, Bun/Biome/Zod/TypeScript conventions, the pure-helper+test pattern, and recipes for adding an agent, a skill, a channel, a runtime provider, or a domain type. Triggers: "add a feature", "add a channel/agent/skill/runtime", "where does X go", "conventions", "how is this repo structured", "coding style".
+description: How to write code in this repo (Floo Agents). Read BEFORE adding or modifying code — covers the three-layer architecture, the replaceable-layer seams (Channel / RuntimeProvider / SkillStore / harness-protocol), the agent/skill storage split, Bun/Biome/Zod/TypeScript conventions, the pure-helper+test pattern, and recipes for adding an agent, a skill, a channel, a runtime provider, or a domain type. Triggers: "add a feature", "add a channel/agent/skill/runtime", "where does X go", "conventions", "how is this repo structured", "coding style".
 ---
 
-# Writing code in Gilly
+# Writing code in Floo Agents
 
-Gilly is an internal platform for building AI agents and connecting them to where work happens (Slack, web). This skill is the durable map of *how the code is organized and the conventions to follow* — read it before implementing, then look at the cited canonical files for the exact shape. Design rationale lives in [`docs/`](../../../docs/) (`mvp-scope.md`, `engineering/repo-architecture.md`, `engineering/slack-mentions.md`).
+Floo Agents is an internal platform for building AI agents and connecting them to where work happens (Slack, web). This skill is the durable map of *how the code is organized and the conventions to follow* — read it before implementing, then look at the cited canonical files for the exact shape. Design rationale lives in [`docs/`](../../../docs/) (`mvp-scope.md`, `engineering/repo-architecture.md`, `engineering/slack-mentions.md`).
 
 ## The one mental model: three replaceable layers
 
-```
-Control Plane (Gilly)   what runs, when, with what access, where output goes   ← we own & build this
+```text
+Control Plane          what runs, when, with what access, where output goes   ← we own & build this
    Harness              the agent loop (Claude and OpenAI SDKs)                  ← vendor, replaceable
    Runtime              the sandbox the harness runs in (AgentCore, local now)   ← vendor, replaceable
 ```
@@ -30,9 +30,9 @@ Interface and implementation live in separate files (the Channel/RuntimeProvider
 
 ## Monorepo layout
 
-```
+```text
 apps/
-  control-plane/   Gilly server: channels (Slack, Web), engine, management API, SkillStore (stores/), index.ts wiring
+  control-plane/   Channels (Slack, Web), engine, management API, SkillStore (stores/), index.ts wiring
   harness/         Shared AgentCore HTTP server with harness-claude/ and harness-openai/ loops
   web/             Next.js UI (App Router) — agent/skill CRUD + SSE chat; talks to the control-plane API
 packages/
@@ -49,7 +49,7 @@ config/skills/     <name>/SKILL.md folders — the LocalSkillStore's backing fil
 
 - **Bun** is the toolchain: `bun install`, `bun test`, `bun --watch src/index.ts` (no dev build step), native TS. Don't add Node-only build tooling.
 - **TypeScript** is strict with `noUncheckedIndexedAccess` + `verbatimModuleSyntax` (see `tsconfig.base.json`). Consequences you must follow:
-  - Import internal packages **by name, no extension**: `import { createEngine } from "@gilly/runtime"`.
+  - Import internal packages **by name, no extension**: `import { createEngine } from "@floo/runtime"`.
   - Import local files **with the `.ts` extension**: `import { toBlocks } from "./slack-format.ts"`.
   - Use `import type { … }` for type-only imports.
   - Indexed access is `T | undefined` — handle it.
@@ -75,21 +75,21 @@ Extension points are interfaces with small implementations (`class … implement
 
 ## Recipes — where things go
 
-- **New agent** → create via the web UI or management API (`POST /api/agents`); it persists to the `agents` table via `@gilly/db` repo fns. `AgentConfig` (`packages/core/src/agent.ts`) is `{ id, name, model, systemPrompt, tools?, skills?, gatewayTools? }`. `config/agents/*.json` are upserted into the DB on every boot by `syncAgents` (files win for the ids they define; agents created only in the DB survive).
+- **New agent** → create via the web UI or management API (`POST /api/agents`); it persists to the `agents` table via `@floo/db` repo fns. `AgentConfig` (`packages/core/src/agent.ts`) is `{ id, name, model, systemPrompt, tools?, skills?, gatewayTools? }`. `config/agents/*.json` are upserted into the DB on every boot by `syncAgents` (files win for the ids they define; agents created only in the DB survive).
 
 - **New built-in agent** (ships with the product, e.g. `agent-builder`) → drop the JSON in `config/builtin-agents/`. `loadBuiltinAgents` reads it into memory at boot and it is **never** written to the DB, so it can't be listed, edited, or deleted through the UI, the API, or the agent-builder — changing it is a code change. The lookup resolves built-ins ahead of the DB (`builtinAgents.get(id) ?? getAgent(db, id)`), `pruneBuiltinAgents` clears rows left by older seeded installs, and the web channel rejects `PUT`/`DELETE` on a built-in id and refuses to create a DB agent that would collide with one. Read it by id (`GET /api/agents/:id`) — that's how the home page chats with the builder.
 - **New skill** → create via the web UI or management API (`POST /api/skills`) with `{ name, description, content }`; the `SkillStore` composes a `SKILL.md` (YAML frontmatter + body) under `config/skills/<name>/`. The engine ships an agent's attached skills inline to the harness as `SkillBundle`s.
-- **Workspace tools** are high-level Gilly abstractions — `Read` / `Write` / `Bash` — stored in `tools`. Claude maps them through `expandTools` in `apps/harness/src/harness-claude/loop.ts`; OpenAI enables its native sandboxed shell only for `Bash` through `buildCodexOptions` / `buildThreadOptions` in `apps/harness/src/harness-openai/loop.ts` and does not synthesize Read/Write tools. **Never surface SDK tool names above the harness**; the UI/DB/API see only the abstractions. External/internal gateway access is separate: `gatewayTools` stores exact canonical, provider-neutral gateway names, enforced together with per-user grants on every call.
+- **Workspace tools** are high-level platform abstractions — `Read` / `Write` / `Bash` — stored in `tools`. Claude maps them through `expandTools` in `apps/harness/src/harness-claude/loop.ts`; OpenAI enables its native sandboxed shell only for `Bash` through `buildCodexOptions` / `buildThreadOptions` in `apps/harness/src/harness-openai/loop.ts` and does not synthesize Read/Write tools. **Never surface SDK tool names above the harness**; the UI/DB/API see only the abstractions. External/internal gateway access is separate: `gatewayTools` stores exact canonical, provider-neutral gateway names, enforced together with per-user grants on every call.
 - **New config-store backend** (e.g. S3 skills) → add a class implementing `SkillStore` in `apps/control-plane/src/stores/` (sibling to `local-skill-store.ts`) and swap it in `index.ts`. Nothing above the seam changes.
 - **New channel** (Telegram, etc.) → add `apps/control-plane/src/channels/<x>.ts` implementing `Channel`. Write a **pure** translator (native event → `MessageInput`) + test. Drive `engine.handle(...)` for conversational surfaces that need the one-run-per-session queue/batch, or `engine.stream(...)` for request-scoped surfaces (see `web.ts`). Wire it in `apps/control-plane/src/index.ts` (channels start optionally based on config). Don't put session/queue logic in the channel — that's the engine's job.
 - **New runtime provider** → add a class in `packages/runtime` implementing `RuntimeProvider` (`invoke`, `invokeStream`, `healthy`); export it from `index.ts`. Nothing above the seam changes.
 - **New domain type / field** → Zod schema in `packages/core`.
-- **Change the harness contract** → edit `packages/harness-protocol`; update both sides (the harness in `apps/harness`, the consumers via `@gilly/runtime`). The harness HTTP shape (`/invocations`, `/ping`, `/invocations/stream` NDJSON, port 8080) is the AgentCore contract — don't break it.
+- **Change the harness contract** → edit `packages/harness-protocol`; update both sides (the harness in `apps/harness`, the consumers via `@floo/runtime`). The harness HTTP shape (`/invocations`, `/ping`, `/invocations/stream` NDJSON, port 8080) is the AgentCore contract — don't break it.
 - **Operational state** (anything per-run/session) → `packages/db` (Drizzle schema + repo fn). Agent config also lives here (`agents` table); skill blobs do **not** — they live behind the `SkillStore` seam.
 
 ## Boundaries to respect (MVP scope & invariants)
 
-- **Config storage is split by shape.** Agent config → SQLite (`agents` table + repo CRUD in `@gilly/db`, runtime-mutable via the API). Skill blobs (`SKILL.md` + files) → the `SkillStore` seam (filesystem now, S3 later). Operational state (sessions/runs/queue) → `packages/db`. Connections/secrets → env. The rule isn't "config never in the DB" — it's: structured records in SQLite, blobs behind the store seam.
+- **Config storage is split by shape.** Agent config → SQLite (`agents` table + repo CRUD in `@floo/db`, runtime-mutable via the API). Skill blobs (`SKILL.md` + files) → the `SkillStore` seam (filesystem now, S3 later). Operational state (sessions/runs/queue) → `packages/db`. Connections/secrets → env. The rule isn't "config never in the DB" — it's: structured records in SQLite, blobs behind the store seam.
 - **MCP scope:** the harness-local gateway MCP bridge is implemented behind the harness contract. General core/control-plane MCP modeling remains deferred, along with subagents, triggers (GitHub/Cron), Fleet, real AgentCore cloud, and a secrets vault. Don't half-build deferred capabilities into core types (see `docs/mvp-scope.md`).
 - **Env:** each app auto-loads its own `apps/<app>/.env` (Bun, from the app's cwd). Control-plane path defaults resolve against the repo root via `import.meta.dir`, with env overrides (so Docker's absolute paths work) — keep new paths cwd-independent the same way.
 - **Side-effect helpers never break the main flow** (e.g. a failed Slack reaction is swallowed and logged, not thrown). Keep that for best-effort UI niceties.

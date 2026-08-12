@@ -1,13 +1,13 @@
-import { AgentConfig } from "@gilly/core";
-import { defineConnector, defineTool } from "@gilly/gateway-kit";
+import { AgentConfig } from "@floo/core";
+import { defineConnector, defineTool } from "@floo/gateway-kit";
 import { z } from "zod";
 
-const cpUrl = () => process.env.GILLY_CONTROL_PLANE_URL ?? "http://localhost:4000";
+const cpUrl = () => process.env.CONTROL_PLANE_URL ?? "http://localhost:4000";
 
 async function cp(path: string, init?: RequestInit): Promise<unknown> {
   const headers = new Headers(init?.headers);
   headers.set("content-type", "application/json");
-  const adminToken = process.env.GILLY_ADMIN_TOKEN;
+  const adminToken = process.env.INTERNAL_API_TOKEN;
   if (adminToken) headers.set("x-admin-token", adminToken);
   const res = await fetch(`${cpUrl()}${path}`, {
     ...init,
@@ -30,39 +30,39 @@ const skillInput = z.object({
 });
 const skillPatch = skillInput.omit({ name: true }).partial();
 
-export const gilly = defineConnector({
-  name: "gilly",
+export const agentBuilder = defineConnector({
+  name: "agent_builder",
   auth: { kind: "none" },
   tools: [
     defineTool({
-      name: "gilly.list_harnesses",
-      description: "List Gilly harnesses, including enabled state and offered models.",
+      name: "agent_builder.list_harnesses",
+      description: "List supported agent harnesses, including enabled state and offered models.",
       input: z.object({}),
       handler: async () => cp("/api/harnesses"),
     }),
     defineTool({
-      name: "gilly.list_agents",
-      description: "List Gilly agents with id, name, and nested harness selection.",
+      name: "agent_builder.list_agents",
+      description: "List agents with id, name, and nested harness selection.",
       input: z.object({}),
       handler: async () => cp("/api/agents"),
     }),
     defineTool({
-      name: "gilly.get_agent",
-      description: "Get one Gilly agent config by id.",
+      name: "agent_builder.get_agent",
+      description: "Get one agent configuration by id.",
       input: z.object({ id: z.string().min(1) }),
       handler: async ({ id }) => cp(`/api/agents/${encodeURIComponent(id)}`),
     }),
     defineTool({
-      name: "gilly.create_agent",
+      name: "agent_builder.create_agent",
       description:
-        "Create a Gilly agent. Input is AgentConfig: id, name, harness: { id, config: { model, optional serviceTier } }, systemPrompt, optional tools, skills, gatewayTools. Select an enabled harness and one of its offered models.",
+        "Create an agent. Input is AgentConfig: id, name, harness: { id, config: { model, optional serviceTier } }, systemPrompt, optional tools, skills, gatewayTools. Select an enabled harness and one of its offered models.",
       input: AgentConfig,
       handler: async (agent) => cp("/api/agents", { method: "POST", body: JSON.stringify(agent) }),
     }),
     defineTool({
-      name: "gilly.update_agent",
+      name: "agent_builder.update_agent",
       description:
-        "Patch a Gilly agent by id. Provide only fields to change: name, systemPrompt, tools, skills, gatewayTools. Harness changes use the full nested harness field.",
+        "Patch an agent by id. Provide only fields to change: name, systemPrompt, tools, skills, gatewayTools. Harness changes use the full nested harness field.",
       input: z.object({ id: z.string().min(1), patch: agentPatch }),
       handler: async ({ id, patch }) => {
         const current = await cp(`/api/agents/${encodeURIComponent(id)}`);
@@ -74,9 +74,9 @@ export const gilly = defineConnector({
       },
     }),
     defineTool({
-      name: "gilly.start_agent",
+      name: "agent_builder.start_agent",
       description:
-        "Start a Gilly agent in the background. Returns a runId immediately; check it with gilly.get_run.",
+        "Start an agent in the background. Returns a runId immediately; check it with agent_builder.get_run.",
       input: z.object({ id: z.string().min(1), message: z.string().min(1) }),
       handler: async ({ id, message }, { userId }) =>
         cp(`/api/agents/${encodeURIComponent(id)}/runs`, {
@@ -85,35 +85,35 @@ export const gilly = defineConnector({
         }),
     }),
     defineTool({
-      name: "gilly.get_run",
+      name: "agent_builder.get_run",
       description:
         "Get a background agent run's status and accumulated message/tool/error steps, plus final output or runError.",
       input: z.object({ runId: z.string().min(1) }),
       handler: async ({ runId }) => cp(`/api/runs/${encodeURIComponent(runId)}`),
     }),
     defineTool({
-      name: "gilly.list_skills",
-      description: "List Gilly skills with name and description.",
+      name: "agent_builder.list_skills",
+      description: "List agent skills with name and description.",
       input: z.object({}),
       handler: async () => cp("/api/skills"),
     }),
     defineTool({
-      name: "gilly.get_skill",
-      description: "Get one Gilly skill by name, including content.",
+      name: "agent_builder.get_skill",
+      description: "Get one agent skill by name, including content.",
       input: z.object({ name: z.string().min(1) }),
       handler: async ({ name }) => cp(`/api/skills/${encodeURIComponent(name)}`),
     }),
     defineTool({
-      name: "gilly.create_skill",
+      name: "agent_builder.create_skill",
       description:
-        "Create a Gilly skill. Input: name, description, content (SKILL.md body), optional files[] (supporting scripts the skill runs, bundled next to SKILL.md).",
+        "Create an agent skill. Input: name, description, content (SKILL.md body), optional files[] (supporting scripts the skill runs, bundled next to SKILL.md).",
       input: skillInput,
       handler: async (skill) => cp("/api/skills", { method: "POST", body: JSON.stringify(skill) }),
     }),
     defineTool({
-      name: "gilly.update_skill",
+      name: "agent_builder.update_skill",
       description:
-        "Patch a Gilly skill by name. Provide only the fields to change: description, content, and/or files[] (replaces the full supporting-file set).",
+        "Patch an agent skill by name. Provide only the fields to change: description, content, and/or files[] (replaces the full supporting-file set).",
       input: z.object({ name: z.string().min(1), patch: skillPatch }),
       handler: async ({ name, patch }) => {
         const current = await cp(`/api/skills/${encodeURIComponent(name)}`);

@@ -2,7 +2,7 @@
 
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ActivityBlock, Markdown } from "./page";
+import { ActivityBlock, Markdown } from "./message-content";
 
 test("Markdown renders GFM tables and inline formatting", () => {
   const html = renderToStaticMarkup(

@@ -7,7 +7,7 @@ export type Vault = {
 
 /**
  * AES-256-GCM vault keyed by a hash of `key`. Encoding is `iv:authTag:ciphertext`, all base64.
- * Injectable so tests pass a fixed key; entrypoints pass `GILLY_VAULT_KEY`. Shared by the gateway
+ * Injectable so tests pass a fixed key; entrypoints pass `CREDENTIAL_VAULT_KEY`. Shared by the gateway
  * (connector secrets) and the control plane (Slack connection tokens).
  */
 export function makeVault(key: string): Vault {

@@ -1,4 +1,4 @@
-# Project Gilly — Fleet
+# Floo Agents — Fleet
 
 **Fleet runs one agent across many repositories at once.** You pick an agent, pick a set of repos, and give a task; Fleet spawns a separate run for each repo. See [`control-plane.md`](control-plane.md).
 

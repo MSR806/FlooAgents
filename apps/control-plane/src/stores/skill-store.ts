@@ -1,5 +1,5 @@
-import type { SkillFields, SkillFile } from "@gilly/core";
-import type { SkillBundle } from "@gilly/harness-protocol";
+import type { SkillFields, SkillFile } from "@floo/core";
+import type { SkillBundle } from "@floo/harness-protocol";
 
 /**
  * The skill registry seam. Skills are blob content (a `SKILL.md` + supporting files) — kept on the

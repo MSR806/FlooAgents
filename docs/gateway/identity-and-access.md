@@ -1,6 +1,6 @@
-# Project Gilly — Identity & Access
+# Floo Agents — Identity & Access
 
-**Gilly is single-tenant: one deployment, one org, no workspace/tenant column anywhere. Users are auto-provisioned on first contact — a new Slack user who messages an agent simply appears in the `users` table, with whatever metadata Slack gives us. Access is granted per user, by an admin, after the fact.**
+**Floo Agents is single-tenant: one deployment, one org, no workspace/tenant column anywhere. Users are auto-provisioned on first contact — a new Slack user who messages an agent simply appears in the `users` table, with whatever metadata Slack gives us. Access is granted per user, by an admin, after the fact.**
 
 See [`gateway.md`](gateway.md) for what grants protect.
 
@@ -33,4 +33,4 @@ limited to a trusted network as described in [`SECURITY.md`](../../SECURITY.md).
 
 ## Single Tenant
 
-There is no `workspaces` table and no `workspaceId` column on credentials, grants, or traces. "Workspace" in Gilly keeps its existing meaning only — the run's filesystem sandbox. If multi-tenancy is ever needed, it arrives as a column-add migration, not a redesign; nothing in the gateway's shape fights it.
+There is no `workspaces` table and no `workspaceId` column on credentials, grants, or traces. "Workspace" in Floo Agents keeps its existing meaning only — the run's filesystem sandbox. If multi-tenancy is ever needed, it arrives as a column-add migration, not a redesign; nothing in the gateway's shape fights it.

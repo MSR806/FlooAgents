@@ -2,12 +2,12 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { catalog, invoke } from "./index.ts";
 
 beforeEach(() => {
-  process.env.GILLY_GATEWAY_URL = "http://gw.test";
-  process.env.GILLY_GATEWAY_TOKEN = "tok-123";
+  process.env.TOOL_GATEWAY_URL = "http://gw.test";
+  process.env.TOOL_GATEWAY_TOKEN = "tok-123";
 });
 afterEach(() => {
-  process.env.GILLY_GATEWAY_URL = undefined;
-  process.env.GILLY_GATEWAY_TOKEN = undefined;
+  process.env.TOOL_GATEWAY_URL = undefined;
+  process.env.TOOL_GATEWAY_TOKEN = undefined;
 });
 
 function fakeFetch(body: unknown, ok = true, status = 200) {
@@ -40,7 +40,7 @@ test("invoke preserves a structured gateway error in the thrown message", async 
 });
 
 test("missing env var throws", async () => {
-  process.env.GILLY_GATEWAY_URL = undefined;
+  process.env.TOOL_GATEWAY_URL = undefined;
   const { fn } = fakeFetch({ tools: [] });
-  expect(catalog(undefined, fn)).rejects.toThrow("GILLY_GATEWAY_URL is not set");
+  expect(catalog(undefined, fn)).rejects.toThrow("TOOL_GATEWAY_URL is not set");
 });

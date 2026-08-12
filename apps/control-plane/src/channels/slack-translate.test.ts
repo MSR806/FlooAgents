@@ -48,7 +48,7 @@ test("formatTranscript labels authors, skips empties and the excluded ts", () =>
       { user: "U1", text: "deploy is failing", ts: "1.0" },
       { bot_id: "B1", text: "looking into it", ts: "2.0" },
       { user: "U1", text: "  ", ts: "3.0" },
-      { user: "U2", text: "@gilly help", ts: "4.0" },
+      { user: "U2", text: "@flooagents help", ts: "4.0" },
     ],
     "4.0",
   );

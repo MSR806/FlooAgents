@@ -1,4 +1,4 @@
-import type { Connector, McpConnector, ToolDef } from "@gilly/gateway-kit";
+import type { Connector, McpConnector, ToolDef } from "@floo/gateway-kit";
 import { connectors } from "./connectors/index.ts";
 
 type Entry = { connector: Connector; tool: ToolDef };

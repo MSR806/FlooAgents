@@ -1,6 +1,6 @@
-# Project Gilly - Harnesses
+# Floo Agents - Harnesses
 
-The harness drives one agent loop behind Gilly's stable `harness-protocol` HTTP contract. One
+The harness drives one agent loop behind the stable `harness-protocol` HTTP contract. One
 universal server and image contain both compiled implementations: `claude` and `codex`.
 
 ## Registry and routing
@@ -30,21 +30,21 @@ Legacy flat model configs are normalized only while being read or migrated. The 
 
 ## Sessions
 
-Gilly stores the raw harness session ID with the harness ID that owns it. A follow-up resumes only
+Floo Agents stores the raw harness session ID with the harness ID that owns it. A follow-up resumes only
 when that owner matches the agent's current harness. Changing harness starts a fresh harness
-conversation while preserving the Gilly Session, workspace, and Run history.
+conversation while preserving the platform Session, workspace, and Run history.
 
 ## Claude loop
 
-`apps/harness/src/harness-claude` wraps the Claude Agent SDK. It maps Gilly's `Read`, `Write`, and
+`apps/harness/src/harness-claude` wraps the Claude Agent SDK. It maps the platform's `Read`, `Write`, and
 `Bash` abstractions to Claude SDK tool names, materializes skills under `.claude/skills`, and
-exposes the tooling gateway through an in-process MCP server.
+exposes the Tool Gateway through an in-process MCP server.
 
 ## Codex loop
 
 `apps/harness/src/harness-openai` wraps `@openai/codex-sdk`. It keeps workspace and `CODEX_HOME`
 state separate, injects the system prompt as developer instructions, materializes skills under
-`.agents/skills`, applies Codex's native sandbox, and translates SDK events to Gilly stream events.
+`.agents/skills`, applies Codex's native sandbox, and translates SDK events to platform stream events.
 
 The Codex SDK currently emits completed item snapshots rather than token deltas, so this loop
 streams completed messages and tool events rather than synthesizing token events.

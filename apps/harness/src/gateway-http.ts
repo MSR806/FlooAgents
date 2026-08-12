@@ -2,7 +2,7 @@ const GATEWAY_TIMEOUT_MS = 30_000;
 
 export type GatewayPostResult = { ok: boolean; data: unknown };
 
-/** POST authenticated JSON to Gilly's gateway with a bounded request lifetime. */
+/** POST authenticated JSON to the tool gateway with a bounded request lifetime. */
 export async function gatewayPost(
   url: string,
   token: string,

@@ -1,4 +1,4 @@
-import type { InvocationRequest, InvocationResult, StreamEvent } from "@gilly/harness-protocol";
+import type { InvocationRequest, InvocationResult, StreamEvent } from "@floo/harness-protocol";
 
 /**
  * The control plane → runtime seam. Swappable by design: LocalRuntimeProvider today,

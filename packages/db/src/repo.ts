@@ -8,7 +8,7 @@ import {
   type Session,
   SlackConnection,
   User,
-} from "@gilly/core";
+} from "@floo/core";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "./client.ts";
 import {

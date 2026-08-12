@@ -6,8 +6,8 @@ import {
   parseSkillMd,
   type SkillFields,
   type SkillFile,
-} from "@gilly/core";
-import type { SkillBundle } from "@gilly/harness-protocol";
+} from "@floo/core";
+import type { SkillBundle } from "@floo/harness-protocol";
 import { loadSkills } from "../config.ts";
 import type { SkillStore } from "./skill-store.ts";
 

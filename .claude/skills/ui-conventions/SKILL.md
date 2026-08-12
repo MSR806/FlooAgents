@@ -1,9 +1,9 @@
 ---
 name: ui-conventions
-description: How to build UI in this repo (Gilly's apps/web). Read BEFORE adding or restyling any screen — covers the Paper & Ink design tokens in packages/design-tokens, the no-literal-values rule, the display/sans/mono type roles, PageHeader, the theme mechanism, shadcn-on-Base-UI conventions (the `render` prop, never `asChild`), and how a page reaches the control plane. Triggers "add a page", "style this", "what colour", "dark mode", "theme", "Tailwind", "shadcn", "component", "UI", "design system".
+description: How to build UI in Floo Agents' apps/web. Read BEFORE adding or restyling any screen — covers the Paper & Ink design tokens in packages/design-tokens, the no-literal-values rule, the display/sans/mono type roles, PageHeader, the theme mechanism, shadcn-on-Base-UI conventions (the `render` prop, never `asChild`), and how a page reaches the control plane. Triggers "add a page", "style this", "what colour", "dark mode", "theme", "Tailwind", "shadcn", "component", "UI", "design system".
 ---
 
-# Building UI in Gilly
+# Building UI in Floo Agents
 
 `apps/web` is the Next.js App Router console. Its look is **Paper & Ink**: a warm editorial console — paper background, near-square 4px radius, borders instead of shadows, a heavy display face for page titles, and monospace for every value an operator reads.
 
@@ -20,7 +20,7 @@ The palette is **monochrome by choice**. Character comes from the display face, 
 @import "../../../packages/design-tokens/tokens.css";
 ```
 
-> Relative, not `@gilly/design-tokens/tokens.css`. Tailwind's CSS resolver doesn't do bare-specifier lookup here, and Node rejects `imports` targets inside `node_modules`. Don't "fix" this to a package specifier without checking `next dev` still compiles.
+> Relative, not `@floo/design-tokens/tokens.css`. Tailwind's CSS resolver doesn't do bare-specifier lookup here, and Node rejects `imports` targets inside `node_modules`. Don't "fix" this to a package specifier without checking `next dev` still compiles.
 
 ## The one rule
 
@@ -88,7 +88,7 @@ Paper is the default; Ink applies only when explicitly chosen. `.dark` on `<html
 - [`lib/theme.ts`](../../../apps/web/lib/theme.ts) — `resolveTheme()` plus `THEME_INIT_SCRIPT`, which runs in `<head>` before first paint so Ink users never flash Paper. Covered by `lib/theme.test.ts`.
 - [`components/theme-toggle.tsx`](../../../apps/web/components/theme-toggle.tsx) — the `INK | PAPER` control in the sidebar footer.
 
-Always check a change in **both**: `localStorage.gilly-theme = "ink"` then reload.
+Always check a change in **both**: `localStorage.setItem("console-theme", "ink")` then reload.
 
 ## Pages
 

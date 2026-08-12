@@ -103,7 +103,7 @@ test("initial discovery includes connected and no-auth tools and recreates keyed
   let key = "key-1";
   const service = createComposioService({
     getApiKey: () => key,
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () => fakeClient(log),
   });
 
@@ -127,21 +127,21 @@ test("initial discovery includes connected and no-auth tools and recreates keyed
     noAuth: false,
   });
   expect(page.items.some((item) => item.slug.startsWith("composio"))).toBe(false);
-  expect(await service.authorize("gmail", "https://gilly.example/callback")).toBe(
+  expect(await service.authorize("gmail", "https://app.example/callback")).toBe(
     "https://connect.composio.dev/link/1",
   );
   expect(await service.execute("GMAIL_SEND_EMAIL", {})).toEqual({ ok: true });
   expect(await service.execute("GMAIL_EMPTY", {})).toBeNull();
   key = "key-2";
   await service.listTools();
-  expect(log.filter((entry) => entry === "create:gilly-shared")).toHaveLength(2);
+  expect(log.filter((entry) => entry === "create:shared")).toHaveLength(2);
 });
 
 test("connected discovery is not blocked by the full no-auth toolkit scan", async () => {
   const inputs: ToolkitInput[] = [];
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () =>
       fakeClient([], {
         toolkitPage: (input) => {
@@ -172,7 +172,7 @@ test("no-auth discovery retries after timeout and ignores the stale attempt", as
   const releases: ((page: ToolkitPage) => void)[] = [];
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () =>
       fakeClient([], {
         toolkitPage: (input) => {
@@ -203,7 +203,7 @@ test("no-auth discovery retries after timeout and ignores the stale attempt", as
 test("initial discovery waits briefly for a warming no-auth scan", async () => {
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () =>
       fakeClient([], {
         toolkitPage: async (input) => {
@@ -231,7 +231,7 @@ test("a rejected cached session is cleared so the next call retries", async () =
   };
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () => client,
   });
 
@@ -251,7 +251,7 @@ test("a rejected old session does not clear the replacement for a new key", asyn
   let clients = 0;
   const service = createComposioService({
     getApiKey: () => key,
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: (apiKey) => {
       clients += 1;
       return apiKey === "old" ? oldClient : fakeClient([]);
@@ -313,7 +313,7 @@ test("a stale no-auth scan does not block warming after an API key change", asyn
   });
   const service = createComposioService({
     getApiKey: () => key,
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: (apiKey) => (apiKey === "old" ? oldClient : newClient),
     noAuthDiscoveryTimeoutMs: 5,
   });
@@ -335,7 +335,7 @@ test("connected toolkit discovery stops on a non-advancing cursor", async () => 
   let pages = 0;
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () =>
       fakeClient([], {
         toolkitPage: (input) => {
@@ -354,7 +354,7 @@ test("connected toolkit discovery has a maximum page count", async () => {
   let pages = 0;
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () =>
       fakeClient([], {
         toolkitPage: (input) => {
@@ -372,7 +372,7 @@ test("connected toolkit discovery has a maximum page count", async () => {
 test("service reports missing connections distinctly", async () => {
   const service = createComposioService({
     getApiKey: () => "key",
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () => fakeClient([]),
   });
   await expect(service.execute("GMAIL_FAIL", {})).rejects.toBeInstanceOf(ComposioNotConnectedError);
@@ -381,7 +381,7 @@ test("service reports missing connections distinctly", async () => {
 test("unconfigured service returns structured toolkit status without creating a client", async () => {
   const service = createComposioService({
     getApiKey: () => undefined,
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () => {
       throw new Error("must not create");
     },
@@ -394,7 +394,7 @@ test("malformed stored credentials are recoverable as unconfigured", async () =>
     getApiKey: () => {
       throw new Error("decrypt failed");
     },
-    userId: "gilly-shared",
+    userId: "shared",
     createClient: () => {
       throw new Error("must not create");
     },
@@ -408,11 +408,11 @@ test("authorize requires an absolute HTTPS redirect URL", async () => {
   for (const redirectUrl of [undefined, "/relative", "http://connect.composio.dev/link/1"]) {
     const service = createComposioService({
       getApiKey: () => "key",
-      userId: "gilly-shared",
+      userId: "shared",
       createClient: () => fakeClient([], { redirectUrl }),
     });
-    await expect(
-      service.authorize("gmail", "https://gilly.example/callback"),
-    ).rejects.toBeInstanceOf(ComposioProviderError);
+    await expect(service.authorize("gmail", "https://app.example/callback")).rejects.toBeInstanceOf(
+      ComposioProviderError,
+    );
   }
 });

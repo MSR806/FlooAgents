@@ -1,4 +1,4 @@
-import { defineMcpConnector } from "@gilly/gateway-kit";
+import { defineMcpConnector } from "@floo/gateway-kit";
 
 /** Amplitude's hosted MCP server (streamable HTTP, PAT bearer). Its analytics tools are discovered, not written. */
 export const amplitude = defineMcpConnector({

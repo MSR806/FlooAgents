@@ -1,14 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { makeVault } from "@gilly/core";
+import { makeVault } from "@floo/core";
 import {
   createDb,
   failRunningRunsBySource,
   getAgent,
   setAdmin,
   upsertUserBySlackId,
-} from "@gilly/db";
-import { LocalRuntimeProvider } from "@gilly/runtime";
+} from "@floo/db";
+import { LocalRuntimeProvider } from "@floo/runtime";
 import type { Channel } from "./channels/channel.ts";
 import { createSlackManager } from "./channels/slack-manager.ts";
 import { createWebChannel } from "./channels/web.ts";
@@ -27,17 +27,18 @@ const BUILTIN_AGENTS_DIR = resolve(
   process.env.BUILTIN_AGENTS_DIR ?? "config/builtin-agents",
 );
 const SKILLS_DIR = resolve(repoRoot, process.env.SKILLS_DIR ?? "config/skills");
-const DATABASE_PATH = resolve(repoRoot, process.env.DATABASE_PATH ?? "data/gilly.db");
+const DATABASE_PATH = resolve(repoRoot, process.env.DATABASE_PATH ?? "data/platform.db");
 const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8080";
 const WEB_PORT = Number(process.env.WEB_PORT ?? 4000);
-const GILLY_GATEWAY_URL = process.env.GILLY_GATEWAY_URL;
-const GILLY_ADMIN_TOKEN = process.env.GILLY_ADMIN_TOKEN;
+const TOOL_GATEWAY_URL = process.env.TOOL_GATEWAY_URL;
+const INTERNAL_API_TOKEN = process.env.INTERNAL_API_TOKEN;
 const GATEWAY_DISCOVERY_TIMEOUT_MS = Number(
-  process.env.GILLY_GATEWAY_DISCOVERY_TIMEOUT_MS ?? 10_000,
+  process.env.TOOL_GATEWAY_DISCOVERY_TIMEOUT_MS ?? 10_000,
 );
 
-const vaultKey = process.env.GILLY_VAULT_KEY;
-if (!vaultKey) throw new Error("GILLY_VAULT_KEY is required (encrypts Slack connection tokens)");
+const vaultKey = process.env.CREDENTIAL_VAULT_KEY;
+if (!vaultKey)
+  throw new Error("CREDENTIAL_VAULT_KEY is required (encrypts Slack connection tokens)");
 
 mkdirSync(dirname(DATABASE_PATH), { recursive: true });
 const db = createDb(DATABASE_PATH);
@@ -67,8 +68,8 @@ const engine = createEngine({
   runtime,
   getAgent: (id) => builtinAgents.get(id) ?? getAgent(db, id),
   getSkill: (name) => skillStore.get(name),
-  gatewayUrl: GILLY_GATEWAY_URL,
-  gatewayAdminToken: GILLY_ADMIN_TOKEN,
+  gatewayUrl: TOOL_GATEWAY_URL,
+  gatewayAdminToken: INTERNAL_API_TOKEN,
   gatewayDiscoveryTimeoutMs: GATEWAY_DISCOVERY_TIMEOUT_MS,
 });
 
@@ -83,8 +84,8 @@ const channels: Channel[] = [
     db,
     skillStore,
     port: WEB_PORT,
-    gatewayUrl: GILLY_GATEWAY_URL,
-    adminToken: GILLY_ADMIN_TOKEN,
+    gatewayUrl: TOOL_GATEWAY_URL,
+    adminToken: INTERNAL_API_TOKEN,
     vault,
     slackManager: slack,
     webUserId: webUser.id,
@@ -94,4 +95,6 @@ const channels: Channel[] = [
 ];
 
 await Promise.all(channels.map((c) => c.start()));
-console.log(`⚡️ Gilly control plane ready — channels: ${channels.map((c) => c.name).join(", ")}`);
+console.log(
+  `⚡️ Floo Agents control plane ready — channels: ${channels.map((c) => c.name).join(", ")}`,
+);

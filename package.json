@@ -1,16 +1,16 @@
 {
-  "name": "gilly",
+  "name": "floo",
   "private": true,
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MSR806/project-gilly.git"
+    "url": "git+https://github.com/MSR806/FlooAgents.git"
   },
   "bugs": {
-    "url": "https://github.com/MSR806/project-gilly/issues"
+    "url": "https://github.com/MSR806/FlooAgents/issues"
   },
-  "homepage": "https://github.com/MSR806/project-gilly#readme",
+  "homepage": "https://github.com/MSR806/FlooAgents#readme",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -21,13 +21,13 @@
     "test": "bun test",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "dev:harness": "bun run --filter '@gilly/harness' dev",
-    "dev:control-plane": "bun run --filter '@gilly/control-plane' dev",
-    "dev:gateway": "bun run --filter '@gilly/gateway' dev",
-    "dev:web": "bun run --filter '@gilly/web' dev"
+    "dev:harness": "bun run --filter '@floo/harness' dev",
+    "dev:control-plane": "bun run --filter '@floo/control-plane' dev",
+    "dev:gateway": "bun run --filter '@floo/gateway' dev",
+    "dev:web": "bun run --filter '@floo/web' dev"
   },
   "dependencies": {
-    "@gilly/gateway-client": "workspace:*"
+    "@floo/gateway-client": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

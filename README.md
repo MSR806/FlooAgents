@@ -1,8 +1,14 @@
 <div align="center">
 
-# Project Gilly
+<img src="apps/web/public/brand/floo-agents-owl-sitting.png" alt="Floo Agents owl mascot" width="180" />
+
+# Floo Agents
+
+**Any agent. Any harness. Any channel.**
 
 Open-source platform for building AI agents and connecting them to where work happens.
+
+[flooagents.com](https://flooagents.com)
 
 [![Status](https://img.shields.io/badge/status-active%20development-2ea44f)](#project-status)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -11,21 +17,21 @@ Open-source platform for building AI agents and connecting them to where work ha
 
 </div>
 
-Gilly is a Bun + TypeScript monorepo for turning reusable agent definitions into
+Floo Agents is a Bun + TypeScript monorepo for turning reusable agent definitions into
 real workflows: Slack conversations, local harness runs, session tracking, and
 eventually broader triggers like GitHub, cron, and fleet runs.
 
 The current build is intentionally narrow: prove the agent platform spine end to
 end before adding more surfaces.
 
-## Why Gilly Exists
+## Why Floo Agents Exists
 
 The best AI engineering workflows today often happen in local harnesses like
 Claude Code, Codex, and OpenCode. They are flexible, high-quality, and deeply
 customizable. Most cloud agent platforms solve automation and deployment, but
 they also force teams into one harness, one tool model, and one execution model.
 
-Gilly is built around a different bet: the harness should be replaceable. Teams
+Floo Agents is built around a different bet: the harness should be replaceable. Teams
 should be able to bring the agent harness that works best for the job, connect
 their own tools, and run the agent from the surfaces where work already starts.
 
@@ -44,7 +50,7 @@ Codex loop. The data-backed harness registry owns enabled state and offered mode
 harness-owned session references are persisted in SQLite so follow-ups resume only on the matching
 harness.
 
-## What Gilly Provides
+## What Floo Agents Provides
 
 | Area | Today |
 | --- | --- |
@@ -54,7 +60,7 @@ harness.
 | Harness | Universal registry-backed endpoint for Claude Agent SDK and OpenAI Codex SDK |
 | Runtime | Local HTTP runtime provider with an AgentCore-compatible contract |
 | Storage | SQLite agents, harness registry, and operational state via Drizzle |
-| Tooling | Canonical provider-neutral gateway for custom tools and Composio toolkits |
+| Tool Gateway | Canonical provider-neutral gateway for custom tools and Composio toolkits |
 | Web | Next.js UI for managing agents, skills, channels, tools, users, and chats |
 
 ## Architecture
@@ -85,7 +91,7 @@ Key boundaries:
 
 ## Vision
 
-Gilly aims to become the harness-agnostic cloud layer for enterprise agents:
+Floo Agents aims to become the harness-agnostic cloud layer for enterprise agents:
 connect any harness, any model, any tool, and trigger agents from Slack, web,
 scheduled jobs, GitHub events, or other workflow surfaces.
 
@@ -114,19 +120,19 @@ cp apps/control-plane/.env.example apps/control-plane/.env
 cp apps/gateway/.env.example apps/gateway/.env
 ```
 
-Set the provider credentials you use in `apps/harness/.env`. Use the same `GILLY_ADMIN_TOKEN` in
+Set the provider credentials you use in `apps/harness/.env`. Use the same `INTERNAL_API_TOKEN` in
 the control-plane and gateway env files; it is an internal server-to-server secret and must never
 be sent to the browser. `HARNESS_URL` is the single endpoint for Claude and OpenAI models.
 
 The web management UI currently has no browser authentication and assumes a trusted deployment.
-Docker binds published ports to loopback by default. Set `GILLY_BIND_ADDRESS` only to an address
-on a trusted network; never expose the management ports publicly.
+Docker always binds the control-plane and Tool Gateway ports to loopback. `BIND_ADDRESS` controls
+only the web UI; set it only to an address on a trusted network and never expose it publicly.
 
 Then run the services you need:
 
 ```bash
 bun run dev:harness         # Claude/OpenAI harness on :8080
-bun run dev:gateway         # provider-neutral tooling gateway on :4100
+bun run dev:gateway         # provider-neutral Tool Gateway on :4100
 bun run dev:control-plane   # API + Slack listener on :4000
 bun run dev:web             # web UI on :3000
 ```
@@ -157,7 +163,7 @@ service hostnames and container paths. Keep `WEB_PORT=4000` in
 ```text
 apps/control-plane       Slack/Web channel handling, sessions, runs
 apps/harness             Shared server with Claude and OpenAI harness loops
-apps/gateway             Provider-neutral tooling gateway
+apps/gateway             Provider-neutral Tool Gateway
 apps/web                 Next.js management UI
 packages/core            Domain model + Zod schemas
 packages/db              SQLite + Drizzle state and agent config
@@ -174,11 +180,11 @@ docker                   Dockerfiles and compose stack
 
 ## Docs
 
-- [Project overview](docs/PROJECT_GILLY.md)
+- [Project overview](docs/overview.md)
 - [MVP scope](docs/mvp-scope.md)
 - [Repo architecture](docs/engineering/repo-architecture.md)
 - [Control plane](docs/control-plane/control-plane.md)
-- [Gateway](docs/gateway/gateway.md)
+- [Tool Gateway](docs/gateway/gateway.md)
 - [Runtime](docs/runtime/runtime.md)
 
 ## Contributing

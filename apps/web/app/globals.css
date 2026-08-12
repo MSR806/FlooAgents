@@ -1,9 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-/* Palettes live in @gilly/design-tokens so the landing page (#16) and docs site (#15)
+/* Palettes live in @floo/design-tokens so the landing page (#16) and docs site (#15)
    inherit the same look. Imported last so its :root wins over shadcn's defaults.
-   Relative, not "@gilly/design-tokens/tokens.css": Tailwind's CSS resolver doesn't do
+   Relative, not "@floo/design-tokens/tokens.css": Tailwind's CSS resolver doesn't do
    bare-specifier lookup here, and Node rejects `imports` targets inside node_modules. */
 @import "../../../packages/design-tokens/tokens.css";
 

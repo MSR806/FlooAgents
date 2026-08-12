@@ -11,7 +11,7 @@ import {
   listAgents,
   schema,
   updateHarness,
-} from "@gilly/db";
+} from "@floo/db";
 import {
   loadAgents,
   loadBuiltinAgents,
@@ -29,20 +29,20 @@ const agent = {
 };
 
 test("loadAgents reads and keys configs by id", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "echo.json"), JSON.stringify(agent));
   const agents = loadAgents(dir);
   expect(agents.get("echo")).toEqual(agent);
 });
 
 test("loadAgents throws on invalid config", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "bad.json"), JSON.stringify({ id: "x" }));
   expect(() => loadAgents(dir)).toThrow();
 });
 
 test("legacy flat model configs normalize in memory and custom models remain loadable", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(
     join(dir, "legacy.json"),
     JSON.stringify({ id: "legacy", name: "Legacy", model: "private-model", systemPrompt: "x" }),
@@ -65,7 +65,7 @@ test("legacy flat model configs normalize in memory and custom models remain loa
 });
 
 test("loadSkills bundles a folder's files; requires SKILL.md", () => {
-  const dir = tmp("gilly-skills-");
+  const dir = tmp("platform-skills-");
   const skill = join(dir, "cut-release");
   mkdirSync(join(skill, "ref"), { recursive: true });
   writeFileSync(join(skill, "SKILL.md"), "# Cut a release");
@@ -74,14 +74,14 @@ test("loadSkills bundles a folder's files; requires SKILL.md", () => {
   expect(bundle?.name).toBe("cut-release");
   expect(new Set(bundle?.files.map((f) => f.path))).toEqual(new Set(["SKILL.md", "ref/notes.md"]));
 
-  const bad = tmp("gilly-skills-");
+  const bad = tmp("platform-skills-");
   mkdirSync(join(bad, "broken"));
   writeFileSync(join(bad, "broken", "readme.md"), "no skill file");
   expect(() => loadSkills(bad)).toThrow(/SKILL.md/);
 });
 
 test("syncAgents upserts config on every boot: new files added, existing overwritten", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "echo.json"), JSON.stringify(agent));
   const db = createDb(":memory:");
 
@@ -101,7 +101,7 @@ test("syncAgents upserts config on every boot: new files added, existing overwri
 });
 
 test("syncAgents leaves DB-only agents (no config file) untouched", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "echo.json"), JSON.stringify(agent));
   const db = createDb(":memory:");
   syncAgents(db, dir);
@@ -117,7 +117,7 @@ test("syncAgents leaves DB-only agents (no config file) untouched", () => {
 });
 
 test("syncAgents keeps booting after a file-backed harness becomes unavailable", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "echo.json"), JSON.stringify(agent));
   const db = createDb(":memory:");
   syncAgents(db, dir);
@@ -129,7 +129,7 @@ test("syncAgents keeps booting after a file-backed harness becomes unavailable",
 });
 
 test("syncAgents preserves legacy connectors until they can migrate", () => {
-  const dir = tmp("gilly-agents-");
+  const dir = tmp("platform-agents-");
   writeFileSync(join(dir, "echo.json"), JSON.stringify({ ...agent, connectors: ["echo"] }));
   const db = createDb(":memory:");
   db.insert(schema.agents)
@@ -151,7 +151,7 @@ test("syncAgents preserves legacy connectors until they can migrate", () => {
 });
 
 test("loadBuiltinAgents keys configs by id and tolerates a missing directory", () => {
-  const dir = tmp("gilly-builtin-");
+  const dir = tmp("platform-builtin-");
   writeFileSync(join(dir, "builder.json"), JSON.stringify({ ...agent, id: "agent-builder" }));
 
   const builtins = loadBuiltinAgents(dir);

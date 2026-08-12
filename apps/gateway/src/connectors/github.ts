@@ -1,4 +1,4 @@
-import { defineMcpConnector } from "@gilly/gateway-kit";
+import { defineMcpConnector } from "@floo/gateway-kit";
 
 /** GitHub's hosted MCP server, reached over Streamable HTTP with a PAT bearer token. */
 export const github = defineMcpConnector({

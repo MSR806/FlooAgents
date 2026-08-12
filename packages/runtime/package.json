@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/runtime",
+  "name": "@floo/runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gilly/core": "workspace:*",
-    "@gilly/harness-protocol": "workspace:*"
+    "@floo/core": "workspace:*",
+    "@floo/harness-protocol": "workspace:*"
   }
 }

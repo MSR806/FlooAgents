@@ -17,7 +17,7 @@ import {
 } from "./repo.ts";
 
 test("legacy agent/session migration is idempotent and preserves custom models", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "gilly-migration-")), "gilly.db");
+  const path = join(mkdtempSync(join(tmpdir(), "platform-migration-")), "platform.db");
   const legacy = new Database(path);
   legacy.exec(`
     CREATE TABLE agents (
@@ -80,7 +80,7 @@ test("legacy agent/session migration is idempotent and preserves custom models",
 });
 
 test("migrates Slack bindings to nullable one-to-one rows deterministically", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "gilly-slack-migration-")), "gilly.db");
+  const path = join(mkdtempSync(join(tmpdir(), "platform-slack-migration-")), "platform.db");
   const legacy = new Database(path);
   legacy.exec(`
     CREATE TABLE agents (
@@ -113,7 +113,7 @@ test("migrates Slack bindings to nullable one-to-one rows deterministically", ()
 });
 
 test("rebuilds Slack bindings when agent uniqueness is only a partial index", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "gilly-slack-partial-index-")), "gilly.db");
+  const path = join(mkdtempSync(join(tmpdir(), "platform-slack-partial-index-")), "platform.db");
   const legacy = new Database(path);
   legacy.exec(`
     CREATE TABLE agents (
@@ -140,7 +140,7 @@ test("rebuilds Slack bindings when agent uniqueness is only a partial index", ()
 });
 
 test("adds images to the predecessor harness registry without breaking custom rows", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "gilly-harness-image-")), "gilly.db");
+  const path = join(mkdtempSync(join(tmpdir(), "platform-harness-image-")), "platform.db");
   const legacy = new Database(path);
   legacy.exec(`
     CREATE TABLE harnesses (
@@ -176,7 +176,7 @@ test("adds images to the predecessor harness registry without breaking custom ro
 });
 
 test("migrates legacy connectors to exact custom tools without widening providers", () => {
-  const path = join(mkdtempSync(join(tmpdir(), "gilly-db-migration-")), "legacy.db");
+  const path = join(mkdtempSync(join(tmpdir(), "platform-db-migration-")), "legacy.db");
   const legacy = new Database(path);
   legacy.exec(`
     CREATE TABLE agents (

@@ -1,5 +1,5 @@
 {
-  "name": "@gilly/harness-protocol",
+  "name": "@floo/harness-protocol",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gilly/core": "workspace:*",
+    "@floo/core": "workspace:*",
     "zod": "^4.4.3"
   }
 }

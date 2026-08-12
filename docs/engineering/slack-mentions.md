@@ -1,6 +1,6 @@
-# Project Gilly — Slack Mention Channel
+# Floo Agents — Slack Mention Channel
 
-Gilly responds when a user `@mention`s a bound bot in a Slack channel. Each Slack thread maps to a Gilly session, so follow-ups resume the same harness session and messages arriving during a run are queued. Slack Assistant and Agent views are deferred.
+Floo Agents responds when a user `@mention`s a bound bot in a Slack channel. Each Slack thread maps to a Floo Agents session, so follow-ups resume the same harness session and messages arriving during a run are queued. Slack Assistant and Agent views are deferred.
 
 Implemented in `apps/control-plane/src/channels/slack.ts`. See [`channel.md`](../control-plane/channel.md).
 

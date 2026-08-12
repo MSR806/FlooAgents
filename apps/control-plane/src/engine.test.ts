@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentConfig } from "@gilly/core";
+import type { AgentConfig } from "@floo/core";
 import {
   addGrant,
   createDb,
@@ -16,9 +16,9 @@ import {
   setHarnessSession,
   updateHarness,
   upsertUserBySlackId,
-} from "@gilly/db";
-import type { InvocationRequest } from "@gilly/harness-protocol";
-import type { RuntimeProvider, StreamEvent } from "@gilly/runtime";
+} from "@floo/db";
+import type { InvocationRequest } from "@floo/harness-protocol";
+import type { RuntimeProvider, StreamEvent } from "@floo/runtime";
 import { createEngine } from "./engine.ts";
 
 type InvocationResult = Awaited<ReturnType<RuntimeProvider["invoke"]>>;

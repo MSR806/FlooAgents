@@ -1,4 +1,4 @@
-import type { StreamEvent } from "@gilly/runtime";
+import type { StreamEvent } from "@floo/runtime";
 
 const MAX_ACTIVITY_LENGTH = 72;
 const COMMAND_TOOLS = new Set([

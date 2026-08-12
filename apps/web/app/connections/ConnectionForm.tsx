@@ -7,24 +7,20 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type SlackConnection, slackStartupError } from "./connection-helpers";
+import {
+  type SlackConnection,
+  slackStartupError,
+  validateSlackBotName,
+} from "./connection-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
-
-/** Slack app/display name → lowercase, hyphenated (Slack rejects spaces/punctuation). */
-const slugify = (s: string) =>
-  s
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
 
 // Socket Mode → no public URL, so the manifest is static except the bot name (mirrors
 // docs/slack-app-manifest.yaml). The name lands in both display_information and bot_user.
 const buildManifest = (botName: string) => `display_information:
   name: ${botName}
-  description: Always working cloud agent
-  background_color: "#000d63"
+  description: Any agent. Any harness. Any channel.
+  background_color: "#091c32"
 features:
   bot_user:
     display_name: ${botName}
@@ -79,10 +75,10 @@ export default function ConnectionForm({
   const [copied, setCopied] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
-  // Create-wizard state. `suffix` → botName `gilly-<suffix>` (also the connection name).
+  // Create-wizard state. `suffix` → botName `flooagents-<suffix>` (also the connection name).
   const [step, setStep] = useState(0);
   const [suffix, setSuffix] = useState("");
-  const botName = suffix ? `gilly-${slugify(suffix)}` : "";
+  const { name: botName, error: botNameError } = validateSlackBotName(suffix);
 
   // Shared token state (create + edit).
   const [name, setName] = useState(initial?.name ?? "");
@@ -90,7 +86,7 @@ export default function ConnectionForm({
   const [appToken, setAppToken] = useState("");
 
   async function copyManifest() {
-    await navigator.clipboard.writeText(buildManifest(botName || "gilly-bot"));
+    await navigator.clipboard.writeText(buildManifest(botName || "flooagents-bot"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -251,7 +247,7 @@ export default function ConnectionForm({
 
   // --- Create: a next/next wizard ---
   const canAdvance =
-    step === 0 ? botName.length > 6 : step === 2 ? !!botToken.trim() && !!appToken.trim() : true;
+    step === 0 ? !!botName : step === 2 ? !!botToken.trim() && !!appToken.trim() : true;
   const last = step === CREATE_STEPS.length - 1;
 
   return (
@@ -281,18 +277,27 @@ export default function ConnectionForm({
         <div className="grid gap-2">
           <Label htmlFor="conn-suffix">Bot name</Label>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">gilly-</span>
+            <span className="text-sm text-muted-foreground">flooagents-</span>
             <Input
               id="conn-suffix"
               value={suffix}
               autoFocus
               placeholder="acme"
+              aria-invalid={!!botNameError}
+              aria-describedby="conn-suffix-help"
               onChange={(e) => setSuffix(e.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Your bot will be named <code>{botName || "gilly-…"}</code> in Slack and in this list.
-          </p>
+          {botNameError ? (
+            <p id="conn-suffix-help" role="alert" className="text-xs text-destructive">
+              {botNameError}
+            </p>
+          ) : (
+            <p id="conn-suffix-help" className="text-xs text-muted-foreground">
+              Your bot will be named <code>{botName || "flooagents-…"}</code> in Slack and in this
+              list.
+            </p>
+          )}
         </div>
       ) : null}
 

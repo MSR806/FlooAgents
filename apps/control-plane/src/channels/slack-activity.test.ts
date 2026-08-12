@@ -6,7 +6,7 @@ test("compacts generated workspace paths for Slack without changing the event", 
     type: "tool" as const,
     name: "Read",
     summary:
-      "/Users/msr/project-gilly/data/workspaces/9d217d8f-a28a-4dd0-898d-70ed41238ee7/vaani-backend/app/services/translation/translation_service.py",
+      "/workspace/data/workspaces/9d217d8f-a28a-4dd0-898d-70ed41238ee7/vaani-backend/app/services/translation/translation_service.py",
   };
 
   expect(toSlackActivity(event)).toEqual({

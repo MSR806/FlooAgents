@@ -1,15 +1,15 @@
-# Project Gilly — Control Plane
+# Floo Agents — Control Plane
 
-**The control plane is Gilly itself: the custom server that decides what runs, when, with what access, and where results go. The harness and runtime sit below it; the control plane is the source of truth above them both.**
+**The control plane is Floo Agents itself: the custom server that decides what runs, when, with what access, and where results go. The harness and runtime sit below it; the control plane is the source of truth above them both.**
 
-The harness drives the agent loop and the runtime gives it a box to run in — but neither knows what an *agent* is, what it's allowed to touch, what starts it, or where its output should land. That knowledge lives in the control plane. It is the only layer Gilly fully builds and owns; the layers beneath it are vendor choices kept deliberately replaceable.
+The harness drives the agent loop and the runtime gives it a box to run in — but neither knows what an *agent* is, what it's allowed to touch, what starts it, or where its output should land. That knowledge lives in the control plane. It is the only layer Floo Agents fully builds and owns; the layers beneath it are vendor choices kept deliberately replaceable.
 
 ---
 
 ## The Layering
 
 ```text
-Control Plane (Gilly)   →  what runs, when, with what access, where results go     [custom server]  ← THIS LAYER
+Control Plane                 →  what runs, when, with what access, where results go     [custom server]  ← THIS LAYER
    Harness              →  the agent loop                                           [Claude / OpenAI SDK]
    Runtime              →  the sandbox the harness runs inside                       [AWS Bedrock AgentCore]
 ```

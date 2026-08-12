@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { query as realQuery, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { InvocationRequest } from "@gilly/harness-protocol";
+import type { InvocationRequest } from "@floo/harness-protocol";
 import {
   buildOptions,
   expandTools,
@@ -20,7 +20,7 @@ import {
 
 type Query = typeof realQuery;
 
-test("expandTools maps Gilly abstractions to SDK tools and de-dupes; unknowns pass through", () => {
+test("expandTools maps platform abstractions to SDK tools and de-dupes; unknowns pass through", () => {
   expect(expandTools(["Read", "Write", "Bash"])).toEqual([
     "Read",
     "Glob",
@@ -101,11 +101,11 @@ test("workspaceDir joins WORKSPACES_DIR with the workspace handle", () => {
   const previous = process.env.WORKSPACES_DIR;
   const repoRoot = resolve(import.meta.dir, "../../../..");
   try {
-    process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
+    process.env.WORKSPACES_DIR = "/tmp/platform-ws";
     expect(workspaceDir({ ...req, workspace: { provider: "local", handle: "s1" } })).toBe(
-      "/tmp/gilly-ws/s1",
+      "/tmp/platform-ws/s1",
     );
-    expect(workspaceDir(req)).toBe("/tmp/gilly-ws/default");
+    expect(workspaceDir(req)).toBe("/tmp/platform-ws/default");
 
     process.env.WORKSPACES_DIR = "relative-workspaces";
     expect(workspaceDir(req)).toBe(join(repoRoot, "relative-workspaces", "default"));
@@ -129,10 +129,10 @@ test("buildOptions: a tool-less agent stays chat-only (no cwd, plain prompt)", (
 });
 
 test("buildOptions: granting tools enables a workspace + bypassed permissions", () => {
-  process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
+  process.env.WORKSPACES_DIR = "/tmp/platform-ws";
   const coding: InvocationRequest = {
     ...req,
-    // Gilly abstractions; the harness expands Read → Read/Glob/Grep before reaching the SDK.
+    // platform abstractions; the harness expands Read → Read/Glob/Grep before reaching the SDK.
     agent: { ...req.agent, tools: ["Read", "Bash"] },
     workspace: { provider: "local", handle: "s2" },
   };
@@ -140,13 +140,13 @@ test("buildOptions: granting tools enables a workspace + bypassed permissions", 
   expect(opts.allowedTools).toEqual(["Read", "Glob", "Grep", "Bash"]);
   expect(opts.permissionMode).toBe("bypassPermissions");
   expect(opts.allowDangerouslySkipPermissions).toBe(true);
-  expect(opts.cwd).toBe("/tmp/gilly-ws/s2");
+  expect(opts.cwd).toBe("/tmp/platform-ws/s2");
   expect(opts.systemPrompt).toEqual({ type: "preset", preset: "claude_code", append: "do x" });
   delete process.env.WORKSPACES_DIR;
 });
 
 test("buildOptions: attaching a skill enables the Skill tool, a workspace, and the project source", () => {
-  process.env.WORKSPACES_DIR = "/tmp/gilly-ws";
+  process.env.WORKSPACES_DIR = "/tmp/platform-ws";
   const opts = buildOptions(
     {
       ...req,
@@ -157,13 +157,13 @@ test("buildOptions: attaching a skill enables the Skill tool, a workspace, and t
   );
   expect(opts.allowedTools).toEqual(["Skill"]);
   expect(opts.settingSources).toEqual(["project"]);
-  expect(opts.cwd).toBe("/tmp/gilly-ws/s5");
+  expect(opts.cwd).toBe("/tmp/platform-ws/s5");
   expect(opts.systemPrompt).toEqual({ type: "preset", preset: "claude_code", append: "do x" });
   delete process.env.WORKSPACES_DIR;
 });
 
 test("materializeSkills writes each file under <cwd>/.claude/skills/<name>/", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "gilly-ws-"));
+  const cwd = mkdtempSync(join(tmpdir(), "platform-ws-"));
   materializeSkills(
     [
       {
@@ -192,10 +192,12 @@ test("summarizeToolUse picks the salient arg and truncates", () => {
   expect(summarizeToolUse({ file_path: "src/index.ts" })).toBe("src/index.ts");
   expect(summarizeToolUse({ pattern: "TODO" })).toBe("TODO");
   expect(summarizeToolUse({ description: "review the PR" })).toBe("review the PR");
-  expect(summarizeToolUse({ tool: "gilly.get_agent", input: { id: "coder" } })).toBe(
-    "gilly.get_agent — coder",
+  expect(summarizeToolUse({ tool: "agent_builder.get_agent", input: { id: "coder" } })).toBe(
+    "agent_builder.get_agent — coder",
   );
-  expect(summarizeToolUse({ tool: "gilly.list_agents", input: {} })).toBe("gilly.list_agents");
+  expect(summarizeToolUse({ tool: "agent_builder.list_agents", input: {} })).toBe(
+    "agent_builder.list_agents",
+  );
   expect(
     summarizeToolUse({
       tool: "jira.searchJiraIssuesUsingJql",
@@ -259,8 +261,8 @@ test("buildOptions: a gateway wires the two MCP tools, the server, and env (keep
     "mcp__gateway__gateway_invoke",
   ]);
   expect(opts.mcpServers?.gateway).toBeDefined();
-  expect(opts.env?.GILLY_GATEWAY_URL).toBe("http://gw");
-  expect(opts.env?.GILLY_GATEWAY_TOKEN).toBe("tok");
+  expect(opts.env?.TOOL_GATEWAY_URL).toBe("http://gw");
+  expect(opts.env?.TOOL_GATEWAY_TOKEN).toBe("tok");
   expect(opts.env?.PATH).toBe(process.env.PATH); // process.env spread survives
   // Gateway alone is agentic: bypassed permissions, but no workspace forced.
   expect(opts.permissionMode).toBe("bypassPermissions");

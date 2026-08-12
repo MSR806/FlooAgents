@@ -1,24 +1,29 @@
-# Project Gilly — Session Lifecycle
+# Floo Agents — Session Lifecycle
 
-**A Session is Gilly's durable work context.** It is created by the control plane when work begins, reused for follow-ups, and tracked until the work is complete or abandoned. The runtime provider may also have its own session concept, but that is an implementation detail below Gilly's Session.
+**A Session is the platform's durable work context.** It is created by the control plane when work
+begins, reused for follow-ups, and tracked until the work is complete or abandoned. The runtime
+provider may also have its own session concept, but that is an implementation detail below the
+platform Session.
 
-Sessions are not authored building blocks like agents, skills, channels, or triggers. They are operational records created by the system so Gilly can answer what is running, what happened, what state exists, and where a follow-up should go.
+Sessions are not authored building blocks like agents, skills, channels, or triggers. They are operational records created by the system so Floo Agents can answer what is running, what happened, what state exists, and where a follow-up should go.
 
 ---
 
 ## The Layering
 
-Gilly owns the product lifecycle. Runtime providers own the sandbox.
+The control plane owns the product lifecycle. Runtime providers own the sandbox.
 
 | Layer | Owns |
 | --- | --- |
-| **Gilly Session** | Conversation/work identity, source mapping, run history, follow-up queue, status |
-| **Gilly Run** | One execution attempt inside a Session |
-| **Gilly Workspace** | The durable filesystem/workspace reference used by a Session |
+| **Platform Session** | Conversation/work identity, source mapping, run history, follow-up queue, status |
+| **Platform Run** | One execution attempt inside a Session |
+| **Platform Workspace** | The durable filesystem/workspace reference used by a Session |
 | **Harness session** | The agent-loop conversation state plus the harness ID that owns it |
 | **Runtime session** | The sandbox provider's execution context, such as an AgentCore runtime session |
 
-The important boundary: **Gilly's Session is the source of truth.** A runtime session ID, harness session ID, mount path, or workspace ID from a provider is stored as metadata on Gilly's records, not exposed as the product model.
+The important boundary: **the platform Session is the source of truth.** A runtime session ID,
+harness session ID, mount path, or workspace ID from a provider is stored as metadata on platform
+records, not exposed as the product model.
 
 ---
 
@@ -34,7 +39,7 @@ The important boundary: **Gilly's Session is the source of truth.** A runtime se
 This keeps retrying, resuming, and provider replacement clean. A failed Run does not erase the Session. A new Runtime can be attached to the same Session if the provider allows it. A follow-up creates another Run against the same Session and Workspace.
 
 A harness session ID is resumed only when its stored owner matches the agent's current harness ID.
-Changing an agent's harness starts fresh harness conversation state without replacing the Gilly
+Changing an agent's harness starts fresh harness conversation state without replacing the platform
 Session, workspace, or Run history.
 
 ---
@@ -43,7 +48,8 @@ Session, workspace, or Run history.
 
 Different entry points create Sessions in slightly different ways, but they all end up with the same lifecycle.
 
-**Channels** own continuing conversations. A Slack thread, Telegram chat, WhatsApp chat, or Web conversation maps to one Gilly Session. Follow-ups in that conversation reuse the Session.
+**Channels** own continuing conversations. A Slack thread, Telegram chat, WhatsApp chat, or Web
+conversation maps to one platform Session. Follow-ups in that conversation reuse the Session.
 
 **Triggers** are one-shot event sources. A GitHub event or cron fire creates a Session and an initial Run. If the result later needs a human follow-up, that follow-up attaches to the Session through the configured delivery surface or Web UI.
 
@@ -58,22 +64,25 @@ A Session can have only one active Run at a time. This is the default concurrenc
 The high-level lifecycle is:
 
 1. Work arrives from a channel, trigger, or Fleet.
-2. Gilly resolves the agent configuration, access, and runtime provider.
-3. Gilly creates or reuses the Session and Workspace.
-4. Gilly starts a Run and leases or resumes a runtime session from the provider.
+2. The control plane resolves the agent configuration, access, and runtime provider.
+3. The control plane creates or reuses the Session and Workspace.
+4. The control plane starts a Run and leases or resumes a runtime session from the provider.
 5. The harness executes inside the runtime using the Workspace.
-6. Gilly records events, status, result, artifacts, and delivery outcome.
-7. If queued follow-ups exist, Gilly starts the next Run against the same Session.
+6. The control plane records events, status, result, artifacts, and delivery outcome.
+7. If queued follow-ups exist, the control plane starts the next Run against the same Session.
 
-Runs are durable records. Runtime processes are not. If a runtime dies, times out, or is replaced, Gilly still knows the Session, Run history, queued follow-ups, and Workspace reference.
+Runs are durable records. Runtime processes are not. If a runtime dies, times out, or is replaced,
+the control plane still knows the Session, Run history, queued follow-ups, and Workspace reference.
 
 ---
 
 ## Follow-Up Rules
 
-Follow-ups are owned by Gilly, not the runtime provider.
+Follow-ups are owned by the control plane, not the runtime provider.
 
-The MVP rule is simple: **one active Run per Session, with FIFO follow-up queueing.** If a user sends a follow-up while the agent is still running, Gilly stores it on the Session and processes it after the active Run finishes.
+The MVP rule is simple: **one active Run per Session, with FIFO follow-up queueing.** If a user
+sends a follow-up while the agent is still running, the control plane stores it on the Session and
+processes it after the active Run finishes.
 
 This keeps Slack, Web, triggers, and Fleet consistent. It also avoids two agents writing to the same workspace at the same time.
 
@@ -83,31 +92,42 @@ Later, live Web or voice channels may support richer behavior such as interrupti
 
 ## Persistence Responsibilities
 
-Gilly persists operational state. The runtime provider persists sandbox state when it supports it.
+The control plane persists operational state. The runtime provider persists sandbox state when it
+supports it.
 
 | State | MVP owner |
 | --- | --- |
-| Session identity and source mapping | Gilly database |
-| Run status, history, result, errors, artifacts | Gilly database |
-| Follow-up queue | Gilly database |
-| Agent, skill, channel, trigger configuration | Gilly database |
-| Filesystem/workspace state | AgentCore managed session storage |
+| Session identity and source mapping | Control-plane database |
+| Run status, history, result, errors, artifacts | Control-plane database |
+| Follow-up queue | Control-plane database |
+| Agent, skill, channel, trigger configuration | Control-plane database |
+| Filesystem/workspace state | AgentCore-managed session storage |
 | Harness conversation state | Harness-specific storage, such as Claude SDK session persistence or AgentCore Memory |
 | Long-term external outputs | The target system, such as a PR, issue, Slack thread, report, or artifact store |
 
-For the MVP, Gilly does **not** build its own filesystem snapshot system. If the sandbox provider gives us reliable provider-native persistence, we use it. AgentCore is the first runtime provider, so Workspace persistence is AgentCore managed session storage.
+For the MVP, the platform does **not** build its own filesystem snapshot system. If the sandbox
+provider gives us reliable provider-native persistence, we use it. AgentCore is the first runtime
+provider, so Workspace persistence is AgentCore-managed session storage.
 
 ---
 
 ## Runtime Provider Boundary
 
-AgentCore is the current runtime provider, not the product model. Gilly should be able to replace it later with Modal, Daytona, E2B, or a self-hosted sandbox without changing what a Session or Run means.
+AgentCore is the current runtime provider, not the product model. The platform should be able to
+replace it later with Modal, Daytona, E2B, or a self-hosted sandbox without changing what a Session
+or Run means.
 
-Each runtime provider can expose different capabilities: persistent filesystem, command execution, WebSocket streaming, background tasks, shared storage, or snapshot/export. Gilly should use provider-native capabilities when available and store the provider handle on the Workspace or Run.
+Each runtime provider can expose different capabilities: persistent filesystem, command execution,
+WebSocket streaming, background tasks, shared storage, or snapshot/export. The platform should use
+provider-native capabilities when available and store the provider handle on the Workspace or Run.
 
-For AgentCore, that means reusing the same runtime session and managed session storage mount for follow-up Runs. For another provider, it may mean reusing a workspace ID, container ID, volume, or project environment. Gilly only needs to know which provider owns the Workspace and how to ask that provider to resume it.
+For AgentCore, that means reusing the same runtime session and managed session storage mount for
+follow-up Runs. For another provider, it may mean reusing a workspace ID, container ID, volume, or
+project environment. The control plane only needs to know which provider owns the Workspace and how
+to ask that provider to resume it.
 
-Gilly-managed filesystem snapshots can be added later if a provider lacks persistence or if portability becomes a requirement. They are not part of the MVP.
+Platform-managed filesystem snapshots can be added later if a provider lacks persistence or if
+portability becomes a requirement. They are not part of the MVP.
 
 ---
 
@@ -115,11 +135,11 @@ Gilly-managed filesystem snapshots can be added later if a provider lacks persis
 
 The first implementation should be intentionally narrow:
 
-1. Gilly owns Session, Run, Follow-up, and Workspace records.
+1. The control plane owns Session, Run, Follow-up, and Workspace records.
 2. AgentCore is the only runtime provider.
-3. AgentCore managed session storage is the only filesystem persistence path.
+3. AgentCore-managed session storage is the only filesystem persistence path.
 4. A Session has one active Run at a time.
 5. Follow-ups received during a Run are queued and processed in order.
-6. Runtime and harness IDs are stored as provider metadata, not treated as Gilly IDs.
+6. Runtime and harness IDs are stored as provider metadata, not treated as platform IDs.
 
 That gives us durable product semantics now and leaves the provider-replacement path open without prematurely building our own sandbox persistence layer.

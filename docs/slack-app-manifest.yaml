@@ -1,14 +1,14 @@
-# Gilly mentions-only Slack app manifest. Paste at api.slack.com/apps → your app → App Manifest,
+# Floo Agents mentions-only Slack app manifest. Paste at api.slack.com/apps → your app → App Manifest,
 # then Reinstall to Workspace after changing scopes.
 # Socket Mode = no public URL. App-level token needs `connections:write` (SLACK_APP_TOKEN);
 # Bot User OAuth Token = SLACK_BOT_TOKEN.
 display_information:
-  name: gilly
-  description: Always working cloud agent
-  background_color: "#000d63"
+  name: Floo Agents
+  description: Any agent. Any harness. Any channel.
+  background_color: "#091c32"
 features:
   bot_user:
-    display_name: gilly-dev
+    display_name: flooagents
     always_online: true
 oauth_config:
   scopes:

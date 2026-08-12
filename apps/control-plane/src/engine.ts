@@ -1,4 +1,4 @@
-import type { AgentConfig } from "@gilly/core";
+import type { AgentConfig } from "@floo/core";
 import {
   appendRunStep,
   completeRun,
@@ -18,9 +18,9 @@ import {
   migrateLegacyAgentTools,
   setHarnessSession,
   validateAgentHarness,
-} from "@gilly/db";
-import type { SkillBundle } from "@gilly/harness-protocol";
-import type { RuntimeProvider, StreamEvent } from "@gilly/runtime";
+} from "@floo/db";
+import type { SkillBundle } from "@floo/harness-protocol";
+import type { RuntimeProvider, StreamEvent } from "@floo/runtime";
 
 const RUN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const GATEWAY_DISCOVERY_TIMEOUT_MS = 10_000;
@@ -74,7 +74,7 @@ export function createEngine(deps: {
   getAgent: (id: string) => AgentConfig | undefined;
   /** Resolve a skill bundle by name (the SkillStore seam); defaults to "no skills". */
   getSkill?: (name: string) => SkillBundle | undefined;
-  /** Tooling gateway base URL; attached only when an agent has exact gateway tools. */
+  /** Tool Gateway base URL; attached only when an agent has exact gateway tools. */
   gatewayUrl?: string;
   /** Internal token used only for gateway management discovery. */
   gatewayAdminToken?: string;
@@ -221,7 +221,7 @@ export function createEngine(deps: {
           agent,
           userMessage: message,
           resumeSessionId,
-          // Stable per-Gilly-session workspace, so follow-ups see files earlier runs made.
+          // Stable per-session workspace, so follow-ups see files earlier runs made.
           workspace: { provider: "local", handle: sessionId },
           ...(skillBundles.length ? { skills: skillBundles } : {}),
           ...(gateway ? { gateway } : {}),

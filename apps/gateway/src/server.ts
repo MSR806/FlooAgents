@@ -1,5 +1,5 @@
-import { type Db, getCredential, getGatewayToken, insertToolCall, setCredentials } from "@gilly/db";
-import type { ToolContext } from "@gilly/gateway-kit";
+import { type Db, getCredential, getGatewayToken, insertToolCall, setCredentials } from "@floo/db";
+import type { ToolContext } from "@floo/gateway-kit";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -44,10 +44,10 @@ function withDeadline<T>(promise: Promise<T>, ms: number, reason: string): Promi
 }
 // Direct-lane result cap. Enforced here (not per-harness) so every harness — current or future —
 // is protected by default: an /invoke result over this size is refused with a pointer to the
-// script lane. The script lane opts OUT by sending `x-gilly-lane: script` (it processes big
+// script lane. The script lane opts OUT by sending `x-tool-gateway-lane: script` (it processes big
 // payloads in the sandbox and only prints a summary, so nothing large reaches model context).
 const RESULT_CAP = 50_000;
-const SCRIPT_LANE_HEADER = "x-gilly-lane";
+const SCRIPT_LANE_HEADER = "x-tool-gateway-lane";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -113,7 +113,7 @@ export function createGatewayServer(deps: {
     deps.composio ??
     createComposioService({
       getApiKey: () => resolveComposioApiKey(db, vault, process.env.COMPOSIO_API_KEY),
-      userId: process.env.GILLY_COMPOSIO_USER_ID ?? "gilly-shared",
+      userId: process.env.COMPOSIO_USER_ID ?? "shared",
     });
   type DynamicRoute =
     | { kind: "mcp"; connector: string }
@@ -522,7 +522,7 @@ export function createGatewayServer(deps: {
     if (!connector) return json({ error: "not found" }, 404);
 
     const authProvider = new VaultOAuthProvider(db, vault, provider, gatewayUrl);
-    const client = new Client({ name: "gilly-gateway", version: "0.0.0" });
+    const client = new Client({ name: "tool-gateway", version: "0.0.0" });
     try {
       await client.connect(
         new StreamableHTTPClientTransport(new URL(connector.transport.url), { authProvider }),

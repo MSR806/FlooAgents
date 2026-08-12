@@ -1,6 +1,7 @@
 "use client";
 
 import { BookOpen, Bot, Cable, Home, MessageSquare, Users } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -37,13 +38,25 @@ export function AppSidebar() {
           <SidebarMenuItem className="flex items-center gap-1">
             <SidebarMenuButton
               size="lg"
-              className="flex-1 group-data-[collapsible=icon]:hidden"
+              className="h-auto min-h-12 flex-1 py-2 group-data-[collapsible=icon]:hidden"
               render={<Link href="/" />}
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Bot className="size-4" />
+              <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden">
+                <Image
+                  src="/brand/floo-agents-owl-sitting.png"
+                  alt=""
+                  width={48}
+                  height={48}
+                  className="size-12 max-w-none object-contain"
+                  loading="eager"
+                />
               </div>
-              <span className="font-semibold">Gilly</span>
+              <div className="min-w-0 leading-tight">
+                <span className="block truncate font-semibold">Floo Agents</span>
+                <span className="block whitespace-normal text-[0.6rem] text-muted-foreground">
+                  Any agent. Any harness. Any channel.
+                </span>
+              </div>
             </SidebarMenuButton>
             <SidebarTrigger className="shrink-0" />
           </SidebarMenuItem>

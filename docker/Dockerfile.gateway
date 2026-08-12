@@ -1,4 +1,4 @@
-# Gilly gateway — registry + access resolution + credential vault + tracing.
+# Tool Gateway — registry + access resolution + credential vault + tracing.
 # Pinned to match the lockfile's bun so --frozen-lockfile stays stable.
 FROM oven/bun:1.3.5 AS base
 WORKDIR /app
@@ -10,4 +10,4 @@ COPY apps ./apps
 RUN bun install --frozen-lockfile
 
 EXPOSE 4100
-CMD ["bun", "run", "--filter", "@gilly/gateway", "start"]
+CMD ["bun", "run", "--filter", "@floo/gateway", "start"]

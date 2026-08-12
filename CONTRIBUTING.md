@@ -1,6 +1,6 @@
 # Contributing
 
-Project Gilly is in active development. Small, focused pull requests are easiest
+Floo Agents is in active development. Small, focused pull requests are easiest
 to review while the architecture is still settling.
 
 ## Setup
@@ -41,7 +41,7 @@ gitleaks scan of every commit in the branch. To run the same gate locally:
 bun run lint
 bun run typecheck
 bun test
-bun run --filter '@gilly/web' build
+bun run --filter '@floo/web' build
 gitleaks git . --redact
 ```
 

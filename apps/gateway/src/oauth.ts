@@ -1,4 +1,4 @@
-import { type Db, deleteCredential, getCredential, setCredential } from "@gilly/db";
+import { type Db, deleteCredential, getCredential, setCredential } from "@floo/db";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -49,7 +49,7 @@ export class VaultOAuthProvider implements OAuthClientProvider {
   ) {
     this.redirectUrl = `${gatewayUrl}/oauth/${provider}/callback`;
     this.clientMetadata = {
-      client_name: "Gilly",
+      client_name: "Floo Agents",
       redirect_uris: [this.redirectUrl],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

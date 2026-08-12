@@ -1,5 +1,25 @@
 import { expect, test } from "bun:test";
-import { safeAgentReturnTo, slackStartupError } from "./connection-helpers";
+import { safeAgentReturnTo, slackStartupError, validateSlackBotName } from "./connection-helpers";
+
+test("validateSlackBotName requires a non-empty normalized suffix", () => {
+  expect(validateSlackBotName("Acme Support")).toEqual({
+    name: "flooagents-acme-support",
+    error: null,
+  });
+  expect(validateSlackBotName("---")).toEqual({ name: "", error: null });
+  expect(validateSlackBotName("  ")).toEqual({ name: "", error: null });
+});
+
+test("validateSlackBotName enforces Slack's 35-character display-name limit", () => {
+  expect(validateSlackBotName("a".repeat(24))).toEqual({
+    name: `flooagents-${"a".repeat(24)}`,
+    error: null,
+  });
+  expect(validateSlackBotName("a".repeat(25))).toEqual({
+    name: "",
+    error: "Use 24 or fewer characters after “flooagents-” (Slack's limit is 35).",
+  });
+});
 
 test("slackStartupError surfaces failed bot startup", () => {
   expect(

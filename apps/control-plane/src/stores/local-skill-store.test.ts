@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalSkillStore } from "./local-skill-store.ts";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "gilly-skills-"));
+const tmp = () => mkdtempSync(join(tmpdir(), "platform-skills-"));
 
 test("create writes a SKILL.md with frontmatter and lists it", () => {
   const dir = tmp();

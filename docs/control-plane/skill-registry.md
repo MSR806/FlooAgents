@@ -1,4 +1,4 @@
-# Project Gilly — Skill Registry
+# Floo Agents — Skill Registry
 
 **The catalog of reusable skills.** A skill is a packaged capability — instructions plus any supporting scripts or resources — that an agent loads to do a specific kind of work. See [`control-plane.md`](control-plane.md) and [`agent-registry.md`](agent-registry.md).
 

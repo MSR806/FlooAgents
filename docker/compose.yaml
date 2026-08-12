@@ -16,8 +16,8 @@ services:
       WORKSPACES_DIR: /data/workspaces
       CODEX_STATE_DIR: /data/codex
     volumes:
-      - gilly-workspaces:/data/workspaces
-      - gilly-codex:/data/codex
+      - agent-workspaces:/data/workspaces
+      - codex-state:/data/codex
 
   control-plane:
     build:
@@ -27,37 +27,37 @@ services:
       - harness
       - gateway
     env_file:
-      - ../apps/control-plane/.env    # GILLY_VAULT_KEY (required), WEB_PORT, ...
+      - ../apps/control-plane/.env    # CREDENTIAL_VAULT_KEY (required), WEB_PORT, ...
     environment:
       # Override .env values that only make sense on the host, not in-network.
       # (environment wins over env_file.)
       HARNESS_URL: http://harness:8080
-      GILLY_GATEWAY_URL: http://gateway:4100
+      TOOL_GATEWAY_URL: http://gateway:4100
       AGENTS_DIR: /app/config/agents
       BUILTIN_AGENTS_DIR: /app/config/builtin-agents
       SKILLS_DIR: /app/config/skills
-      DATABASE_PATH: /data/gilly.db
+      DATABASE_PATH: /data/platform.db
     volumes:
       - ../config:/app/config:ro      # agent + skill JSON, read-only
-      - gilly-data:/data              # SQLite store persists across runs
+      - platform-data:/data           # SQLite store persists across runs
     ports:
-      - "${GILLY_BIND_ADDRESS:-127.0.0.1}:4000:4000" # trusted management API
+      - "127.0.0.1:4000:4000" # trusted management API; never publish beyond loopback
 
   gateway:
     build:
       context: ..
       dockerfile: docker/Dockerfile.gateway
     env_file:
-      - ../apps/gateway/.env          # GILLY_VAULT_KEY and GILLY_ADMIN_TOKEN
+      - ../apps/gateway/.env          # CREDENTIAL_VAULT_KEY and INTERNAL_API_TOKEN
     environment:
-      DATABASE_PATH: /data/gilly.db
-      GILLY_GATEWAY_URL: http://localhost:4100
-      GILLY_WEB_URL: http://localhost:3000
-      GILLY_CONTROL_PLANE_URL: http://control-plane:4000
+      DATABASE_PATH: /data/platform.db
+      TOOL_GATEWAY_URL: http://localhost:4100
+      WEB_APP_URL: http://localhost:3000
+      CONTROL_PLANE_URL: http://control-plane:4000
     volumes:
-      - gilly-data:/data
+      - platform-data:/data
     ports:
-      - "${GILLY_BIND_ADDRESS:-127.0.0.1}:4100:4100"
+      - "127.0.0.1:4100:4100" # internal Tool Gateway; never publish beyond loopback
 
   web:
     build:
@@ -69,9 +69,10 @@ services:
       # Next.js rewrites /api/* to the control-plane over the Docker network.
       API_URL: http://control-plane:4000
     ports:
-      - "${GILLY_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+      # The web UI is the only service whose host bind may be configured.
+      - "${BIND_ADDRESS:-127.0.0.1}:3000:3000"
 
 volumes:
-  gilly-data:
-  gilly-workspaces:
-  gilly-codex:
+  platform-data:
+  agent-workspaces:
+  codex-state:

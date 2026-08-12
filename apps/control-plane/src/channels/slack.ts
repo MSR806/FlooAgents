@@ -1,5 +1,5 @@
-import { type Db, getSessionBySourceKey, upsertUserBySlackId } from "@gilly/db";
-import type { StreamEvent } from "@gilly/runtime";
+import { type Db, getSessionBySourceKey, upsertUserBySlackId } from "@floo/db";
+import type { StreamEvent } from "@floo/runtime";
 import { App, LogLevel } from "@slack/bolt";
 import type { WebClient } from "@slack/web-api";
 import type { createEngine } from "../engine.ts";
