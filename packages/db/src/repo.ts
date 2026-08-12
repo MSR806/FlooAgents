@@ -139,7 +139,6 @@ function replaceAgent(db: Db, id: string, agent: AgentConfig, options: AgentWrit
 }
 
 type GatewayToolIdentity = {
-  name: string;
   toolkit: string;
   source: "custom" | "composio";
 };
@@ -186,7 +185,9 @@ export function migrateLegacyAgentTools(
   const tools = [
     ...new Set([
       ...existing,
-      ...customTools.filter((tool) => resolved.has(tool.toolkit)).map((tool) => tool.name),
+      ...customTools
+        .filter((tool) => resolved.has(tool.toolkit))
+        .map((tool) => `${tool.toolkit}.*`),
     ]),
   ];
   const remaining = legacy.filter((connector) => !resolved.has(connector));

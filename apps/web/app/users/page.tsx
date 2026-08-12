@@ -19,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { parseGatewayTools } from "../agents/agent-form-helpers";
+import { parseGatewayToolkits } from "../agents/agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
 
@@ -42,8 +42,8 @@ export default function UsersPage() {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
       })
-      .then(parseGatewayTools)
-      .then((catalog) => setTools(catalog.map((tool) => tool.name)))
+      .then(parseGatewayToolkits)
+      .then((catalog) => setTools(catalog.map((toolkit) => `${toolkit.name}.*`)))
       .catch(() => setToolError(true));
   }, []);
 

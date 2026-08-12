@@ -77,6 +77,12 @@ type ManagementTool = CatalogTool & {
   connected: boolean;
 };
 
+type ManagementToolkit = {
+  name: string;
+  source: ManagementTool["source"];
+  connected: boolean;
+};
+
 export function resolveComposioApiKey(db: Db, vault: Vault, fallback?: string): string | undefined {
   const stored = getCredential(db, "composio").find((row) => row.key === "api_key");
   return (stored ? vault.decrypt(stored.value) : undefined) || fallback;
@@ -287,10 +293,9 @@ export function createGatewayServer(deps: {
     if ("error" in a) return a.error;
     const body = ((await readJson(req)) ?? {}) as { query?: string };
     const q = body.query?.toLowerCase();
-    const allowed = new Set(a.token.tools);
     const tools = (await managementTools()).tools.filter(
       (tool) =>
-        allowed.has(tool.name) &&
+        isAllowed(tool.name, a.token.tools) &&
         (!q || tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q)),
     );
     return json({ tools });
@@ -332,7 +337,7 @@ export function createGatewayServer(deps: {
     return json(result);
 
     async function run(): Promise<unknown> {
-      if (!tools.includes(toolName)) return { error: "forbidden" };
+      if (!isAllowed(toolName, tools)) return { error: "forbidden" };
       if (!isAllowed(toolName, grants)) {
         return {
           error: "user_missing_grant",
@@ -585,7 +590,26 @@ export function createGatewayServer(deps: {
       if (req.headers.get("x-admin-token") !== adminToken) {
         return json({ error: "unauthorized" }, 401);
       }
-      return managementTools().then(({ tools }) => json({ tools }));
+      return managementTools().then(({ tools }) => {
+        const byName = new Map<string, ManagementToolkit>();
+        for (const tool of tools) {
+          if (tool.toolkit === "agent_builder") continue;
+          const existing = byName.get(tool.toolkit);
+          if (existing) {
+            existing.connected ||= tool.connected;
+            if (tool.source === "custom") existing.source = "custom";
+          } else {
+            byName.set(tool.toolkit, {
+              name: tool.toolkit,
+              source: tool.source,
+              connected: tool.connected,
+            });
+          }
+        }
+        return json({
+          toolkits: [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)),
+        });
+      });
     }
     if (method === "GET" && pathname === "/connectors") {
       if (req.headers.get("x-admin-token") !== adminToken) {

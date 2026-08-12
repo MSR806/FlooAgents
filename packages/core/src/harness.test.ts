@@ -50,3 +50,20 @@ test("legacy normalization is migration-only and preserves real model ids", () =
   });
   expect(isDeferredOpenModel("gpt-oss-120b")).toBe(true);
 });
+
+test("agent gateway access accepts exact tools and terminal toolkit patterns only", () => {
+  const config = {
+    id: "helper",
+    name: "Helper",
+    harness: { id: "claude", config: { model: "sonnet" } },
+    systemPrompt: "Help.",
+  };
+  expect(
+    AgentConfig.parse({ ...config, gatewayTools: ["gmail.*", "echo.ping"] }).gatewayTools,
+  ).toEqual(["gmail.*", "echo.ping"]);
+  for (const pattern of ["*", "gmail*", "gmail.*.delete"]) {
+    expect(() => AgentConfig.parse({ ...config, gatewayTools: [pattern] })).toThrow(
+      "Gateway tool patterns must use the toolkit.* form",
+    );
+  }
+});

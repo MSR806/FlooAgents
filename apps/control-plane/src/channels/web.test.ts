@@ -184,12 +184,10 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     seen = new Request(input as string, init);
     return Response.json({
-      tools: [
+      toolkits: [
         {
-          name: "gmail.send_email",
-          description: "Send email",
+          name: "gmail",
           source: "composio",
-          toolkit: "gmail",
           connected: true,
         },
       ],
@@ -199,12 +197,10 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
   const res = await handler()(new Request("http://x/api/tools"));
   expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
   expect(await res.json()).toEqual({
-    tools: [
+    toolkits: [
       {
-        name: "gmail.send_email",
-        description: "Send email",
+        name: "gmail",
         source: "composio",
-        toolkit: "gmail",
         connected: true,
       },
     ],

@@ -261,7 +261,7 @@ export function createWebHandler(deps: WebDeps): (req: Request) => Promise<Respo
     }
 
     if (method === "GET" && pathname === "/api/tools") {
-      if (!gatewayUrl) return json({ tools: [] });
+      if (!gatewayUrl) return json({ toolkits: [] });
       if (!adminToken) return json({ error: "gateway admin authentication not configured" }, 503);
       try {
         const res = await globalThis.fetch(`${gatewayUrl}/tools`, {

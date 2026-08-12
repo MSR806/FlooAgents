@@ -175,7 +175,7 @@ test("adds images to the predecessor harness registry without breaking custom ro
   expect(getHarness(createDb(path), "claude")?.image).toBe("/harnesses/operator.svg");
 });
 
-test("migrates legacy connectors to exact custom tools without widening providers", () => {
+test("migrates legacy connectors to custom toolkit patterns", () => {
   const path = join(mkdtempSync(join(tmpdir(), "platform-db-migration-")), "legacy.db");
   const legacy = new Database(path);
   legacy.exec(`
@@ -201,11 +201,11 @@ test("migrates legacy connectors to exact custom tools without widening provider
   expect(getLegacyAgentConnectors(db, "legacy")).toEqual(["echo"]);
   expect(
     migrateLegacyAgentTools(db, "legacy", [
-      { name: "echo.ping", toolkit: "echo", source: "custom" },
-      { name: "echo.send", toolkit: "echo", source: "composio" },
+      { toolkit: "echo", source: "custom" },
+      { toolkit: "echo", source: "composio" },
     ]),
-  ).toEqual(["echo.ping"]);
-  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  ).toEqual(["echo.*"]);
+  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.*"]);
   expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
   expect(getGatewayToken(db, "legacy-token")?.tools).toEqual([]);
 });

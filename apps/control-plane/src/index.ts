@@ -58,7 +58,7 @@ const skillStore = new LocalSkillStore(SKILLS_DIR);
 const vault = makeVault(vaultKey);
 
 // Web chat has no auth yet: every web request runs as one shared admin user, so it gets full
-// access to the agent's exact gateway tools. Replace with real identity when web auth lands.
+// access to the agent's gateway tool patterns. Replace with real identity when web auth lands.
 const webUser = upsertUserBySlackId(db, { slackUserId: "web", name: "Web (shared)" });
 setAdmin(db, webUser.id, true);
 
