@@ -53,6 +53,35 @@ gitleaks git . --redact
 - Make sure CI is green before requesting review.
 - Document user-facing behavior in `README.md` or `docs/` when needed.
 
+### PR titles
+
+Title the PR, not just the commit — squash-merge uses it as the commit message.
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` new feature or functionality
+- `fix:` bug fix
+- `docs:` documentation or README changes
+- `chore:` maintenance tasks, tooling, non-dependency housekeeping
+- `build:` dependency bumps (this is what Dependabot opens)
+- `refactor:` code restructuring without changing behavior
+- `test:` adding or updating tests
+
+Add a scope when a change is limited to one app or package — an `apps/`
+or `packages/` directory name (`web`, `gateway`, `harness`, `control-plane`,
+`core`, `db`, `runtime`, ...), or a cross-cutting area like `tools` or `deps`
+when it spans several. Skip the scope for repo-wide changes.
+
+Examples:
+
+```
+feat(tools): select integrations by toolkit
+fix(web): load direct conversation links
+docs: add repo development skills to the roadmap
+build(deps): bump the minor group across 1 directory with 3 updates
+chore: manage hooks with husky, add gitleaks secret scanning
+refactor(gateway): simplify connector auth lookup
+```
+
 Security problems go through [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Development status
