@@ -9,7 +9,7 @@ to review while the architecture is still settling.
 bun install
 bun run typecheck
 bun test
-```
+```text
 
 For local services, copy the app `.env.example` files described in the README.
 Do not commit secrets, local databases, or generated runtime data.
