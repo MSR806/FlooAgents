@@ -32,7 +32,9 @@ jobs:
 
       - run: bun run typecheck
 
-      - run: bun test
+      # `bun run test`, not `bun test` — the script scopes the scan to apps/ and
+      # packages/ so runtime data under config/skills or data/ can't join the run.
+      - run: bun run test
 
       # Catches what `tsc --noEmit` can't: bad imports, server/client boundary
       # violations, route-level build failures.
