@@ -8,7 +8,7 @@ to review while the architecture is still settling.
 ```bash
 bun install
 bun run typecheck
-bun test
+bun run test
 ```
 
 For local services, copy the app `.env.example` files described in the README.
@@ -40,7 +40,7 @@ gitleaks scan of every commit in the branch. To run the same gate locally:
 ```bash
 bun run lint
 bun run typecheck
-bun test
+bun run test
 bun run --filter '@floo/web' build
 gitleaks git . --redact
 ```

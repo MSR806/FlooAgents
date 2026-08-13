@@ -18,7 +18,7 @@
   "scripts": {
     "prepare": "husky",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "bun test",
+    "test": "bun test apps packages",
     "lint": "biome check .",
     "format": "biome format --write .",
     "dev:harness": "bun run --filter '@floo/harness' dev",
