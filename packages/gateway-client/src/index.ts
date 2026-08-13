@@ -5,7 +5,7 @@
  * Wire contract (matched by the Wave 3 gateway server):
  *   POST ${url}/catalog  { query? }        -> { tools: [{ name, description, inputSchema? }] }
  *   POST ${url}/invoke   { tool, input }    -> the tool result (any JSON)
- *   Either route may answer with { error } (e.g. "forbidden", "not_connected") — we throw it.
+ *   Either route may answer with { error } (e.g. "tool_not_found", "not_connected") — we throw it.
  */
 
 export type CatalogEntry = { name: string; description: string; inputSchema?: unknown };

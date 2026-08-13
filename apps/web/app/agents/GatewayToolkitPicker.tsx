@@ -10,6 +10,7 @@ import {
   gatewayToolkitNames,
   parseGatewayToolkits,
   toggleGatewayToolkit,
+  unavailableGatewayTools,
 } from "./agent-form-helpers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
@@ -25,10 +26,7 @@ export default function GatewayToolkitPicker({
   const [toolkits, setToolkits] = useState<GatewayToolkit[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const available = new Set(toolkits.map((toolkit) => toolkit.name));
-  const unavailable =
-    status === "ready"
-      ? [...new Set(selected)].filter((tool) => !available.has(tool.split(".")[0] ?? ""))
-      : [];
+  const unavailable = status === "ready" ? unavailableGatewayTools(selected, available) : [];
   const selectedToolkitCount = gatewayToolkitNames(selected).filter((toolkit) =>
     available.has(toolkit),
   ).length;
@@ -78,10 +76,7 @@ export default function GatewayToolkitPicker({
     const search = query.trim().toLowerCase();
     return !search || toolkit.name.toLowerCase().includes(search);
   });
-  const draftUnavailable =
-    status === "ready"
-      ? [...new Set(draft)].filter((tool) => !available.has(tool.split(".")[0] ?? ""))
-      : [];
+  const draftUnavailable = status === "ready" ? unavailableGatewayTools(draft, available) : [];
 
   return (
     <>

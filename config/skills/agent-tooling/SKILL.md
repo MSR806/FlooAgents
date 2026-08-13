@@ -57,6 +57,8 @@ console.log("CAC:", totalSpend(spend) / countInstalls(installs)); // only the an
   tool, and wait for their response. Do not retry it. If they ask you to ignore it and continue,
   resume with the other available tools and context; you will not have data from the denied tool.
 - `forbidden` — the tool is outside this agent's connected tools. Do not try to work around it.
+- `tool_not_found` — that exact tool name is unavailable. Search `gateway_catalog` again and invoke
+  only a name returned by it; do not invent aliases.
 - `not_connected` — the admin hasn't configured this provider's credentials yet. Say so; it's an
   admin task, not something you fix in-conversation.
 - `invalid_input` — your `input` didn't match the tool's schema. Re-check the schema from

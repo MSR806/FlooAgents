@@ -364,7 +364,14 @@ export function createGatewayServer(deps: {
       }
 
       const route = (await managementTools()).routes.get(toolName);
-      if (!route) return { error: "forbidden" };
+      if (!route) {
+        return {
+          error: "tool_not_found",
+          tool: toolName,
+          message:
+            "This exact tool is unavailable. Search the catalog again and use a returned name.",
+        };
+      }
       if (route.kind === "composio") {
         return withTimeout(() => composio.execute(route.upstreamSlug, body.input));
       }

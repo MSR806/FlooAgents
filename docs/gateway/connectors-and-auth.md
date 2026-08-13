@@ -68,7 +68,7 @@ Composio-managed connections follow the same shared-identity rule. The platform 
 project key; Composio keeps downstream OAuth/API credentials. Composio remains behind the Tool
 Gateway and does not replace tool allowlists, grants, result limits, or traces.
 
-**Missing credential is a first-class answer, not a failure.** Static tools with missing credentials return `{ error: "not_connected" }`. Dynamic MCP/Composio tools are absent from current discovery, so stale selections fail closed as `forbidden` until the provider reconnects and discovery refreshes. Configuration lives with the admin, not in-conversation.
+**Missing credential is a first-class answer, not a failure.** Static tools with missing credentials return `{ error: "not_connected" }`. Dynamic MCP/Composio tools are absent from current discovery, so stale names return `tool_not_found` until the provider reconnects and discovery refreshes. Configuration lives with the admin, not in-conversation.
 
 ![Auth and invoke flows](../diagrams/gateway-auth-flow.svg)
 

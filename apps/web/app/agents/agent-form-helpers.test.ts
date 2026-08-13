@@ -6,6 +6,7 @@ import {
   parseGatewayToolkits,
   parseHarnessRegistry,
   toggleGatewayToolkit,
+  unavailableGatewayTools,
 } from "./agent-form-helpers";
 
 const registry = [
@@ -87,4 +88,13 @@ test("gatewayToolkitNames shows one entry per exact-tool prefix", () => {
     "gmail",
     "legacy_tool",
   ]);
+});
+
+test("unavailableGatewayTools preserves hidden agent-builder access", () => {
+  expect(
+    unavailableGatewayTools(
+      ["agent_builder.list_agents", "legacy.tool", "gmail.*", "legacy.tool"],
+      new Set(["gmail"]),
+    ),
+  ).toEqual(["legacy.tool"]);
 });

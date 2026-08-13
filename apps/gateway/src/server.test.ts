@@ -891,7 +891,7 @@ test("MCP providers discover concurrently with independent deadlines", async () 
   );
 });
 
-test("removed and unknown dynamic tools never dispatch", async () => {
+test("removed and unknown dynamic tools return tool_not_found without dispatching", async () => {
   let available = true;
   let mcpCalls = 0;
   let composioCalls = 0;
@@ -929,7 +929,11 @@ test("removed and unknown dynamic tools never dispatch", async () => {
 
   for (const tool of ["github.create_issue", "github.removed", "gmail.removed"]) {
     const res = await post(fetch, "/invoke", auth(token), { tool, input: {} });
-    expect(await res.json()).toEqual({ error: "forbidden" });
+    expect(await res.json()).toEqual({
+      error: "tool_not_found",
+      tool,
+      message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+    });
   }
   expect(mcpCalls).toBe(0);
   expect(composioCalls).toBe(0);
@@ -950,7 +954,11 @@ test("Composio discovery and toolkit routes time out boundedly", async () => {
     tool: "gmail.send_email",
     input: {},
   });
-  expect(await invoke.json()).toEqual({ error: "forbidden" });
+  expect(await invoke.json()).toEqual({
+    error: "tool_not_found",
+    tool: "gmail.send_email",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
   const tools = await getTools(fetch);
   expect(tools.status).toBe(200);
   const toolkits = await fetch(
@@ -1193,7 +1201,11 @@ test("no github credential → invoke mcp tool fails closed", async () => {
     tool: "github.create_issue",
     input: {},
   });
-  expect(await res.json()).toEqual({ error: "forbidden" });
+  expect(await res.json()).toEqual({
+    error: "tool_not_found",
+    tool: "github.create_issue",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
 });
 
 test("mcp callTool throwing → provider_error", async () => {
@@ -1245,7 +1257,11 @@ test("oauth connector not connected → catalog omits its tools", async () => {
 test("oauth connector not connected → invoke fails closed", async () => {
   const { fetch, token } = setup(["jira.*"], { mcp: notConnectedMcp });
   const res = await post(fetch, "/invoke", auth(token), { tool: "jira.getIssue", input: {} });
-  expect(await res.json()).toEqual({ error: "forbidden" });
+  expect(await res.json()).toEqual({
+    error: "tool_not_found",
+    tool: "jira.getIssue",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
 });
 
 test("GET /oauth/jira/start without admin token → 401", async () => {

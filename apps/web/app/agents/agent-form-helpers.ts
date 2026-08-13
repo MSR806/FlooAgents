@@ -63,6 +63,17 @@ export function gatewayToolkitNames(tools: readonly string[] = []): string[] {
   return [...new Set(tools.map((tool) => tool.split(".")[0] || tool))];
 }
 
+/** Catalog-absent selections an editor may explicitly remove; internal tools stay hidden. */
+export function unavailableGatewayTools(
+  selected: readonly string[],
+  availableToolkits: ReadonlySet<string>,
+): string[] {
+  return [...new Set(selected)].filter((tool) => {
+    const toolkit = tool.split(".")[0] ?? "";
+    return toolkit !== "agent_builder" && !availableToolkits.has(toolkit);
+  });
+}
+
 /** Validate the successful create/update response before reflecting server-owned values in the UI. */
 export function parseAgentValues(value: unknown): AgentValues {
   const parsed = AgentConfig.safeParse(value);
