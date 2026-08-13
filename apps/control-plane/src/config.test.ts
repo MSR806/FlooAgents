@@ -152,10 +152,18 @@ test("syncAgents preserves legacy connectors until they can migrate", () => {
 
 test("loadBuiltinAgents keys configs by id and tolerates a missing directory", () => {
   const dir = tmp("platform-builtin-");
-  writeFileSync(join(dir, "builder.json"), JSON.stringify({ ...agent, id: "agent-builder" }));
+  writeFileSync(
+    join(dir, "builder.json"),
+    JSON.stringify({
+      ...agent,
+      id: "agent-builder",
+      gatewayTools: ["agent_builder.list_agents"],
+    }),
+  );
 
   const builtins = loadBuiltinAgents(dir);
   expect([...builtins.keys()]).toEqual(["agent-builder"]);
+  expect(builtins.get("agent-builder")?.gatewayTools).toEqual(["agent_builder.list_agents"]);
 
   // An absent directory is a valid deployment, not an error.
   expect(loadBuiltinAgents(join(dir, "nope")).size).toBe(0);

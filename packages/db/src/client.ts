@@ -68,6 +68,7 @@ function migrate(sqlite: Database) {
   addColumn(sqlite, "follow_ups", "ref", "TEXT");
   addColumn(sqlite, "agents", "gateway_tools", "TEXT");
   addColumn(sqlite, "agents", "connectors", "TEXT");
+  removeReservedAgentBuilderAccess(sqlite);
   addColumn(sqlite, "gateway_tokens", "tools", "TEXT NOT NULL DEFAULT '[]'");
   addColumn(sqlite, "gateway_tokens", "connectors", "TEXT NOT NULL DEFAULT '[]'");
   const addedHarnessImage = addColumn(sqlite, "harnesses", "image", "TEXT");
@@ -99,6 +100,45 @@ function migrate(sqlite: Database) {
 
   const addedSessionHarness = addColumn(sqlite, "sessions", "harness_id", "TEXT");
   if (addedSessionHarness) migrateLegacySessions(sqlite);
+}
+
+/** Remove privileged built-in access left by older user-created agent configs. */
+function removeReservedAgentBuilderAccess(sqlite: Database): void {
+  const rows = sqlite.query("SELECT id, gateway_tools, connectors FROM agents").all() as {
+    id: string;
+    gateway_tools: string | null;
+    connectors: string | null;
+  }[];
+  const update = sqlite.prepare("UPDATE agents SET gateway_tools = ?, connectors = ? WHERE id = ?");
+  for (const row of rows) {
+    const gatewayTools = storedStrings(row.gateway_tools).filter(
+      (tool) => !tool.startsWith("agent_builder."),
+    );
+    const connectors = storedStrings(row.connectors).filter(
+      (connector) => connector !== "agent_builder",
+    );
+    if (
+      gatewayTools.length === storedStrings(row.gateway_tools).length &&
+      connectors.length === storedStrings(row.connectors).length
+    ) {
+      continue;
+    }
+    update.run(
+      gatewayTools.length ? JSON.stringify(gatewayTools) : null,
+      connectors.length ? JSON.stringify(connectors) : null,
+      row.id,
+    );
+  }
+}
+
+function storedStrings(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string") ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 /** Rebuild the predecessor table because SQLite cannot alter nullability, uniqueness, or FKs. */

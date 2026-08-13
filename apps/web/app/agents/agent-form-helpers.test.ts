@@ -90,11 +90,11 @@ test("gatewayToolkitNames shows one entry per exact-tool prefix", () => {
   ]);
 });
 
-test("unavailableGatewayTools preserves hidden agent-builder access", () => {
+test("unavailableGatewayTools identifies catalog-absent selections", () => {
   expect(
     unavailableGatewayTools(
       ["agent_builder.list_agents", "legacy.tool", "gmail.*", "legacy.tool"],
       new Set(["gmail"]),
     ),
-  ).toEqual(["legacy.tool"]);
+  ).toEqual(["agent_builder.list_agents", "legacy.tool"]);
 });

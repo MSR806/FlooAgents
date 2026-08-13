@@ -322,6 +322,29 @@ test("agent gateway tool patterns round-trip through get/update", () => {
   expect(getAgent(db, "coder")?.gatewayTools).toEqual(["branch.*", "gmail.*"]);
 });
 
+test("DB agents cannot use built-in Agent Builder tools", () => {
+  const db = freshDb();
+  const message = "Only the built-in Agent Builder can use agent_builder gateway tools";
+  for (const gatewayTool of ["agent_builder.list_agents", "agent_builder.*"]) {
+    expect(() =>
+      createAgent(db, {
+        ...agentCfg,
+        id: gatewayTool.endsWith(".*") ? "agent-builder" : "helper",
+        gatewayTools: [gatewayTool],
+      }),
+    ).toThrow(message);
+  }
+
+  createAgent(db, agentCfg);
+  expect(() =>
+    updateAgent(db, agentCfg.id, { ...agentCfg, gatewayTools: ["agent_builder.*"] }),
+  ).toThrow(message);
+  expect(getAgent(db, agentCfg.id)?.gatewayTools).toBeUndefined();
+  expect(() =>
+    syncAgent(db, { ...agentCfg, id: "seeded", gatewayTools: ["agent_builder.list_agents"] }),
+  ).toThrow(message);
+});
+
 test("legacy connectors migrate only from the custom catalog and edits retire the fallback", () => {
   const db = freshDb();
   db.insert(agents)
@@ -372,6 +395,26 @@ test("legacy connectors migrate only from the custom catalog and edits retire th
     })
     .run();
   expect(getGatewayToken(db, "legacy-token")?.tools).toEqual([]);
+});
+
+test("legacy connector migration cannot grant Agent Builder access", () => {
+  const db = freshDb();
+  db.insert(agents)
+    .values({
+      id: "legacy-builder",
+      name: "Legacy",
+      model: claudeHarness.config.model,
+      harnessId: claudeHarness.id,
+      systemPrompt: "Old config",
+      gatewayTools: null,
+      connectors: JSON.stringify(["agent_builder"]),
+      createdAt: 1,
+    })
+    .run();
+  expect(
+    migrateLegacyAgentTools(db, "legacy-builder", [{ toolkit: "agent_builder", source: "custom" }]),
+  ).toEqual([]);
+  expect(getAgent(db, "legacy-builder")?.gatewayTools).toBeUndefined();
 });
 
 // --- Slack connections -------------------------------------------------------
