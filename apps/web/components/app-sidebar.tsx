@@ -53,9 +53,6 @@ export function AppSidebar() {
               </div>
               <div className="min-w-0 leading-tight">
                 <span className="block truncate font-semibold">Floo Agents</span>
-                <span className="block whitespace-normal text-[0.6rem] text-muted-foreground">
-                  Any agent. Any harness. Any channel.
-                </span>
               </div>
             </SidebarMenuButton>
             <SidebarTrigger className="shrink-0" />
