@@ -62,13 +62,13 @@ Composio Connect Link for the shared deployment identity, and Composio owns the 
 
 One credential per provider — the vault stays exactly as [`gateway.md`](gateway.md) defines it: `credentials(provider, key, value)`. All calls to a provider run as the identity the admin connected.
 
-Per-user control is **access resolution, not credential ownership**: the agent's exact `gatewayTools` determine catalog visibility, while the `grants` table decides which user may invoke each tool through the run token ([`identity-and-access.md`](identity-and-access.md)). A user without a grant can discover the tool but cannot execute it or receive its data.
+Per-user control is **access resolution, not credential ownership**: the agent's `gatewayTools` patterns determine catalog visibility, while the `grants` table decides which user may invoke each tool through the run token ([`identity-and-access.md`](identity-and-access.md)). A user without a grant can discover the tool but cannot execute it or receive its data.
 
 Composio-managed connections follow the same shared-identity rule. The platform keeps the Composio
 project key; Composio keeps downstream OAuth/API credentials. Composio remains behind the Tool
 Gateway and does not replace tool allowlists, grants, result limits, or traces.
 
-**Missing credential is a first-class answer, not a failure.** Static tools with missing credentials return `{ error: "not_connected" }`. Dynamic MCP/Composio tools are absent from current discovery, so stale selections fail closed as `forbidden` until the provider reconnects and discovery refreshes. Configuration lives with the admin, not in-conversation.
+**Missing credential is a first-class answer, not a failure.** Static tools with missing credentials return `{ error: "not_connected" }`. Dynamic MCP/Composio tools are absent from current discovery, so stale names return `tool_not_found` until the provider reconnects and discovery refreshes. Configuration lives with the admin, not in-conversation.
 
 ![Auth and invoke flows](../diagrams/gateway-auth-flow.svg)
 

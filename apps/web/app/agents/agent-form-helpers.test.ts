@@ -1,12 +1,12 @@
 import { expect, test } from "bun:test";
 import {
   gatewayToolkitNames,
-  gatewayToolkits,
   harnessSelection,
   parseAgentValues,
-  parseGatewayTools,
+  parseGatewayToolkits,
   parseHarnessRegistry,
   toggleGatewayToolkit,
+  unavailableGatewayTools,
 } from "./agent-form-helpers";
 
 const registry = [
@@ -59,129 +59,42 @@ test("parseAgentValues accepts nested harness config and rejects flat model resp
   );
 });
 
-test("parseGatewayTools validates and unwraps the tool catalog", () => {
-  const tools = [
+test("parseGatewayToolkits validates and unwraps the toolkit catalog", () => {
+  const toolkits = [
     {
-      name: "GITHUB_CREATE_ISSUE",
-      description: "Create an issue",
+      name: "github",
       source: "composio" as const,
-      toolkit: "github",
       connected: true,
     },
   ];
 
-  expect(parseGatewayTools({ tools })).toEqual(tools);
-  expect(() => parseGatewayTools({ tools: [{ ...tools[0], connected: "yes" }] })).toThrow(
-    "Invalid tool catalog",
+  expect(parseGatewayToolkits({ toolkits })).toEqual(toolkits);
+  expect(() => parseGatewayToolkits({ toolkits: [{ ...toolkits[0], connected: "yes" }] })).toThrow(
+    "Invalid toolkit catalog",
   );
 });
 
-test("gatewayToolkits groups exact tools by source and toolkit", () => {
-  expect(
-    gatewayToolkits([
-      {
-        name: "github.create_issue",
-        description: "Create an issue",
-        source: "composio",
-        toolkit: "github",
-        connected: true,
-      },
-      {
-        name: "github.get_issue",
-        description: "Get an issue",
-        source: "composio",
-        toolkit: "github",
-        connected: true,
-      },
-      {
-        name: "internal.search",
-        description: "Search records",
-        source: "custom",
-        toolkit: "internal",
-        connected: false,
-      },
-    ]),
-  ).toEqual([
-    {
-      id: "composio:github",
-      source: "composio",
-      toolkit: "github",
-      connected: true,
-      tools: [
-        {
-          name: "github.create_issue",
-          description: "Create an issue",
-          source: "composio",
-          toolkit: "github",
-          connected: true,
-        },
-        {
-          name: "github.get_issue",
-          description: "Get an issue",
-          source: "composio",
-          toolkit: "github",
-          connected: true,
-        },
-      ],
-    },
-    {
-      id: "custom:internal",
-      source: "custom",
-      toolkit: "internal",
-      connected: false,
-      tools: [
-        {
-          name: "internal.search",
-          description: "Search records",
-          source: "custom",
-          toolkit: "internal",
-          connected: false,
-        },
-      ],
-    },
+test("toggleGatewayToolkit upgrades exact entries to one wildcard and clears it", () => {
+  expect(toggleGatewayToolkit(["github.create_issue", "legacy.tool"], "github")).toEqual([
+    "legacy.tool",
+    "github.*",
   ]);
-});
-
-test("toggleGatewayToolkit selects partial toolkits and clears complete ones without losing legacy values", () => {
-  expect(
-    toggleGatewayToolkit(
-      ["github.create_issue", "legacy.tool"],
-      ["github.create_issue", "github.get_issue"],
-    ),
-  ).toEqual(["github.create_issue", "legacy.tool", "github.get_issue"]);
-  expect(
-    toggleGatewayToolkit(
-      ["github.create_issue", "legacy.tool", "github.get_issue"],
-      ["github.create_issue", "github.get_issue"],
-    ),
-  ).toEqual(["legacy.tool"]);
+  expect(toggleGatewayToolkit(["legacy.tool", "github.*"], "github")).toEqual(["legacy.tool"]);
 });
 
 test("gatewayToolkitNames shows one entry per exact-tool prefix", () => {
-  expect(
-    gatewayToolkitNames(["echo.ping", "gmail.send_email", "gmail.create_draft", "legacy_tool"]),
-  ).toEqual(["echo", "gmail", "legacy_tool"]);
+  expect(gatewayToolkitNames(["echo.*", "gmail.send_email", "gmail.*", "legacy_tool"])).toEqual([
+    "echo",
+    "gmail",
+    "legacy_tool",
+  ]);
 });
 
-test("gatewayToolkitNames uses catalog metadata for underscore-formatted tools", () => {
-  const catalog = [
-    {
-      name: "GITHUB_CREATE_ISSUE",
-      description: "Create an issue",
-      source: "composio" as const,
-      toolkit: "github",
-      connected: true,
-    },
-    {
-      name: "GITHUB_GET_ISSUE",
-      description: "Get an issue",
-      source: "composio" as const,
-      toolkit: "github",
-      connected: true,
-    },
-  ];
-
-  expect(gatewayToolkitNames(["GITHUB_CREATE_ISSUE", "GITHUB_GET_ISSUE"], catalog)).toEqual([
-    "github",
-  ]);
+test("unavailableGatewayTools identifies catalog-absent selections", () => {
+  expect(
+    unavailableGatewayTools(
+      ["agent_builder.list_agents", "legacy.tool", "gmail.*", "legacy.tool"],
+      new Set(["gmail"]),
+    ),
+  ).toEqual(["agent_builder.list_agents", "legacy.tool"]);
 });

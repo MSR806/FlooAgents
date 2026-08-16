@@ -316,7 +316,7 @@ test("handle surfaces an unknown agent as an error event", async () => {
 
 // --- Gateway token minting -------------------------------------------------
 
-const echoWithGatewayTools: AgentConfig = { ...agent, gatewayTools: ["echo.ping"] };
+const echoWithGatewayTools: AgentConfig = { ...agent, gatewayTools: ["echo.*"] };
 
 function insertLegacyAgent(db: ReturnType<typeof createDb>) {
   db.insert(schema.agents)
@@ -358,7 +358,7 @@ function capturingRuntime(db: ReturnType<typeof createDb>) {
   return { runtime, seen };
 }
 
-test("mints a gateway token with exact agent tools and user grant patterns", async () => {
+test("mints a gateway token with agent and user grant patterns", async () => {
   const db = createDb(":memory:");
   const user = upsertUserBySlackId(db, { slackUserId: "U1", name: "U1" });
   addGrant(db, user.id, "echo.*");
@@ -373,11 +373,11 @@ test("mints a gateway token with exact agent tools and user grant patterns", asy
   await collect(engine.stream({ ...baseInput, userMessage: "hi", userId: user.id }));
   expect(seen.req?.gateway?.url).toBe("http://gw");
   expect(seen.req?.gateway?.token).toBeTruthy();
-  expect(seen.tools).toEqual(["echo.ping"]);
+  expect(seen.tools).toEqual(["echo.*"]);
   expect(seen.grants).toEqual(["echo.*"]);
 });
 
-test("migrates legacy connector policy into exact custom gateway tools before minting", async () => {
+test("migrates legacy connector policy into a custom toolkit pattern before minting", async () => {
   const db = createDb(":memory:");
   insertLegacyAgent(db);
   const user = upsertUserBySlackId(db, { slackUserId: "legacy-admin", name: "Admin" });
@@ -389,9 +389,9 @@ test("migrates legacy connector policy into exact custom gateway tools before mi
     fetch(req) {
       discovery.token = req.headers.get("x-admin-token");
       return Response.json({
-        tools: [
-          { name: "echo.ping", toolkit: "echo", source: "custom" },
-          { name: "echo.send", toolkit: "echo", source: "composio" },
+        toolkits: [
+          { name: "echo", source: "custom", connected: true },
+          { name: "gmail", source: "composio", connected: true },
         ],
       });
     },
@@ -412,9 +412,9 @@ test("migrates legacy connector policy into exact custom gateway tools before mi
     server.stop(true);
   }
   expect(discovery.token).toBe("internal-admin");
-  expect(seen.tools).toEqual(["echo.ping"]);
-  expect(seen.grants).toEqual(["echo.ping"]);
-  expect(getDbAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  expect(seen.tools).toEqual(["echo.*"]);
+  expect(seen.grants).toEqual(["echo.*"]);
+  expect(getDbAgent(db, "legacy")?.gatewayTools).toEqual(["echo.*"]);
 });
 
 test("stalled legacy tool discovery fails the run with a terminal error", async () => {
@@ -488,11 +488,11 @@ test("mints a catalog-only gateway token when the user's grants don't match", as
 
   await collect(engine.stream({ ...baseInput, userMessage: "hi", userId: user.id }));
   expect(seen.req?.gateway).toBeDefined();
-  expect(seen.tools).toEqual(["echo.ping"]);
+  expect(seen.tools).toEqual(["echo.*"]);
   expect(seen.grants).toEqual(["gmail.*"]);
 });
 
-test("an admin gets exact selected tools as grants", async () => {
+test("an admin gets selected tool patterns as grants", async () => {
   const db = createDb(":memory:");
   const user = upsertUserBySlackId(db, { slackUserId: "admin", name: "Admin" });
   setAdmin(db, user.id, true); // no addGrant — admin needs none
@@ -505,7 +505,7 @@ test("an admin gets exact selected tools as grants", async () => {
   });
 
   await collect(engine.stream({ ...baseInput, userMessage: "hi", userId: user.id }));
-  expect(seen.grants).toEqual(["echo.ping"]);
+  expect(seen.grants).toEqual(["echo.*"]);
 });
 
 test("no gateway when gatewayUrl is unset, even with a matching grant", async () => {
