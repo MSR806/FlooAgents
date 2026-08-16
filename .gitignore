@@ -16,8 +16,8 @@ data/
 .bun/
 
 # UI/runtime-created skills (LocalSkillStore backing files) — keep only the seed skill.
+# Org-specific skills stay local; only generally-useful ones belong in the repo.
 config/skills/*
-!config/skills/our-repos/
 !config/skills/agent-tooling/
 *.DS_Store
 
