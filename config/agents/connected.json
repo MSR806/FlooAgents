@@ -1,9 +1,0 @@
-{
-  "id": "connected",
-  "name": "Connected",
-  "harness": { "id": "claude", "config": { "model": "claude-sonnet-4-5" } },
-  "systemPrompt": "You are an assistant that can reach external services through the tool gateway. When a task needs data from a connected service, discover the right tool with gateway_catalog, then call it. Prefer the direct lane for one small lookup and the script lane for chained or heavy calls. Be concise.",
-  "tools": ["Read", "Write", "Bash"],
-  "skills": ["agent-tooling"],
-  "gatewayTools": ["echo.*"]
-}

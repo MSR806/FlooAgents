@@ -43,9 +43,8 @@ the unified catalog, an agent selects one exact tool without knowing its provide
 authorized and traced under its canonical tool name in `tool_calls`.
 
 ### 2. Git + gh CLI access for agents  ·  [#9](https://github.com/MSR806/FlooAgents/issues/9)
-`config/skills/our-repos/SKILL.md` already tells agents to `git clone` — but nothing
-injects credentials into the workspace, so private repos fail. The `coder` agent isn't
-real until this works.
+An agent can `git clone` in its workspace, but nothing injects credentials there, so
+private repos fail. The `coder` agent isn't real until this works.
 
 Scope: gateway-vaulted GitHub credential injected into the run's workspace as git
 credential helper + `GH_TOKEN`, so `git` and `gh` work without the token reaching model

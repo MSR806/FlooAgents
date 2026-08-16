@@ -1,0 +1,128 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+tone_instructions: >
+  Be terse and concrete. Match the repo's own voice: short, technical, no filler.
+
+reviews:
+  profile: chill
+  high_level_summary_instructions: "Describe the change in 50 words or less."
+  # Ceremony a single-maintainer repo doesn't need.
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+
+  path_filters:
+    - "!bun.lock"
+    - "!docs/diagrams/**" # generated d2 -> svg, plus exported html
+    - "!apps/web/AGENTS.md" # rewritten by `next dev`, not authored here
+
+  path_instructions:
+    - path: "apps/gateway/src/**"
+      instructions: >
+        Security-critical (see SECURITY.md). Invocation must require BOTH the agent's
+        tool allowlist AND the user's grants — flag any path returning provider data or
+        invoking a tool with only one of the two. Run-scoped tokens must not outlive
+        their run or widen scope. Provider credentials must never reach tool output,
+        run tokens, agent context, or the sandbox. Wildcard tool patterns must stay
+        anchored and escaped.
+    - path: "apps/control-plane/src/engine.ts"
+      instructions: >
+        The engine is transport-agnostic. Flag any Slack/HTTP/channel-specific import or
+        concept here. Session, run-lifecycle and queue/batch logic belongs here and not
+        in a channel.
+    - path: "packages/core/**"
+      instructions: >
+        Domain data types only — Zod schemas and pure helpers. Flag seam interfaces
+        (Channel, RuntimeProvider, SkillStore), I/O, or transport code added here.
+    - path: "apps/web/**/*.tsx"
+      instructions: >
+        Paper & Ink. Flag literal colours, radii and font families (bg-white, #hex,
+        rounded-2xl, text-green-500) — use the tokens in packages/design-tokens.
+        Base UI uses the `render` prop; flag any `asChild`. Page titles go through
+        components/page-header.tsx.
+    - path: "**/*.test.ts"
+      instructions: >
+        bun:test, fully offline, inject-don't-mock. Flag mocking frameworks, module
+        interception, snapshots, network calls, or anything needing a real API key.
+    - path: "docs/**/*.md"
+      instructions: >
+        Docs stay short and high-level — what a thing is and why, not an exhaustive
+        reference. Flag padding, restated sections, and speculative future work.
+
+  auto_review:
+    base_branches: ["master"]
+    ignore_title_keywords: ["WIP", "DO NOT MERGE"]
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: >
+        Conventional Commits — `type(scope): description`. Squash-merge uses this title
+        as the commit message. Types: feat, fix, docs, chore, build, refactor, test.
+        Scope is an apps/ or packages/ directory name (web, gateway, harness,
+        control-plane, core, db, runtime) or a cross-cutting area (tools, deps); omit it
+        for repo-wide changes. See CONTRIBUTING.md.
+    description:
+      mode: "off"
+    docstrings:
+      mode: "off" # comments here are deliberately minimal
+
+    custom_checks:
+      - name: "Env var propagation"
+        mode: warning
+        instructions: >-
+          When this PR adds a new environment variable read (process.env.X / Bun.env.X),
+          verify X is documented in the root .env.example AND the owning app's
+          apps/<app>/.env.example, and wired into docker/compose.yaml if the service
+          needs it at runtime. Secrets get a placeholder plus a one-line comment, never a
+          value. Pass when no new env var is introduced.
+
+      - name: "Seam contract propagation"
+        mode: warning
+        instructions: >-
+          The four seams are packages/harness-protocol, packages/runtime/src/provider.ts
+          (RuntimeProvider), apps/control-plane/src/channels/channel.ts (Channel), and
+          apps/control-plane/src/stores/skill-store.ts (SkillStore). When a seam's
+          interface or Zod schema changes, verify every implementation and consumer is
+          updated in the same PR. The harness HTTP shape (/invocations, /ping,
+          /invocations/stream NDJSON, port 8080) is the AgentCore contract — flag any
+          change to it as breaking and require it in the PR description. Pass when no
+          seam changed.
+
+  tools:
+    # CI and the pre-commit hook already run these. Re-running only duplicates comments.
+    biome:
+      enabled: false
+    eslint:
+      enabled: false
+    oxc:
+      enabled: false
+    gitleaks:
+      enabled: false
+    # Prose linters fight technical writing more than they help.
+    languagetool:
+      enabled: false
+    markdownlint:
+      enabled: false
+    # Left on deliberately — nothing in CI covers these:
+    #   actionlint + zizmor -> .github/workflows/ci.yml
+    #   hadolint            -> docker/Dockerfile.*
+    #   shellcheck          -> .husky/pre-commit, the curl|tar step in CI
+    #   yamllint            -> docker/compose.yaml, docs/slack-app-manifest.yaml
+    #   skillspector        -> config/skills/*/SKILL.md
+    #   github-checks       -> reads CI's result instead of re-deriving it
+
+knowledge_base:
+  code_guidelines:
+    # Replaces the defaults, which would otherwise pick up apps/web/AGENTS.md.
+    filePatterns:
+      - files: ".claude/skills/coding-conventions/SKILL.md"
+        applyTo: "**/*.ts,**/*.tsx"
+      - files: ".claude/skills/test-conventions/SKILL.md"
+        applyTo: "**/*.test.ts"
+      - files: ".claude/skills/ui-conventions/SKILL.md"
+        applyTo: "apps/web/**"
+      - files: "CONTRIBUTING.md"
+        applyTo: "**"

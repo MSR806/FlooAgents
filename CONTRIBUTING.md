@@ -8,8 +8,8 @@ to review while the architecture is still settling.
 ```bash
 bun install
 bun run typecheck
-bun test
-```text
+bun run test
+```
 
 For local services, copy the app `.env.example` files described in the README.
 Do not commit secrets, local databases, or generated runtime data.
@@ -40,7 +40,7 @@ gitleaks scan of every commit in the branch. To run the same gate locally:
 ```bash
 bun run lint
 bun run typecheck
-bun test
+bun run test
 bun run --filter '@floo/web' build
 gitleaks git . --redact
 ```
@@ -73,7 +73,7 @@ when it spans several. Skip the scope for repo-wide changes.
 
 Examples:
 
-```
+```text
 feat(tools): select integrations by toolkit
 fix(web): load direct conversation links
 docs: add repo development skills to the roadmap
