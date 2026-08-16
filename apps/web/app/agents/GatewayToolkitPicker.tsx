@@ -6,31 +6,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  type GatewayTool,
   type GatewayToolkit,
-  gatewayToolkits,
+  gatewayToolkitNames,
+  parseGatewayToolkits,
   toggleGatewayToolkit,
+  unavailableGatewayTools,
 } from "./agent-form-helpers";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
+
 export default function GatewayToolkitPicker({
-  tools,
   selected,
   onChange,
 }: {
-  tools: readonly GatewayTool[];
   selected: string[];
   onChange: (tools: string[]) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const toolkits = gatewayToolkits(tools);
-  const available = new Set(tools.map((tool) => tool.name));
-  const unavailable = [...new Set(selected)].filter((tool) => !available.has(tool));
-  const selectedSet = new Set(selected);
-  const selectedToolkitCount = toolkits.filter((toolkit) =>
-    toolkit.tools.some((tool) => selectedSet.has(tool.name)),
+  const [toolkits, setToolkits] = useState<GatewayToolkit[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const available = new Set(toolkits.map((toolkit) => toolkit.name));
+  const unavailable = status === "ready" ? unavailableGatewayTools(selected, available) : [];
+  const selectedToolkitCount = gatewayToolkitNames(selected).filter((toolkit) =>
+    available.has(toolkit),
   ).length;
   const [open, setOpen] = useState(false);
-  const [source, setSource] = useState<GatewayTool["source"]>("custom");
+  const [source, setSource] = useState<GatewayToolkit["source"]>("custom");
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<string[]>(selected);
 
@@ -39,10 +40,24 @@ export default function GatewayToolkitPicker({
     if (!open && dialog.current?.open) dialog.current.close();
   }, [open]);
 
+  async function loadTools() {
+    setStatus("loading");
+    try {
+      const response = await fetch(`${API_BASE}/tools`);
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      const catalog = parseGatewayToolkits(await response.json());
+      setToolkits(catalog);
+      setSource(catalog.some((toolkit) => toolkit.source === "custom") ? "custom" : "composio");
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }
+
   function openPicker() {
     setDraft(selected);
     setQuery("");
-    setSource(toolkits.some((toolkit) => toolkit.source === "custom") ? "custom" : "composio");
+    if (status === "idle") void loadTools();
     setOpen(true);
   }
 
@@ -59,34 +74,28 @@ export default function GatewayToolkitPicker({
   const sourceToolkits = toolkits.filter((toolkit) => toolkit.source === source);
   const filtered = sourceToolkits.filter((toolkit) => {
     const search = query.trim().toLowerCase();
-    return (
-      !search ||
-      toolkit.toolkit.toLowerCase().includes(search) ||
-      toolkit.tools.some(
-        (tool) =>
-          tool.name.toLowerCase().includes(search) ||
-          tool.description.toLowerCase().includes(search),
-      )
-    );
+    return !search || toolkit.name.toLowerCase().includes(search);
   });
-  const draftUnavailable = [...new Set(draft)].filter((tool) => !available.has(tool));
+  const draftUnavailable = status === "ready" ? unavailableGatewayTools(draft, available) : [];
 
   return (
     <>
       <div className="flex min-w-0 flex-col gap-3 rounded-lg border bg-muted/15 p-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">
-            {selected.length
-              ? `${selectedToolkitCount} ${selectedToolkitCount === 1 ? "integration" : "integrations"} · ${selected.length} ${selected.length === 1 ? "tool" : "tools"}`
-              : "No external integrations selected"}
+            {selected.length && status === "ready"
+              ? `${selectedToolkitCount} ${selectedToolkitCount === 1 ? "integration" : "integrations"} selected`
+              : selected.length
+                ? `${gatewayToolkitNames(selected).length} external ${gatewayToolkitNames(selected).length === 1 ? "integration" : "integrations"} selected`
+                : "No external integrations selected"}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Toolkit choices are saved as an exact tool allowlist.
+            Add integrations to choose the tools this agent may use.
             {unavailable.length ? ` ${unavailable.length} unavailable tools are preserved.` : ""}
           </p>
         </div>
         <Button type="button" variant="outline" onClick={openPicker}>
-          Choose integrations
+          {selected.length ? "Manage tools" : "Add tools"}
         </Button>
       </div>
 
@@ -107,7 +116,7 @@ export default function GatewayToolkitPicker({
                 Choose integrations
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Selecting an integration grants its currently available tools.
+                A selection includes current and future tools from that integration.
               </p>
             </div>
             <Button
@@ -150,34 +159,42 @@ export default function GatewayToolkitPicker({
               </div>
             </div>
 
-            {filtered.length ? (
+            {status === "loading" || status === "idle" ? (
+              <p className="rounded-lg border border-dashed bg-muted/15 px-4 py-12 text-center text-sm text-muted-foreground">
+                Loading available tools…
+              </p>
+            ) : status === "error" ? (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-muted/15 px-4 py-12 text-center">
+                <p className="text-sm text-destructive">Failed to load available tools.</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void loadTools()}>
+                  Retry
+                </Button>
+              </div>
+            ) : filtered.length ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {filtered.map((toolkit) => (
                   <ToolkitOption
-                    key={toolkit.id}
+                    key={toolkit.name}
                     toolkit={toolkit}
-                    selected={draftSet}
+                    selected={draftSet.has(`${toolkit.name}.*`)}
                     onToggle={() =>
-                      setDraft((current) =>
-                        toggleGatewayToolkit(
-                          current,
-                          toolkit.tools.map((tool) => tool.name),
-                        ),
-                      )
+                      setDraft((current) => toggleGatewayToolkit(current, toolkit.name))
                     }
                   />
                 ))}
               </div>
             ) : (
               <p className="rounded-lg border border-dashed bg-muted/15 px-4 py-12 text-center text-sm text-muted-foreground">
-                {sourceToolkits.length
-                  ? "No integrations match your search."
-                  : source === "custom"
-                    ? "No custom integrations available."
-                    : "No connected Composio integrations. "}
-                {!sourceToolkits.length && source === "composio" ? (
+                {!toolkits.length
+                  ? "No tools available. "
+                  : sourceToolkits.length
+                    ? "No integrations match your search."
+                    : source === "custom"
+                      ? "No custom integrations available."
+                      : "No connected Composio integrations. "}
+                {!toolkits.length || (!sourceToolkits.length && source === "composio") ? (
                   <a href="/connectors" className="underline underline-offset-4">
-                    Connect one on the Tools page.
+                    Configure one on the Tools page.
                   </a>
                 ) : null}
               </p>
@@ -212,7 +229,8 @@ export default function GatewayToolkitPicker({
 
           <div className="flex flex-col-reverse gap-3 border-t bg-background px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p className="text-sm text-muted-foreground">
-              {draft.length} {draft.length === 1 ? "tool" : "tools"} selected
+              {gatewayToolkitNames(draft).length}{" "}
+              {gatewayToolkitNames(draft).length === 1 ? "integration" : "integrations"} selected
             </p>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={closePicker}>
@@ -260,28 +278,18 @@ function ToolkitOption({
   onToggle,
 }: {
   toolkit: GatewayToolkit;
-  selected: ReadonlySet<string>;
+  selected: boolean;
   onToggle: () => void;
 }) {
-  const selectedCount = toolkit.tools.filter((tool) => selected.has(tool.name)).length;
-  const allSelected = selectedCount === toolkit.tools.length;
-  const partial = selectedCount > 0 && !allSelected;
-  const label = humanize(toolkit.toolkit);
-  const toolNoun = toolkit.tools.length === 1 ? "tool" : "tools";
+  const label = humanize(toolkit.name);
 
   return (
     <button
       type="button"
-      aria-pressed={partial ? "mixed" : allSelected}
-      aria-label={
-        allSelected
-          ? `Clear ${label}, all ${toolkit.tools.length} ${toolNoun} selected`
-          : partial
-            ? `Select all ${label}, ${selectedCount} of ${toolkit.tools.length} ${toolNoun} currently selected`
-            : `Select ${label}, ${toolkit.tools.length} ${toolNoun}`
-      }
+      aria-pressed={selected}
+      aria-label={selected ? `Remove ${label}` : `Select ${label}`}
       className={`flex min-h-36 min-w-0 flex-col rounded-lg border p-4 text-left transition-colors ${
-        selectedCount
+        selected
           ? "border-foreground/30 bg-muted/30"
           : "bg-card hover:border-foreground/20 hover:bg-muted/10"
       }`}
@@ -302,21 +310,15 @@ function ToolkitOption({
             <span className="truncate font-medium">{label}</span>
             <span
               className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
-                selectedCount
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "bg-background"
+                selected ? "border-primary bg-primary text-primary-foreground" : "bg-background"
               }`}
             >
-              {allSelected ? (
-                <Check className="size-3.5" />
-              ) : partial ? (
-                <span className="size-2 rounded-full bg-current" />
-              ) : null}
+              {selected ? <Check className="size-3.5" /> : null}
             </span>
           </span>
           <span className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
-            {toolkit.tools.length} exact {toolkit.tools.length === 1 ? "tool" : "tools"} available
-            through {toolkit.source === "composio" ? "Composio" : "the gateway"}.
+            Grants access to current and future {label} tools through{" "}
+            {toolkit.source === "composio" ? "Composio" : "the gateway"}.
           </span>
         </span>
       </span>
@@ -324,9 +326,7 @@ function ToolkitOption({
         <span className={toolkit.connected ? "text-success" : "text-warning"}>
           {toolkit.connected ? "Connected" : "Not connected"}
         </span>
-        {partial ? (
-          <span className="text-muted-foreground">Partial · {selectedCount} selected</span>
-        ) : null}
+        {selected ? <span className="text-muted-foreground">All tools</span> : null}
       </span>
     </button>
   );

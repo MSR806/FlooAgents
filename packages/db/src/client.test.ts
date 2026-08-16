@@ -175,7 +175,7 @@ test("adds images to the predecessor harness registry without breaking custom ro
   expect(getHarness(createDb(path), "claude")?.image).toBe("/harnesses/operator.svg");
 });
 
-test("migrates legacy connectors to exact custom tools without widening providers", () => {
+test("migrates legacy connectors to custom toolkit patterns", () => {
   const path = join(mkdtempSync(join(tmpdir(), "platform-db-migration-")), "legacy.db");
   const legacy = new Database(path);
   legacy.exec(`
@@ -201,11 +201,33 @@ test("migrates legacy connectors to exact custom tools without widening provider
   expect(getLegacyAgentConnectors(db, "legacy")).toEqual(["echo"]);
   expect(
     migrateLegacyAgentTools(db, "legacy", [
-      { name: "echo.ping", toolkit: "echo", source: "custom" },
-      { name: "echo.send", toolkit: "echo", source: "composio" },
+      { toolkit: "echo", source: "custom" },
+      { toolkit: "echo", source: "composio" },
     ]),
-  ).toEqual(["echo.ping"]);
-  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.ping"]);
+  ).toEqual(["echo.*"]);
+  expect(getAgent(db, "legacy")?.gatewayTools).toEqual(["echo.*"]);
   expect(getLegacyAgentConnectors(db, "legacy")).toEqual([]);
   expect(getGatewayToken(db, "legacy-token")?.tools).toEqual([]);
+});
+
+test("removes Agent Builder access from existing DB agents", () => {
+  const path = join(mkdtempSync(join(tmpdir(), "platform-reserved-tools-")), "legacy.db");
+  const legacy = new Database(path);
+  legacy.exec(`
+    CREATE TABLE agents (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, model TEXT NOT NULL,
+      system_prompt TEXT NOT NULL, tools TEXT, skills TEXT, gateway_tools TEXT, connectors TEXT,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO agents VALUES (
+      'helper', 'Helper', 'sonnet', 'Help.', NULL, NULL,
+      '["echo.*","agent_builder.list_agents","agent_builder.*"]',
+      '["echo","agent_builder"]', 1
+    );
+  `);
+  legacy.close();
+
+  const db = createDb(path);
+  expect(getAgent(db, "helper")?.gatewayTools).toEqual(["echo.*"]);
+  expect(getLegacyAgentConnectors(db, "helper")).toEqual(["echo"]);
 });

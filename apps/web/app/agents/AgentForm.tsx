@@ -17,11 +17,9 @@ import { Textarea } from "@/components/ui/textarea";
 import MultiSelect, { type Group } from "../components/MultiSelect";
 import {
   type AgentValues,
-  type GatewayTool,
   type HarnessDefinition,
   harnessSelection,
   parseAgentValues,
-  parseGatewayTools,
   parseHarnessRegistry,
 } from "./agent-form-helpers";
 import GatewayToolkitPicker from "./GatewayToolkitPicker";
@@ -80,8 +78,6 @@ export default function AgentForm({
   const [harnesses, setHarnesses] = useState<HarnessDefinition[]>([]);
   const [harnessStatus, setHarnessStatus] = useState<"loading" | "ready" | "error">("loading");
   const [allSkills, setAllSkills] = useState<{ name: string; description: string }[]>([]);
-  const [allGatewayTools, setAllGatewayTools] = useState<GatewayTool[]>([]);
-  const [gatewayToolError, setGatewayToolError] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -103,14 +99,6 @@ export default function AgentForm({
       .then((r) => r.json() as Promise<{ name: string; description: string }[]>)
       .then(setAllSkills)
       .catch(() => setAllSkills([]));
-    fetch(`${API_BASE}/tools`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Request failed (${r.status})`);
-        return r.json();
-      })
-      .then(parseGatewayTools)
-      .then(setAllGatewayTools)
-      .catch(() => setGatewayToolError(true));
   }, []);
 
   const set = <K extends keyof AgentValues>(key: K, value: AgentValues[K]) =>
@@ -304,23 +292,10 @@ export default function AgentForm({
 
       <div className="grid gap-2">
         <Label>Gateway tools</Label>
-        {gatewayToolError ? (
-          <p className="text-xs text-destructive">Failed to load gateway tools.</p>
-        ) : allGatewayTools.length === 0 && !values.gatewayTools?.length ? (
-          <p className="text-xs text-muted-foreground">
-            No tools available — configure one on the{" "}
-            <a href="/connectors" className="underline">
-              Tools
-            </a>{" "}
-            page first.
-          </p>
-        ) : (
-          <GatewayToolkitPicker
-            tools={allGatewayTools}
-            selected={values.gatewayTools ?? []}
-            onChange={(gatewayTools) => set("gatewayTools", gatewayTools)}
-          />
-        )}
+        <GatewayToolkitPicker
+          selected={values.gatewayTools ?? []}
+          onChange={(gatewayTools) => set("gatewayTools", gatewayTools)}
+        />
         <p className="text-xs text-muted-foreground">
           What this agent may reach. A user still needs a matching grant to call a tool.
         </p>

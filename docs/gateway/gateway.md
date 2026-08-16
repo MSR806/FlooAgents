@@ -71,12 +71,14 @@ Two small packages carry the contract:
 
 Two levels, intersected when the control plane mints the run token:
 
-- **Agent level** — agent config carries exact `gatewayTools` names: what appears in this agent's catalog and what it may touch at all. The upstream implementation is irrelevant here.
+- **Agent level** — agent config carries `gatewayTools` names or toolkit patterns such as `gmail.*`: what appears in this agent's catalog and what it may touch at all. The upstream implementation is irrelevant here.
 - **User level** — a `grants` table (`userId → tool pattern`): what this user may call. Users are auto-provisioned from Slack and granted access by an admin — see [`identity-and-access.md`](identity-and-access.md).
 
-The token is scoped to `{ userId, agentId, tools, grants }`. Catalog requests use the exact tool allowlist; invoke requests require both an agent-selected tool and a matching user grant. Both lanes pass through the token, so access holds even inside agent-written scripts. Mechanically it is an **opaque token in a DB table** (gateway and control plane share the SQLite) — checked per call, expired when its run completes; no JWT machinery.
+The `agent_builder` toolkit is reserved for the built-in Agent Builder. It is omitted from management catalogs, and DB-backed agents cannot store its exact tools or wildcard.
 
-Invoke errors form a closed set: `user_missing_grant` (stop and inform the user), `forbidden` (outside the agent's exact tool allowlist), `not_connected` (admin hasn't configured the upstream), `invalid_input` (schema mismatch), `provider_error`, `timeout`. And the direct lane has a **result-size cap (~50KB)**: a larger result is refused with a pointer to the script lane — the cap is what enforces the context discipline, not just the skill's advice.
+The token is scoped to `{ userId, agentId, tools, grants }`. Catalog requests evaluate the agent's tool patterns; invoke requests require both a matching agent pattern and a matching user grant. Both lanes pass through the token, so access holds even inside agent-written scripts. Mechanically it is an **opaque token in a DB table** (gateway and control plane share the SQLite) — checked per call, expired when its run completes; no JWT machinery.
+
+Invoke errors form a closed set: `user_missing_grant` (stop and inform the user), `forbidden` (outside the agent's tool patterns), `tool_not_found` (the exact discovered name is unavailable), `not_connected` (admin hasn't configured the upstream), `invalid_input` (schema mismatch), `provider_error`, `timeout`. And the direct lane has a **result-size cap (~50KB)**: a larger result is refused with a pointer to the script lane — the cap is what enforces the context discipline, not just the skill's advice.
 
 ## Credentials
 

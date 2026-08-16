@@ -12,12 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { type SlackConnection, slackStartupError } from "../../connections/connection-helpers";
 import AgentForm, { type AgentValues } from "../AgentForm";
-import {
-  type GatewayTool,
-  gatewayToolkitNames,
-  parseAgentValues,
-  parseGatewayTools,
-} from "../agent-form-helpers";
+import { gatewayToolkitNames, parseAgentValues } from "../agent-form-helpers";
 import HarnessImage from "../HarnessImage";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "/api";
@@ -32,7 +27,6 @@ export default function AgentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [agent, setAgent] = useState<AgentValues | null>(null);
   const [harnessImages, setHarnessImages] = useState<Record<string, string>>({});
-  const [gatewayCatalog, setGatewayCatalog] = useState<GatewayTool[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [connections, setConnections] = useState<SlackConnection[] | null>(null);
@@ -73,14 +67,6 @@ export default function AgentDetailPage() {
         ),
       )
       .catch(() => setHarnessImages({}));
-    fetch(`${API_BASE}/tools`)
-      .then((response) => {
-        if (!response.ok) throw new Error(`Request failed (${response.status})`);
-        return response.json();
-      })
-      .then(parseGatewayTools)
-      .then(setGatewayCatalog)
-      .catch(() => setGatewayCatalog([]));
     void loadConnections();
   }, [id, loadConnections]);
 
@@ -371,7 +357,7 @@ export default function AgentDetailPage() {
                 />
                 <CapabilityRow
                   label="Gateway toolkits"
-                  items={gatewayToolkitNames(agent.gatewayTools, gatewayCatalog)}
+                  items={gatewayToolkitNames(agent.gatewayTools)}
                   empty="None"
                   href={() => "/connectors"}
                 />

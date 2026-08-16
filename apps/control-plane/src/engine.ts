@@ -26,7 +26,6 @@ const RUN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const GATEWAY_DISCOVERY_TIMEOUT_MS = 10_000;
 
 type GatewayToolIdentity = {
-  name: string;
   toolkit: string;
   source: "custom" | "composio";
 };
@@ -74,7 +73,7 @@ export function createEngine(deps: {
   getAgent: (id: string) => AgentConfig | undefined;
   /** Resolve a skill bundle by name (the SkillStore seam); defaults to "no skills". */
   getSkill?: (name: string) => SkillBundle | undefined;
-  /** Tool Gateway base URL; attached only when an agent has exact gateway tools. */
+  /** Tool Gateway base URL; attached only when an agent has gateway tool access. */
   gatewayUrl?: string;
   /** Internal token used only for gateway management discovery. */
   gatewayAdminToken?: string;
@@ -111,23 +110,26 @@ export function createEngine(deps: {
     if (!response.ok)
       throw new Error(`Gateway tool discovery failed with status ${response.status}`);
     const body: unknown = await response.json();
-    if (!body || typeof body !== "object" || !("tools" in body) || !Array.isArray(body.tools)) {
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !("toolkits" in body) ||
+      !Array.isArray(body.toolkits)
+    ) {
       throw new Error("Gateway returned an invalid tool catalog");
     }
-    const tools = body.tools.filter(
-      (tool): tool is GatewayToolIdentity =>
-        !!tool &&
-        typeof tool === "object" &&
-        "name" in tool &&
-        typeof tool.name === "string" &&
-        "toolkit" in tool &&
-        typeof tool.toolkit === "string" &&
-        "source" in tool &&
-        (tool.source === "custom" || tool.source === "composio"),
+    const tools = body.toolkits.filter(
+      (toolkit): toolkit is { name: string; source: "custom" | "composio" } =>
+        !!toolkit &&
+        typeof toolkit === "object" &&
+        "name" in toolkit &&
+        typeof toolkit.name === "string" &&
+        "source" in toolkit &&
+        (toolkit.source === "custom" || toolkit.source === "composio"),
     );
-    if (tools.length !== body.tools.length)
+    if (tools.length !== body.toolkits.length)
       throw new Error("Gateway returned an invalid tool catalog");
-    return tools;
+    return tools.map(({ name, source }) => ({ toolkit: name, source }));
   }
 
   function withRunTimeout<T>(promise: Promise<T>): Promise<T> {
@@ -180,7 +182,7 @@ export function createEngine(deps: {
       const skillBundles = skillsFor(agent);
       validateAgentHarness(db, agent);
 
-      // The agent's exact tools define catalog visibility. Grants are checked only on invocation,
+      // The agent's tool patterns define catalog visibility. Grants are checked only on invocation,
       // so an ungranted user can discover a relevant tool and receive a useful access error.
       let gatewayTools = [...new Set(agent.gatewayTools ?? [])];
       if (gatewayUrl && userId && getLegacyAgentConnectors(db, agent.id).length > 0) {

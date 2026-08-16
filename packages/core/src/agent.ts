@@ -23,8 +23,17 @@ export const AgentConfig = z.object({
   tools: z.array(z.string()).optional(),
   /** Skill names this agent loads (folders in the skill registry). */
   skills: z.array(z.string()).optional(),
-  /** Exact canonical gateway tool names this agent may discover and invoke. */
-  gatewayTools: z.array(z.string()).optional(),
+  /** Canonical gateway tool names or terminal toolkit patterns this agent may use. */
+  gatewayTools: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .refine((value) => !value.includes("*") || /^[\w-]+\.\*$/.test(value), {
+          message: "Gateway tool patterns must use the toolkit.* form",
+        }),
+    )
+    .optional(),
 });
 
 export type AgentConfig = z.infer<typeof AgentConfig>;

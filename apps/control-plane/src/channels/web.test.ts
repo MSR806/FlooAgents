@@ -114,6 +114,42 @@ test("agent API returns nested harness summaries and rejects unavailable selecti
   expect((await fetch(new Request("http://x/api/agents/%E0%A4%A"))).status).toBe(404);
 });
 
+test("agent API reserves Agent Builder gateway tools for the built-in", async () => {
+  const db = createDb(":memory:");
+  const fetch = createWebHandler({
+    engine: {} as ReturnType<typeof createEngine>,
+    db,
+    skillStore: {} as SkillStore,
+    port: 0,
+  });
+  const agent = {
+    id: "helper",
+    name: "Helper",
+    harness: { id: "claude", config: { model: "claude-sonnet-4-5" } },
+    systemPrompt: "Help.",
+  };
+  const request = (method: "POST" | "PUT", gatewayTools: string[]) =>
+    fetch(
+      new Request(method === "POST" ? "http://x/api/agents" : "http://x/api/agents/helper", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...agent, gatewayTools }),
+      }),
+    );
+
+  const create = await request("POST", ["agent_builder.list_agents"]);
+  expect(create.status).toBe(400);
+  expect(await create.json()).toEqual({
+    error: "Only the built-in Agent Builder can use agent_builder gateway tools",
+  });
+  expect(getAgent(db, "helper")).toBeUndefined();
+
+  expect((await request("POST", ["echo.*"])).status).toBe(201);
+  const update = await request("PUT", ["agent_builder.*"]);
+  expect(update.status).toBe(400);
+  expect(getAgent(db, "helper")?.gatewayTools).toEqual(["echo.*"]);
+});
+
 test("PUT credentials proxy injects x-admin-token and forwards the body", async () => {
   let seen: Request | undefined;
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
@@ -184,12 +220,10 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
   globalThis.fetch = (async (input: Request | string | URL, init?: RequestInit) => {
     seen = new Request(input as string, init);
     return Response.json({
-      tools: [
+      toolkits: [
         {
-          name: "gmail.send_email",
-          description: "Send email",
+          name: "gmail",
           source: "composio",
-          toolkit: "gmail",
           connected: true,
         },
       ],
@@ -199,12 +233,10 @@ test("GET /api/tools proxies the unified gateway catalog", async () => {
   const res = await handler()(new Request("http://x/api/tools"));
   expect(seen?.headers.get("x-admin-token")).toBe("admin-secret");
   expect(await res.json()).toEqual({
-    tools: [
+    toolkits: [
       {
-        name: "gmail.send_email",
-        description: "Send email",
+        name: "gmail",
         source: "composio",
-        toolkit: "gmail",
         connected: true,
       },
     ],

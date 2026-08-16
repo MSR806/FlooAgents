@@ -9,10 +9,12 @@ Tests are **`bun:test`, fully offline, and every seam is injectable** — no moc
 
 ## Running
 
-- `bun test` — the whole workspace (recursively finds every `*.test.ts`).
+- `bun run test` — the whole workspace. The script is `bun test apps packages`: bare
+  `bun test` scans from the repo root, which sweeps in runtime data like UI-created
+  skills under `config/skills/` and cloned repos under `data/workspaces/`.
 - `bun test apps/control-plane` — one app/dir.
-- `bun test --watch` — while iterating.
-- Tests are part of "done": `bun run typecheck` + `bun test` + `bun run biome check .` all pass.
+- `bun run test --watch` — while iterating.
+- Tests are part of "done": `bun run typecheck` + `bun run test` + `bun run biome check .` all pass.
 
 ## Philosophy
 

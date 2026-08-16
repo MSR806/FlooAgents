@@ -2,13 +2,12 @@ import { expect, test } from "bun:test";
 import { createDb, createGatewayToken, getCredential, schema, setCredential } from "@floo/db";
 import { ComposioNotConnectedError, type ComposioService } from "./composio.ts";
 import { type McpGateway, McpToolError, NotConnectedError } from "./mcp.ts";
-import { allTools } from "./registry.ts";
 import { createGatewayServer, resolveComposioApiKey } from "./server.ts";
 import { makeVault } from "./vault.ts";
 
 const ADMIN = "admin-secret";
 
-/** Build a fresh in-memory gateway with a token carrying exact tools and grants. */
+/** Build a fresh in-memory gateway with independent agent tool and user grant patterns. */
 function setup(
   grants: string[],
   opts: {
@@ -35,22 +34,7 @@ function setup(
     runId: "run-1",
     userId: "user-1",
     agentId: "agent-1",
-    tools:
-      opts.tools ??
-      grants.flatMap((grant) =>
-        grant.endsWith(".*")
-          ? [
-              ...allTools()
-                .map((tool) => tool.name)
-                .filter((name) => name.startsWith(grant.slice(0, -1))),
-              ...(grant === "github.*"
-                ? ["github.create_issue"]
-                : grant === "jira.*"
-                  ? ["jira.getIssue"]
-                  : []),
-            ]
-          : [grant],
-      ),
+    tools: opts.tools ?? grants,
     grants,
     ttlMs: opts.ttlMs ?? 60_000,
   });
@@ -309,7 +293,7 @@ async function withControlPlane<T>(
   }
 }
 
-test("catalog returns exact agent gateway tools only", async () => {
+test("catalog expands agent toolkit patterns to concrete tools", async () => {
   const { fetch, token } = setup(["echo.*"]);
   const res = await post(fetch, "/catalog", auth(token), {});
   const { tools } = (await res.json()) as { tools: { name: string; inputSchema: unknown }[] };
@@ -535,7 +519,7 @@ test("invoke connected but ungranted tool → user_missing_grant instructions", 
   });
 });
 
-test("invoke tool outside the agent's exact tools → forbidden", async () => {
+test("invoke tool outside the agent's patterns → forbidden", async () => {
   const { fetch, token } = setup(["github.*"], { tools: ["echo.ping"] });
   const res = await post(fetch, "/invoke", auth(token), {
     tool: "github.create_issue",
@@ -654,28 +638,25 @@ test("stored Composio API key takes precedence over the environment fallback", (
   expect(resolveComposioApiKey(db, vault, "env-key")).toBe("stored-key");
 });
 
-test("GET /tools unifies custom, connected MCP, and Composio metadata", async () => {
+test("GET /tools returns toolkit choices without concrete tool metadata", async () => {
   const { db, fetch, vault } = setup([], { mcp: fakeMcp(), composio: fakeComposio() });
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
 
   expect((await fetch(new Request("http://x/tools"))).status).toBe(401);
   const res = await getTools(fetch);
-  const body = (await res.json()) as { tools: { name: string; source: string; toolkit: string }[] };
-  expect(body.tools).toEqual(
+  const body = (await res.json()) as {
+    toolkits: { name: string; source: string; connected: boolean }[];
+  };
+  expect(body.toolkits).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ name: "echo.ping", source: "custom", toolkit: "echo" }),
-      expect.objectContaining({
-        name: "github.create_issue",
-        source: "custom",
-        toolkit: "github",
-      }),
-      expect.objectContaining({
-        name: "gmail.send_email",
-        source: "composio",
-        toolkit: "gmail",
-      }),
+      { name: "echo", source: "custom", connected: true },
+      { name: "github", source: "custom", connected: true },
+      { name: "gmail", source: "composio", connected: true },
     ]),
   );
+  expect(body.toolkits.some((toolkit) => toolkit.name === "agent_builder")).toBe(false);
+  expect(JSON.stringify(body)).not.toContain("inputSchema");
+  expect(JSON.stringify(body)).not.toContain("send_email");
 });
 
 test("a failing Composio configuration check does not hide custom tools", async () => {
@@ -687,9 +668,9 @@ test("a failing Composio configuration check does not hide custom tools", async 
 
   const response = await getTools(fetch);
   expect(response.status).toBe(200);
-  const body = (await response.json()) as { tools: { name: string }[] };
-  expect(body.tools.some((tool) => tool.name === "echo.ping")).toBe(true);
-  expect(body.tools.some((tool) => tool.name === "gmail.send_email")).toBe(false);
+  const body = (await response.json()) as { toolkits: { name: string }[] };
+  expect(body.toolkits.some((toolkit) => toolkit.name === "echo")).toBe(true);
+  expect(body.toolkits.some((toolkit) => toolkit.name === "gmail")).toBe(false);
 });
 
 test("management discovery shares in-flight work, caches briefly, and invalidates on credentials", async () => {
@@ -749,9 +730,9 @@ test("management discovery does not cache an incomplete Composio catalog", async
   const { fetch } = setup([], { composio, managementToolsTtlMs: 60_000 });
 
   await getTools(fetch);
-  const second = (await (await getTools(fetch)).json()) as { tools: { name: string }[] };
+  const second = (await (await getTools(fetch)).json()) as { toolkits: { name: string }[] };
   expect(discoveries).toBe(2);
-  expect(second.tools.map((tool) => tool.name)).toContain("hackernews.get_user");
+  expect(second.toolkits.map((toolkit) => toolkit.name)).toContain("hackernews");
 });
 
 test("dynamic invocation uses its exact discovery across cache invalidation", async () => {
@@ -804,8 +785,8 @@ test("dynamic invocation uses its exact discovery across cache invalidation", as
 
   expect(await (await invocation).json()).toEqual({ ok: true });
   expect(calls).toBe(1);
-  const refreshed = (await (await getTools(fetch)).json()) as { tools: { name: string }[] };
-  expect(refreshed.tools.some((tool) => tool.name === "github.create_issue")).toBe(false);
+  const refreshed = (await (await getTools(fetch)).json()) as { toolkits: { name: string }[] };
+  expect(refreshed.toolkits.some((toolkit) => toolkit.name === "github")).toBe(false);
 });
 
 test("Composio invocation preserves its discovered upstream slug across invalidation", async () => {
@@ -904,13 +885,13 @@ test("MCP providers discover concurrently with independent deadlines", async () 
   setCredential(db, "github", "github_pat", vault.encrypt("pat"));
 
   const res = await getTools(fetch);
-  const body = (await res.json()) as { tools: { name: string }[] };
-  expect(body.tools.map((tool) => tool.name)).toEqual(
-    expect.arrayContaining(["github.tool", "jira.tool"]),
+  const body = (await res.json()) as { toolkits: { name: string }[] };
+  expect(body.toolkits.map((toolkit) => toolkit.name)).toEqual(
+    expect.arrayContaining(["github", "jira"]),
   );
 });
 
-test("removed and unknown dynamic tools never dispatch", async () => {
+test("removed and unknown dynamic tools return tool_not_found without dispatching", async () => {
   let available = true;
   let mcpCalls = 0;
   let composioCalls = 0;
@@ -948,7 +929,11 @@ test("removed and unknown dynamic tools never dispatch", async () => {
 
   for (const tool of ["github.create_issue", "github.removed", "gmail.removed"]) {
     const res = await post(fetch, "/invoke", auth(token), { tool, input: {} });
-    expect(await res.json()).toEqual({ error: "forbidden" });
+    expect(await res.json()).toEqual({
+      error: "tool_not_found",
+      tool,
+      message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+    });
   }
   expect(mcpCalls).toBe(0);
   expect(composioCalls).toBe(0);
@@ -969,7 +954,11 @@ test("Composio discovery and toolkit routes time out boundedly", async () => {
     tool: "gmail.send_email",
     input: {},
   });
-  expect(await invoke.json()).toEqual({ error: "forbidden" });
+  expect(await invoke.json()).toEqual({
+    error: "tool_not_found",
+    tool: "gmail.send_email",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
   const tools = await getTools(fetch);
   expect(tools.status).toBe(200);
   const toolkits = await fetch(
@@ -1038,9 +1027,11 @@ test("custom tools win canonical-name collisions with Composio", async () => {
   });
   const { fetch } = setup([], { composio });
   const res = await getTools(fetch);
-  const body = (await res.json()) as { tools: { name: string; source: string }[] };
-  expect(body.tools.filter((tool) => tool.name === "echo.ping")).toEqual([
-    expect.objectContaining({ name: "echo.ping", source: "custom" }),
+  const body = (await res.json()) as {
+    toolkits: { name: string; source: string; connected: boolean }[];
+  };
+  expect(body.toolkits.filter((toolkit) => toolkit.name === "echo")).toEqual([
+    { name: "echo", source: "custom", connected: true },
   ]);
 });
 
@@ -1210,7 +1201,11 @@ test("no github credential → invoke mcp tool fails closed", async () => {
     tool: "github.create_issue",
     input: {},
   });
-  expect(await res.json()).toEqual({ error: "forbidden" });
+  expect(await res.json()).toEqual({
+    error: "tool_not_found",
+    tool: "github.create_issue",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
 });
 
 test("mcp callTool throwing → provider_error", async () => {
@@ -1262,7 +1257,11 @@ test("oauth connector not connected → catalog omits its tools", async () => {
 test("oauth connector not connected → invoke fails closed", async () => {
   const { fetch, token } = setup(["jira.*"], { mcp: notConnectedMcp });
   const res = await post(fetch, "/invoke", auth(token), { tool: "jira.getIssue", input: {} });
-  expect(await res.json()).toEqual({ error: "forbidden" });
+  expect(await res.json()).toEqual({
+    error: "tool_not_found",
+    tool: "jira.getIssue",
+    message: "This exact tool is unavailable. Search the catalog again and use a returned name.",
+  });
 });
 
 test("GET /oauth/jira/start without admin token → 401", async () => {

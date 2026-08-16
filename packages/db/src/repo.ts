@@ -32,29 +32,39 @@ const now = () => Date.now();
 
 type AgentRow = typeof agents.$inferSelect;
 type AgentWriteOptions = { legacyConnectors?: readonly string[] };
+const RESERVED_AGENT_TOOL_PREFIX = "agent_builder.";
+
+function validateDbAgent(agent: AgentConfig): AgentConfig {
+  if (agent.gatewayTools?.some((tool) => tool.startsWith(RESERVED_AGENT_TOOL_PREFIX))) {
+    throw new Error("Only the built-in Agent Builder can use agent_builder gateway tools");
+  }
+  return agent;
+}
 
 /** Parse a stored row back into a validated `AgentConfig` (JSON arrays + Zod check). */
 function rowToAgent(row: AgentRow): AgentConfig {
-  return AgentConfig.parse({
-    id: row.id,
-    name: row.name,
-    harness: {
-      id: row.harnessId,
-      config: {
-        model: row.model,
-        ...(row.serviceTier ? { serviceTier: row.serviceTier } : {}),
+  return validateDbAgent(
+    AgentConfig.parse({
+      id: row.id,
+      name: row.name,
+      harness: {
+        id: row.harnessId,
+        config: {
+          model: row.model,
+          ...(row.serviceTier ? { serviceTier: row.serviceTier } : {}),
+        },
       },
-    },
-    systemPrompt: row.systemPrompt,
-    tools: row.tools ? JSON.parse(row.tools) : undefined,
-    skills: row.skills ? JSON.parse(row.skills) : undefined,
-    gatewayTools: row.gatewayTools ? JSON.parse(row.gatewayTools) : undefined,
-  });
+      systemPrompt: row.systemPrompt,
+      tools: row.tools ? JSON.parse(row.tools) : undefined,
+      skills: row.skills ? JSON.parse(row.skills) : undefined,
+      gatewayTools: row.gatewayTools ? JSON.parse(row.gatewayTools) : undefined,
+    }),
+  );
 }
 
 /** Validate config and shape it for storage (arrays → JSON text, empty → null). */
 function agentToRow(cfg: AgentConfig, options: AgentWriteOptions = {}): AgentRow {
-  const a = AgentConfig.parse(cfg);
+  const a = validateDbAgent(AgentConfig.parse(cfg));
   return {
     id: a.id,
     name: a.name,
@@ -139,7 +149,6 @@ function replaceAgent(db: Db, id: string, agent: AgentConfig, options: AgentWrit
 }
 
 type GatewayToolIdentity = {
-  name: string;
   toolkit: string;
   source: "custom" | "composio";
 };
@@ -177,7 +186,9 @@ export function migrateLegacyAgentTools(
 
   const legacy = storedStrings(row.connectors);
   const existing = storedStrings(row.gatewayTools);
-  const customTools = catalog.filter((tool) => tool.source === "custom");
+  const customTools = catalog.filter(
+    (tool) => tool.source === "custom" && tool.toolkit !== "agent_builder",
+  );
   const resolved = new Set(
     legacy.filter((connector) => customTools.some((tool) => tool.toolkit === connector)),
   );
@@ -186,7 +197,9 @@ export function migrateLegacyAgentTools(
   const tools = [
     ...new Set([
       ...existing,
-      ...customTools.filter((tool) => resolved.has(tool.toolkit)).map((tool) => tool.name),
+      ...customTools
+        .filter((tool) => resolved.has(tool.toolkit))
+        .map((tool) => `${tool.toolkit}.*`),
     ]),
   ];
   const remaining = legacy.filter((connector) => !resolved.has(connector));
