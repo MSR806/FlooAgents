@@ -13,7 +13,7 @@
     "@floo/core": "workspace:*",
     "@floo/harness-protocol": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/codex-sdk": "0.144.6",
+    "@openai/codex-sdk": "0.147.0",
     "zod": "^4.4.3"
   }
 }

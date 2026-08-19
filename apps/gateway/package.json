@@ -12,7 +12,7 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@composio/core": "^0.15.0",
+    "@composio/core": "^0.16.0",
     "@floo/core": "workspace:*",
     "@floo/db": "workspace:*",
     "@floo/gateway-kit": "workspace:*",
