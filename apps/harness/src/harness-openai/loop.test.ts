@@ -117,6 +117,7 @@ const fixture: ThreadEvent[] = [
   turnCompleted({
     input_tokens: 10,
     cached_input_tokens: 0,
+    cache_write_input_tokens: 0,
     output_tokens: 8,
     reasoning_output_tokens: 2,
   }),
