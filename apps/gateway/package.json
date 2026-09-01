@@ -12,11 +12,11 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@composio/core": "^0.16.0",
+    "@composio/core": "^0.18.0",
     "@floo/core": "workspace:*",
     "@floo/db": "workspace:*",
     "@floo/gateway-kit": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.2"
   }
 }
